@@ -36493,22 +36493,37 @@ function sv_t(s) { try { return trUi(s); } catch (e) { return s; } }
      При первом входе владельца заполняем отделы, должности (как в анкете демо: vStruct(vDefault(тип))) и быстрые смены (dh_std). Один раз:
      если в заведении уже больше одного отдела или должности — ничего не делаем. */
   SV.seed = async function () {
-    var me = SV.me || {}, D = SV.T.departments || [], P = SV.T.positions || [];
-    if (me.role !== 'owner' || D.length > 1 || P.length > 1) return false;
-    var ty = (SV.venue && SV.venue.type) || ((SV.venues || []).filter(function (v) { return v.venue_id === SV.venueId; })[0] || {}).type;
+    var me = SV.me || {}, R = SV.real, vid = SV.venueId, mk = 'sv-seed-' + vid;
+    if (me.role !== 'owner' || !R || !vid) return false;
+    try { if (localStorage.getItem(mk)) return false; } catch (e) {}
+    /* быстрые смены уже есть — заведение настроено, ничего не трогаем */
+    var sr = await R.from('shift_presets').select('id').eq('venue_id', vid).limit(1); if (sr.error) return false;
+    if ((sr.data || []).length) { try { localStorage.setItem(mk, '1'); } catch (e) {} return false; }
+    var ty = (SV.venue && SV.venue.type) || ((SV.venues || []).filter(function (v) { return v.venue_id === vid; })[0] || {}).type;
     var st = null; try { st = vStruct(vDefault(ty)); } catch (e) { st = null; }
     if (!st || !st.depts || st.depts.length < 2) return false;
     var DNU = { adm: 'Maʼmuriyat', fo: 'Qabulxona', hk: 'Xaskiping', kitchen: 'Oshxona', fnb: 'Zal', eng: 'Texnik xizmat', sec: 'Qoʻriqlash', sales: 'Sotuv', dlv: 'Yetkazib berish' };
     var uz = function (s) { try { var t = (window.CG_UZ || {})[s]; return typeof t === 'string' ? t : null; } catch (e) { return null; } };
-    for (var i = 0; i < st.depts.length; i++) { var d = st.depts[i]; if (d[0] === 'dir') continue;
-      await sb.from('departments').insert({ id: d[0], code: d[0], name: d[1], name_uz: DNU[d[0]] || uz(d[1]), sort: i }); }
-    for (var j = 0; j < st.pos.length; j++) { var p = st.pos[j]; if (p.dept_id === 'dir') continue;
-      await sb.from('positions').insert({ name: p.name, name_uz: uz(p.name), dept_id: p.dept_id, sort: j }); }
+    /* дозаполняем то, чего нет (если прошлый раз прервался — продолжаем с места остановки) */
+    var dr = await R.from('departments').select('id,code').eq('venue_id', vid); if (dr.error) return false;
+    var pr = await R.from('positions').select('id,name,dept_id').eq('venue_id', vid); if (pr.error) return false;
+    var DID = {}; (dr.data || []).forEach(function (d) { DID[d.code] = d.id; });
+    var have = {}; (pr.data || []).forEach(function (p) { have[p.dept_id + '|' + p.name] = 1; });
+    for (var i = 0; i < st.depts.length; i++) { var d = st.depts[i]; if (DID[d[0]] != null) continue;
+      var r1 = await R.from('departments').insert({ venue_id: vid, code: d[0], name: d[1], name_uz: DNU[d[0]] || uz(d[1]), sort: i }).select('id').single();
+      if (r1.error) throw r1.error; DID[d[0]] = r1.data.id; }
+    var rows = [];
+    st.pos.forEach(function (p, j) { var di = DID[p.dept_id]; if (p.dept_id === 'dir' || di == null || have[di + '|' + p.name]) return; rows.push({ venue_id: vid, dept_id: di, name: p.name, name_uz: uz(p.name), sort: j }); });
+    if (rows.length) { var r2 = await R.from('positions').insert(rows); if (r2.error) throw r2.error; }
     if (typeof dh_std === 'function') {
-      for (var k = 0; k < st.depts.length; k++) { var dc = st.depts[k][0]; if (dc === 'dir') continue;
+      var vt0 = typeof dh_vtype === 'function' ? dh_vtype : null; if (vt0) dh_vtype = function () { return ty || vt0(); };
+      try {
+      for (var k = 0; k < st.depts.length; k++) { var dc = st.depts[k][0]; if (dc === 'dir' || DID[dc] == null) continue;
         var L = dh_std(dc) || [];
-        for (var m = 0; m < L.length; m++) { try { await sb.from('shift_types').insert({ dept_id: dc, name: L[m][1], start_time: L[m][2], end_time: L[m][3], sort: m }); } catch (e) {} } }
+        for (var m = 0; m < L.length; m++) { var r3 = await R.rpc('preset_save', { p_id: null, p_dept: DID[dc], p_name: L[m][1], p_name_uz: uz(L[m][1]), p_start: L[m][2], p_end: L[m][3], p_sort: m }); if (r3.error) try { console.warn('[sv] preset', r3.error.message); } catch (x) {} } }
+      } finally { if (vt0) dh_vtype = vt0; }
     }
+    try { localStorage.setItem(mk, '1'); } catch (e) {}
     return true;
   };
   /* вход мог завершиться раньше, чем загрузился этот фрагмент: тогда заполняем сейчас и один раз перезагружаем экран */

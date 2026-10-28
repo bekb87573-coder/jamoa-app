@@ -832,6 +832,7 @@
       }
     };
     SV.client = client;
+    SV.real = real;   /* «голый» клиент — для разовой начальной настройки заведения (90-server, SV.seed) */
     /* события входа доходят до приложения после того, как выбран заведение и загружена база */
     var chain = Promise.resolve();
     real.auth.onAuthStateChange(function (ev, session) {
