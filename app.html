@@ -43150,6 +43150,228 @@ function di_genderFix(DB) {
 })();
 
 
+/* ===== ВОЛНА 4 · 92j-colors.js ===== */
+/* ===== Часть J · цвета состояний (решение владельца 28.10) =====
+   Изумрудный — хорошо (норма, вовремя, выполнено, на смене, принято, плюс в деньгах).
+   Сапфировый — в работе, план, информация, отпуск, нейтральные графики.
+   Янтарный   — внимание (скоро срок, небольшое опоздание, ждёт решения).
+   Рубиновый  — плохо (прогул, просрочено, штраф, минус) и «горит» (срочно — мягкая пульсация).
+   Золото остаётся цветом бренда: логотип, главные кнопки, активная вкладка — не трогаем.
+   Слой lx базы выравнивал --ok/--warn/--info в золото и серый; здесь токены возвращаются.
+   Селекторы с :root — специфичнее слоя lx (html[data-lx]) и стилей частей 93–99. */
+(function () {
+  var L = '--dj-fok:#0B7A52;--dj-finfo:#1F5FBF;--dj-fbad:#C62A25;--dj-fwarn:#E8A317;--dj-onw:#1C1400;--ok:#0B7A52;--okbg:#E3F5EC;--info:#1F5FBF;--infobg:#E6EEFB;--warn:#9A5B00;--warnbg:#FDF0DA;--bad:#C62A25;--badbg:#FCE7E5;--alert:#C62A25;--alertbg:#FCE7E5;--done:#0B7A52;' +
+    '--dj-okf:#12A06C;--dj-infof:#2F6FD6;--dj-warnf:#E08A00;--dj-badf:#E0342E;--hot:#E0342E;--dj-hotr:rgba(224,52,46,.45)';
+  var D = '--dj-fok:#108257;--dj-finfo:#2B6BD4;--dj-fbad:#D3302B;--dj-fwarn:#F0B13D;--dj-onw:#1C1400;--ok:#38C98D;--okbg:rgba(56,201,141,.15);--info:#6FA8FF;--infobg:rgba(111,168,255,.15);--warn:#F0B13D;--warnbg:rgba(240,177,61,.15);--bad:#FF6B5E;--badbg:rgba(255,107,94,.16);--alert:#FF6B5E;--alertbg:rgba(255,107,94,.16);--done:#38C98D;' +
+    '--dj-okf:#38C98D;--dj-infof:#6FA8FF;--dj-warnf:#F0B13D;--dj-badf:#FF6B5E;--hot:#FF6B5E;--dj-hotr:rgba(255,107,94,.5)';
+  var R = 'html[data-lx]:root ';
+  var css =
+    /* 1. токены: светлая и тёмная темы */
+    'html[data-lx="light"]:root{' + L + '}html[data-lx="dark"]:root{' + D + '}' +
+    /* тёмные «герои» (карточка смены, срочное, тревога) — тёмная палитра в обеих темах */
+    R + '.shift,' + R + '.newbig,' + R + '.alarm{' + D + '}' +
+    /* в светлой теме .shift.hmo/.shift.now/.newbig — светлые: светлая палитра (правило ниже — позже и не слабее) */
+    'html[data-lx="light"]:root .shift.hmo,html[data-lx="light"]:root .shift.now,html[data-lx="light"]:root .newbig{' + L + '}' +
+
+    /* 2. общие метки и полосы: lx делал их золотыми и серыми */
+    R + '.t-ok{color:var(--ok);background:var(--okbg);box-shadow:none}' +
+    R + '.t-warn{color:var(--warn);background:var(--warnbg);box-shadow:none}' +
+    R + '.t-bad{color:var(--bad);background:var(--badbg)}' +
+    R + '.t-info{color:var(--info);background:var(--infobg)}' +
+    R + '.note.t-ok{border-color:color-mix(in srgb,var(--ok) 28%,transparent);border-left-color:var(--dj-okf);background:var(--okbg);color:var(--ink)}' +
+    R + '.note.t-warn{border-color:color-mix(in srgb,var(--warn) 28%,transparent);border-left-color:var(--dj-warnf);background:var(--warnbg);color:var(--ink)}' +
+    R + '.note.t-info{border-color:color-mix(in srgb,var(--info) 24%,transparent);border-left-color:var(--dj-infof);background:var(--infobg);color:var(--ink)}' +
+    R + '.note.t-bad{border-color:color-mix(in srgb,var(--bad) 30%,transparent);border-left-color:var(--dj-badf);background:var(--badbg);color:var(--ink)}' +
+    R + '.status.is-done::before{background:var(--dj-okf)}' + R + '.status.is-wait::before{background:transparent;box-shadow:inset 0 0 0 1.5px var(--dj-warnf)}' +
+    R + '.status.is-alert{color:var(--bad)}' + R + '.status.is-alert::before{background:var(--dj-badf)}' +
+    /* «Срочно» / «горит» — рубиновая метка с мягкой пульсацией */
+    R + '.chip.t-urg,' + R + '.chip.dj-hot{color:var(--bad);background:var(--badbg);box-shadow:0 0 0 0 var(--dj-hotr);animation:dj-hot 2.4s ease-out infinite}' +
+    '@keyframes dj-hot{0%{box-shadow:0 0 0 0 var(--dj-hotr)}70%,100%{box-shadow:0 0 0 6px transparent}}' +
+    R + '.newbig.urg{border-color:color-mix(in srgb,var(--bad) 45%,transparent)!important}' + R + '.newbig.urg::before{background:var(--dj-badf);animation:dj-hotb 2.4s ease-in-out infinite}' +
+    '@keyframes dj-hotb{50%{opacity:.45}}' +
+    '@media (prefers-reduced-motion:reduce){' + R + '.chip.t-urg,' + R + '.chip.dj-hot,' + R + '.newbig.urg::before{animation:none}}' +
+    /* метки, которым смысл дал текст (см. dj_mark ниже) */
+    R + '.chip.dj-ok{color:var(--ok);background:var(--okbg);box-shadow:none}' +
+    R + '.chip.dj-info{color:var(--info);background:var(--infobg);box-shadow:none}' +
+    R + '.chip.dj-warn{color:var(--warn);background:var(--warnbg);box-shadow:none}' +
+    R + '.chip.dj-bad{color:var(--bad);background:var(--badbg);box-shadow:none}' +
+    R + '.dj-t-ok{color:var(--ok);font-weight:600}' + R + '.dj-t-info{color:var(--info);font-weight:600}' + R + '.dj-t-warn{color:var(--warn)!important;font-weight:600}' + R + '.dj-t-ok{color:var(--ok)!important}' + R + '.dj-t-bad,' + R + '.dj-t-hot{color:var(--bad)!important;font-weight:600}' +
+
+    /* 3. главная и «Сейчас в заведении»: плитки итога */
+    R + '.jc-tile[data-jcf="on"] .v{color:var(--ok)!important}' + R + '.jc-tile.jc-bad .v{color:var(--bad)!important}' + R + '.jc-tile.jc-warn .v{color:var(--warn)!important}' +
+    R + '.now-bad{color:var(--bad)}' +
+
+    /* 4. задачи: выполнено — изумруд, на проверке — янтарь, просрочено — рубин */
+    R + '.tk[data-st=done] .tk-c{background:var(--dj-okf);color:#fff;box-shadow:none}' +
+    R + '.tk[data-st=rev] .tk-c{box-shadow:inset 0 0 0 1.5px var(--dj-warnf);background:var(--warnbg)}' + R + '.tk[data-st=rev] .tk-c::after{background:var(--dj-warnf)}' +
+    R + '.tmeta .over{color:var(--bad)}' + R + '.tmeta .over::before{background:var(--dj-badf)}' +
+    R + '.cd-ckb.on{background:var(--okbg);border-color:var(--dj-okf);color:var(--ok)}' +
+
+    /* 5. календарь месяца (92a «Мой расчёт», 92g карточка): отгул/отпуск — сапфир */
+    R + '[data-cad].t-gold,' + R + '[data-dgd].t-gold,' + R + '.card:has([data-cad]) .chip.t-gold,' + R + '.dg-leg .chip.t-gold,' + R + '.dg-st.t-gold{color:var(--info);background:var(--infobg);box-shadow:none}' +
+    R + '.dg-st.t-gold{border-left-color:var(--dj-infof)}' +
+    R + '.dg-dot.today{box-shadow:0 0 0 2px var(--gold)}' +
+
+    /* 6. табель (92d): Я — изумруд, О — янтарь, П — рубин, Б и Отп — сапфир */
+    R + '.cd-c.y{background:var(--okbg);color:var(--ok)}' + R + '.cd-c.l{background:var(--warnbg);color:var(--warn)}' +
+    R + '.cd-c.p{background:var(--badbg);color:var(--bad);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--bad) 55%,transparent)}' +
+    R + '.cd-c.b,' + R + '.cd-c.h{background:var(--infobg);color:var(--info)}' +
+    R + '.cd-tb td.cd-s span[style*="goldink"]{color:var(--warn)!important}' +
+    R + '.cd-sum .stat:nth-child(1) .v{color:var(--ok)!important}' + R + '.cd-sum .stat:nth-child(3) .v{color:var(--warn)!important}' + R + '.cd-sum .stat:nth-child(4) .v{color:var(--bad)!important}' +
+    R + '.cd-tb th.we{color:var(--info)}' +
+    /* график команды: больничный и отпуск — сапфир */
+
+    /* 7. деньги: премия — плюс, штраф и долг — минус, итог к выплате — плюс */
+    R + '[data-psline="bonus"] .ps-val{color:var(--ok)}' + R + '[data-psline="fine"] .ps-val,' + R + '[data-psline="ca_debt"] .ps-val{color:var(--bad)}' +
+    R + '.ps-card .ps-line.b:last-child .ps-val,' + R + '.ps-line.b:last-child .ps-val{color:var(--ok)}' +
+    R + '.ps-chip.dr{color:var(--info);border-color:color-mix(in srgb,var(--info) 55%,transparent)}' +
+    R + '.dg-line.tot{color:var(--ok)}' + R + '.dg-plus{color:var(--ok)}' +
+
+    /* 8. заявки: всё, что ждёт решения, — янтарная полоса и янтарное «ждёт …» */
+    R + '.card:has(input[data-d6s]){box-shadow:inset 3px 0 0 var(--dj-warnf)}' +
+    R + '.card:has(input[data-d6s]) .meta>span.num:last-child{color:var(--warn);font-weight:600}' +
+
+    /* 9. графики (аналитика, отчёты): нейтральное — сапфир, рост — изумруд, падение и долг — рубин */
+    R + '.an-bb rect{fill:var(--dj-infof);opacity:.72}' + R + '.an-bb rect.an-bt{opacity:1}' +
+    R + '.an-sp polyline{stroke:var(--dj-infof)}' + R + '.an-sp circle{fill:var(--dj-infof)}' +
+    R + '.an-up{color:var(--ok)}' + R + '.an-dn{color:var(--bad)}' +
+    R + '.an-lok{background:var(--dj-okf)}' + R + '.an-lmid{background:var(--dj-warnf)}' + R + '.an-lbad{background:var(--dj-badf)}' +
+    R + '.ar-bt{stroke:var(--dj-infof)}' + R + '.ar-bo{fill:var(--dj-badf)}' +
+    R + '.fd-ch .a{fill:var(--dj-infof)}' + R + '.fd-c-ok{color:var(--ok)}' + R + '.fd-c-warn{color:var(--warn)}' + R + '.fd-c-bad{color:var(--bad)}' + R + '.fd-drop b{color:var(--bad)}';
+
+  /* ===== второй проход (28.10, владелец: «залить») — сплошные заливки, белый текст (на янтаре — тёмный) ===== */
+  var FOK = 'background:var(--dj-fok);color:#fff!important', FIN = 'background:var(--dj-finfo);color:#fff!important', FBD = 'background:var(--dj-fbad)!important;color:#fff!important', FWR = 'background:var(--dj-fwarn);color:var(--dj-onw)!important';
+  var NC = ':not([data-dgd]):not([data-cad]):not(.dg-dot)';
+  var PILL = 'display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-weight:700;box-shadow:none;border-color:transparent';
+  css +=
+    /* метки-«пилюли» */
+    R + '.chip.t-ok,' + R + '.chip.dj-ok{' + FOK + ';box-shadow:none;border-color:transparent}' +
+    R + '.chip.t-info,' + R + '.chip.dj-info,' + R + '.ps-chip.dr{' + FIN + ';box-shadow:none;border-color:transparent;border-style:solid}' +
+    R + '.chip.t-warn,' + R + '.chip.dj-warn{' + FWR + ';box-shadow:none;border-color:transparent}' +
+    R + '.chip.t-bad,' + R + '.chip.dj-bad{' + FBD + ';box-shadow:none;border-color:transparent}' +
+    R + '.chip.t-bad' + NC + '{padding-left:9px;padding-right:9px}' + R + '.chip.t-bad::before{display:none}' +
+    R + '.chip.t-urg,' + R + '.chip.dj-hot{' + FBD + '}' +
+    R + '.chip.t-ok *,' + R + '.chip.t-warn *,' + R + '.chip.t-bad *,' + R + '.chip.t-info *,' + R + '.chip[class*="dj-"] *{color:inherit}' +
+    R + '.tmeta .over{' + PILL + ';' + FBD + ';font-size:12px;line-height:1.5;margin-right:8px}' + R + '.tmeta .over::before,' + R + '.tmeta .over::after{display:none}' +
+    R + 'span.dj-t-bad:not(.ps-val),' + R + 'span.dj-t-hot:not(.ps-val){' + PILL + ';' + FBD + '}' +
+    R + 'span.dj-t-warn:not(.ps-val),' + R + '.card:has(input[data-d6s]) .meta>span.num:last-child{' + PILL + ';' + FWR + ';color:var(--dj-onw)!important}' +
+    R + 'span.dj-t-info{' + PILL + ';' + FIN + '}' + R + 'span.dj-t-ok:not(.ps-val){' + PILL + ';' + FOK + '}' +
+    R + '.now-bad{' + PILL + ';' + FBD + ';padding:1px 8px}' +
+    /* плашка статуса в карточке сотрудника */
+    R + '.note.dg-st.t-ok{' + FOK + ';border-color:transparent}' + R + '.note.dg-st.t-warn{' + FWR + ';border-color:transparent}' +
+    R + '.note.dg-st.t-bad{' + FBD + ';border-color:transparent}' + R + '.note.dg-st.t-gold,' + R + '.note.dg-st.t-info{' + FIN + ';border-color:transparent}' +
+    /* календари и кружки недели — сплошная заливка, белые цифры; сегодня — золотое кольцо */
+    R + '.dg-dot.t-ok,' + R + '[data-dgd].t-ok,' + R + '[data-cad].t-ok{' + FOK + '}' +
+    R + '.dg-dot.t-warn,' + R + '[data-dgd].t-warn,' + R + '[data-cad].t-warn{' + FWR + '}' +
+    R + '.dg-dot.t-bad,' + R + '[data-dgd].t-bad,' + R + '[data-cad].t-bad{' + FBD + '}' +
+    R + '.dg-dot.t-gold,' + R + '[data-dgd].t-gold,' + R + '[data-cad].t-gold,' + R + '.dg-dot.t-info{' + FIN + '}' +
+    R + '[data-dgd][class*="t-"] *,' + R + '[data-cad][class*="t-"]:not(.t-mute) *{color:inherit!important;opacity:1}' +
+    R + '.dg-dot.today{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--gold)}' +
+    R + '[data-dgd][style*="--gold"]{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--gold)!important}' +
+    R + '.card:has([data-cad]) .chip.t-gold,' + R + '.dg-leg .chip.t-gold{' + FIN + '}' +
+    /* табель: плитка на всю клетку (код + часы), выходной — светло-серая */
+    R + '.cd-tb td:has(>.cd-c.y){' + FOK + '}' + R + '.cd-tb td:has(>.cd-c.l){' + FWR + '}' + R + '.cd-tb td:has(>.cd-c.p){' + FBD + '}' +
+    R + '.cd-tb td:has(>.cd-c.b),' + R + '.cd-tb td:has(>.cd-c.h){' + FIN + '}' + R + '.cd-tb td:has(>.cd-c.o){background:var(--mute2);color:var(--muted)}' +
+    R + '.cd-tb td:has(>.cd-c:not(.f)){border-radius:8px;box-shadow:inset 0 0 0 2px var(--card);border-bottom-color:transparent}' +
+    R + '.cd-tb td>.cd-c:not(.f){background:none!important;box-shadow:none!important;color:inherit!important}' + R + '.cd-tb td:has(>.cd-c:not(.f))>.cd-hr{color:inherit;opacity:.92}' +
+    R + '.cd-lg .chip:has(.cd-c.y){' + FOK + '}' + R + '.cd-lg .chip:has(.cd-c.l){' + FWR + '}' + R + '.cd-lg .chip:has(.cd-c.p){' + FBD + '}' +
+    R + '.cd-lg .chip:has(.cd-c.b),' + R + '.cd-lg .chip:has(.cd-c.h){' + FIN + '}' +
+    R + '.cd-lg .chip:has(.cd-c:not(.o):not(.f)) .cd-c{background:none!important;box-shadow:none!important;color:inherit!important}' +
+    R + '.cd-sum .stat:nth-child(1){background:var(--okbg);border-color:color-mix(in srgb,var(--ok) 30%,transparent)}' +
+    R + '.cd-sum .stat:nth-child(3){background:var(--warnbg);border-color:color-mix(in srgb,var(--warn) 30%,transparent)}' +
+    R + '.cd-sum .stat:nth-child(4){background:var(--badbg);border-color:color-mix(in srgb,var(--bad) 30%,transparent)}' +
+    /* плитки «Сейчас в заведении» — светлая подложка при значении > 0 */
+    '@media (max-width:360px){' + R + '.cd-sum .stat{padding-left:8px;padding-right:6px;min-width:0}' + R + '.cd-sum .stat .v{font-size:18px!important}' + R + '.cd-sum .stat .l{font-size:11px;overflow-wrap:anywhere}}' +
+    R + '.jc-tile.dj-pos{background:var(--okbg);border-color:color-mix(in srgb,var(--ok) 30%,transparent)}' +
+    R + '.jc-tile.jc-bad{background:var(--badbg);border-color:color-mix(in srgb,var(--bad) 30%,transparent)}' +
+    R + '.jc-tile.jc-warn{background:var(--warnbg);border-color:color-mix(in srgb,var(--warn) 30%,transparent)}' +
+    R + '.jc-tile.on{border-color:var(--gold)}' +
+    /* «Сейчас» сотрудника: просроченная задача */
+    R + '.now-m b.dj-late{color:var(--bad)}' + R + '.now-m:has(.dj-over){white-space:normal;overflow:visible;text-overflow:clip}';
+  var st = document.createElement('style'); st.id = 'djCss'; st.textContent = css;
+  document.head.appendChild(st);
+  /* стили частей после 92j (93–99) добавляются позже — поднимаем свой стиль в конец <head>, когда всё загрузилось */
+  function dj_last() { if (st.parentNode && st !== document.head.lastElementChild) document.head.appendChild(st); }
+  if (document.readyState === 'complete') setTimeout(dj_last, 0); else window.addEventListener('load', dj_last);
+})();
+
+/* Метки, у которых смысл только в тексте: класс t-gold / t-mute / без цвета.
+   По точному началу текста (ru и текущий язык) добавляем dj-ok / dj-info / dj-warn / dj-bad / dj-hot. */
+var DJ_WORDS = {
+  ok: ['Выполнено', 'Выполнена', 'Принято', 'Принята', 'Одобрено', 'Одобрен', 'Одобрена', 'Подтверждено', 'Вовремя', 'На смене', 'Готово'],
+  info: ['В работе', 'новое', 'Новое', 'Отпуск', 'Больничный', 'Отгул', 'Отгул или отпуск', 'смена с', 'Впереди', 'По графику', 'Запланировано'],
+  warn: ['Ждёт руководителя', 'Ждёт решения', 'Ждёт', 'На проверке', 'предупреждения', 'Скоро срок', 'Скоро'],
+  bad: ['Отказано', 'Отказ', 'Просрочено', 'Просрочена', 'Прогул', 'не пришёл', 'не пришла', 'Штраф', 'опаздывает', 'опоздал', 'опоздала', 'вне зоны'],
+  hot: ['Срочно', 'Горит']
+};
+var DJ_MAP = {};
+function dj_norm(s) { return String(s || '').replace(/[\s ]+/g, ' ').replace(/[\d:.,–\-+·]+/g, ' ').trim().toLowerCase(); }
+function dj_map() {
+  var lg = (window.MLX_I18N && (MLX_I18N.lang + (MLX_I18N.cyr ? 'c' : ''))) || 'ru';
+  if (DJ_MAP[lg]) return DJ_MAP[lg];
+  var m = [];
+  Object.keys(DJ_WORDS).forEach(function (k) {
+    DJ_WORDS[k].forEach(function (w) {
+      m.push([dj_norm(w), k]);
+      try { var t = window.MLX_I18N && MLX_I18N.t ? MLX_I18N.t(w) : null; if (t && t !== w) m.push([dj_norm(t), k]); } catch (e) {}
+    });
+  });
+  m.sort(function (a, b) { return b[0].length - a[0].length; }); /* длинное совпадение первым: «Ждёт решения» раньше «Ждёт» */
+  return (DJ_MAP[lg] = m);
+}
+function dj_mark(root) {
+  var list = (root || document).querySelectorAll('#app .chip:not([data-dj])');
+  var m = dj_map();
+  for (var i = 0; i < list.length; i++) {
+    var c = list[i], cl = c.classList; c.setAttribute('data-dj', '');
+    if (cl.contains('t-ok') || cl.contains('t-warn') || cl.contains('t-bad') || cl.contains('t-info') || cl.contains('t-urg') || c.querySelector('.cd-c') || c.closest('.cd-lg,.dg-leg,[data-cad],[data-dgd]')) continue;
+    var tx = dj_norm(c.textContent);
+    if (!tx) continue;
+    var k = dj_kind(tx, m); if (k) { c.setAttribute('data-dj', k); cl.add('dj-' + k); }
+  }
+  /* строки «Имя · не пришёл / опаздывает» на карточке «Сейчас в заведении» — цвет только у слова состояния */
+  var rows = (root || document).querySelectorAll('#app .card:has(.jc-tiles) .pft>span:not([data-dj]),#app .jc-tm>span:first-child:not([data-dj])');
+  for (var r = 0; r < rows.length; r++) { var k2 = dj_kind(dj_norm(rows[r].textContent), m); rows[r].setAttribute('data-dj', k2 || ''); if (k2) rows[r].classList.add('dj-t-' + k2); }
+  /* сводка руководителю: опоздания — янтарь (внимание), просрочено — остаётся рубином */
+  var lt = [dj_norm('опоздали сегодня'), dj_norm('опоздания'), dj_norm(dj_tr('опоздали сегодня')), dj_norm(dj_tr('опоздания'))], kb = (root || document).querySelectorAll('#app .kpi>div>b:not([data-dj])');
+  for (var z = 0; z < kb.length; z++) { var sp = kb[z].nextElementSibling; kb[z].setAttribute('data-dj', ''); if (sp && lt.indexOf(dj_norm(sp.textContent)) >= 0 && /--alert/.test(kb[z].getAttribute('style') || '')) kb[z].classList.add('dj-t-warn'); }
+  /* деньги: сумма со знаком «+» (премия) — изумруд, со знаком «−» (штраф, долг) — рубин */
+  var mv = (root || document).querySelectorAll('#app .ps-val:not([data-dj]),#app .dg-line>b:not([data-dj]),#app .dg-line>.num:not([data-dj])');
+  for (var v = 0; v < mv.length; v++) { var t0 = (mv[v].textContent || '').trim().charAt(0); mv[v].setAttribute('data-dj', ''); if (t0 === '+') mv[v].classList.add('dj-t-ok'); else if (t0 === '−' || t0 === '-') mv[v].classList.add('dj-t-bad'); }
+  /* «на смене» > 0 — светло-изумрудная плитка */
+  var jt = (root || document).querySelectorAll('#app .jc-tile[data-jcf="on"]');
+  for (var y = 0; y < jt.length; y++) { var vv = jt[y].querySelector('.v'); jt[y].classList.toggle('dj-pos', !!vv && +String(vv.textContent).replace(/\D/g, '') > 0); }
+  /* «Сейчас» на главной: задача со сроком «к 11:30», срок прошёл — пометка «просрочено» */
+  var nr = (root || document).querySelectorAll('#app .now-r[data-nk^="t"] .now-m:not([data-dj])'), nd = new Date(), nm = nd.getHours() * 60 + nd.getMinutes();
+  for (var u = 0; u < nr.length; u++) {
+    var mm = nr[u]; mm.setAttribute('data-dj', ''); if (mm.querySelector('.now-bad')) continue;
+    var bb = mm.querySelector('b'), hm = bb && /(\d{1,2}):(\d{2})/.exec(bb.textContent); if (!hm) continue;
+    if (+hm[1] * 60 + +hm[2] < nm) { bb.classList.add('dj-late'); mm.insertAdjacentHTML('afterbegin', '<span class="now-bad dj-over">' + h(dj_tr('просрочено')) + '</span> · '); }
+  }
+  /* «Ждут решения · самое старое 10 ч» — время ожидания янтарём */
+  var old = dj_norm(dj_tr('самое старое')), ms = (root || document).querySelectorAll('#app .meta>span.num:not([data-dj])');
+  for (var q = 0; q < ms.length; q++) { var pv = ms[q].previousElementSibling; ms[q].setAttribute('data-dj', ''); if (pv && (dj_norm(pv.textContent) === old || dj_norm(pv.textContent) === 'самое старое')) ms[q].classList.add('dj-t-warn'); }
+}
+function dj_tr(w) { try { return window.MLX_I18N && MLX_I18N.t ? MLX_I18N.t(w) : w; } catch (e) { return w; } }
+function dj_kind(tx, m) {
+  if (!tx) return '';
+  for (var j = 0; j < m.length; j++) { var w = m[j][0]; if (tx === w || (tx.indexOf(w) === 0 && tx.charAt(w.length) === ' ')) return m[j][1]; }
+  return '';
+}
+(function () {
+  var pend = false;
+  function run() { pend = false; try { dj_mark(document); } catch (e) { console.warn(e); } }
+  function sched() { if (pend) return; pend = true; (window.requestAnimationFrame || setTimeout)(run); }
+  function start() {
+    var app = document.getElementById('app') || document.body;
+    try { new MutationObserver(function (ms) { for (var i = 0; i < ms.length; i++) if (ms[i].addedNodes.length) { sched(); return; } }).observe(app, { childList: true, subtree: true }); } catch (e) {}
+    sched();
+  }
+  if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+})();
+window.__dj = { mark: function () { dj_mark(document); }, map: function () { return dj_map(); } };
+
+
 /* ===== ВОЛНА 4 · 93-u45.js ===== */
 /* =========================================================================================
    93-u45 · волна «У»: пакеты У4 (по типам заведений) и У5 (слова и мелочи) — общее для нескольких частей.
