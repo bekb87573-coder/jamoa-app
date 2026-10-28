@@ -40227,6 +40227,7 @@ function cg_data(L) {
     ['auto', L('Авто', 'Avto'), ['carwash']],
     ['health', L('Здоровье', 'Salomatlik'), ['clinic']],
     ['kids', L('Дети и обучение', 'Bolalar va taʼlim'), ['kinder', 'edu']],
+    ['serv', L('Услуги', 'Xizmatlar'), ['laundry']],
     ['other', L('Прочее', 'Boshqa'), ['other']]
   ];
   /* службы: [код, название, подсказка, отдел] — отдел = код службы */
@@ -40263,7 +40264,13 @@ function cg_data(L) {
     ['gtch', L('Преподаватели', 'Oʻqituvchilar'), L('Методист, преподаватели, ассистенты', 'Metodist, oʻqituvchilar, assistentlar')],
     ['gman', L('Руководство смен', 'Smena rahbariyati'), L('Управляющий, администраторы смены', 'Boshqaruvchi, smena administratorlari')],
     ['gwork', L('Основной персонал', 'Asosiy xodimlar'), L('Старший смены, сотрудники, стажёры', 'Smena boshligʻi, xodimlar, stajyorlar')],
-    ['gclean', L('Уборка и санитария', 'Tozalash va sanitariya'), L('Уборщицы', 'Farroshlar')]
+    ['gclean', L('Уборка и санитария', 'Tozalash va sanitariya'), L('Уборщицы', 'Farroshlar')],
+    ['gladm', L('Управление', 'Boshqaruv'), L('Управляющий, администратор, бухгалтер', 'Boshqaruvchi, administrator, buxgalter')],
+    ['glrecv', L('Приёмный пункт', 'Qabul punkti'), L('Приём и выдача вещей клиентов, касса', 'Mijozlar buyumlarini qabul qilish va berish, kassa')],
+    ['gldry', L('Цех химчистки', 'Kimyoviy tozalash sexi'), L('Технолог, операторы машин, пятновыводчик', 'Texnolog, mashina operatorlari, dogʻ ketkazuvchi')],
+    ['glwash', L('Прачечная', 'Kirxona'), L('Стирка и сушка белья и одежды', 'Choyshab va kiyimlarni yuvish va quritish')],
+    ['gliron', L('Глажка и упаковка', 'Dazmollash va qadoqlash'), L('Гладильщицы, упаковка готовых вещей', 'Dazmolchilar, tayyor buyumlarni qadoqlash')],
+    ['glsew', L('Ремонт одежды', 'Kiyim taʼmiri'), L('Швея: мелкий ремонт, пуговицы, молнии', 'Tikuvchi: mayda taʼmir, tugma, zamok')]
   ].map(function (s) { return [s[0], s[1], s[2], s[0]]; });
   /* должности по службам: [название, руководитель службы] */
   var P = function (ru, uz, lead) { return [L(ru, uz), lead ? 1 : 0]; };
@@ -40300,11 +40307,19 @@ function cg_data(L) {
     gtch: [P('Методист', 'Metodist', 1), P('Преподаватель', 'Oʻqituvchi'), P('Ассистент преподавателя', 'Oʻqituvchi assistenti')],
     gman: [P('Управляющий', 'Boshqaruvchi', 1), P('Администратор смены', 'Smena administratori')],
     gwork: [P('Старший смены', 'Smena boshligʻi', 1), P('Сотрудник', 'Xodim'), P('Стажёр', 'Stajyor')],
-    gclean: [P('Старшая уборщица', 'Katta farrosh', 1), P('Уборщица', 'Farrosh')]
+    gclean: [P('Старшая уборщица', 'Katta farrosh', 1), P('Уборщица', 'Farrosh')],
+    gladm: [P('Управляющий', 'Boshqaruvchi', 1), P('Администратор', 'Administrator'), P('Бухгалтер', 'Buxgalter')],
+    glrecv: [P('Старший приёмщик', 'Katta qabulchi', 1), P('Приёмщик-кассир', 'Qabulchi-kassir')],
+    gldry: [P('Технолог химчистки', 'Kimyoviy tozalash texnologi', 1), P('Оператор машины химчистки', 'Kimyoviy tozalash mashinasi operatori'), P('Пятновыводчик', 'Dogʻ ketkazuvchi')],
+    glwash: [P('Старший оператор прачечной', 'Kirxona katta operatori', 1), P('Оператор стиральных машин', 'Kir yuvish mashinalari operatori'), P('Оператор сушки', 'Quritish operatori')],
+    gliron: [P('Старшая гладильщица', 'Katta dazmolchi', 1), P('Гладильщица', 'Dazmolchi'), P('Упаковщица', 'Qadoqlovchi')],
+    glsew: [P('Швея', 'Tikuvchi')]
   };
   /* типы: код, название, подсказка, службы по умолчанию, люди по умолчанию, службы «по делу» для анкеты, раздел,
-     родительный падеж (для «Добавить N задач …»), смены [код, название, начало, конец] */
-  var T = function (code, name, hint, svcs, people, fit, group, gen, shifts) { return { code: code, name: name, hint: hint, svc: svcs, people: people, fit: fit, group: group, gen: gen, shifts: shifts }; };
+     родительный падеж (для «Добавить N задач …»), смены [код, название, начало, конец];
+     dshifts (необязательно) — свои смены отдела (названия — из общего словаря смен: Утро, День, Вечер, Ночь, Сутки, Офис, Рабочий день — их переводит i18n) { код службы: [[код, название, начало, конец]] }, у остальных отделов типа — shifts.
+     Новый тип добавлять в КОНЕЦ списка: номера вопросов теста дня считаются по месту типа в списке (cg_quizRows). */
+  var T = function (code, name, hint, svcs, people, fit, group, gen, shifts, dshifts) { return { code: code, name: name, hint: hint, svc: svcs, people: people, fit: fit, group: group, gen: gen, shifts: shifts, dshifts: dshifts || null }; };
   var U = L('Утро', 'Ertalab'), V = L('Вечер', 'Kechqurun'), D = L('День', 'Kunduzi'), N = L('Ночь', 'Tun');
   var types = [
     T('bakery', L('Пекарня, кондитерская, пищевой цех', 'Novvoyxona, qandolatxona, oziq-ovqat sexi'), L('Цех, выпечка, продажа, развоз', 'Sex, pishiriq, sotuv, tarqatish'),
@@ -40342,10 +40357,19 @@ function cg_data(L) {
       ['geadm', 'gtch', 'gclean', 'acc', 'sec'], 'kids', L('учебного центра', 'oʻquv markazi'), [['u', U, '09:00', '15:00'], ['v', V, '14:00', '21:00']]),
     T('other', L('Другой бизнес со сменами', 'Smenali boshqa biznes'), L('Общий набор: смены, задачи, табель', 'Umumiy toʻplam: smenalar, vazifalar, tabel'),
       ['gman', 'gwork', 'gclean'], { gman: { 'Управляющий': 1, 'Администратор смены': 1 }, gwork: { 'Старший смены': 1, 'Сотрудник': 6, 'Стажёр': 1 }, gclean: { 'Уборщица': 1 } },
-      ['gman', 'gwork', 'gclean', 'gwhs', 'gsale', 'sec', 'eng', 'acc', 'dlv'], 'other', L('заведения', 'muassasa'), [['u', U, '08:00', '17:00'], ['v', V, '14:00', '23:00']])
+      ['gman', 'gwork', 'gclean', 'gwhs', 'gsale', 'sec', 'eng', 'acc', 'dlv'], 'other', L('заведения', 'muassasa'), [['u', U, '08:00', '17:00'], ['v', V, '14:00', '23:00']]),
+    /* химчистка и прачечная (пилот 28.10): одна точка, ~11 человек по умолчанию; приёмка «День» 09:00–21:00 (график 2/2 — в «Графике»), цех, прачечная и глажка — 08:00–17:00 и 13:00–22:00.
+       Остальные должности (администратор, бухгалтер, старшие, упаковщица, сушка, швея, курьер) — в анкете и потом в «Пульт → Отделы», 0 человек по умолчанию */
+    T('laundry', L('Химчистка и прачечная', 'Kimyoviy tozalash va kirxona'), L('Приёмка вещей, цех, стирка, глажка', 'Buyum qabuli, sex, yuvish, dazmollash'),
+      ['gladm', 'glrecv', 'gldry', 'glwash', 'gliron'], { gladm: { 'Управляющий': 1 }, glrecv: { 'Старший приёмщик': 1, 'Приёмщик-кассир': 2 }, gldry: { 'Технолог химчистки': 1, 'Оператор машины химчистки': 1, 'Пятновыводчик': 1 }, glwash: { 'Оператор стиральных машин': 2 }, gliron: { 'Гладильщица': 2 }, glsew: { 'Швея': 1 }, dlv: { 'Курьер': 1 } },
+      ['gladm', 'glrecv', 'gldry', 'glwash', 'gliron', 'glsew', 'dlv', 'gclean', 'sec'], 'serv', L('химчистки', 'kimyoviy tozalash'), [['u', U, '08:00', '17:00'], ['v', V, '13:00', '22:00']],
+      { glrecv: [['d', D, '09:00', '21:00']],
+        gladm: [['d', L('Рабочий день', 'Ish kuni'), '09:00', '18:00']],
+        dlv: [['d', D, '10:00', '19:00']] })
   ];
   /* чек-листы по типу: [вид, название, пункты [[текст, фото]]] */
-  var C = function (kind, title, items) { return { kind: kind, title: title, items: items.map(function (x) { return { t: x[0], ph: x[1] ? 1 : 0 }; }) }; };
+  /* key — свой ключ, если у типа два чек-листа одного вида (у химчистки два 'special': «Приёмка вещей» и «Цех») */
+  var C = function (kind, title, items, key) { return { kind: kind, key: key || kind, title: title, items: items.map(function (x) { return { t: x[0], ph: x[1] ? 1 : 0 }; }) }; };
   var I = function (ru, uz, ph) { return [L(ru, uz), ph]; };
   var checklists = {
     bakery: [
@@ -40418,6 +40442,13 @@ function cg_data(L) {
       C('open', L('Открытие смены', 'Smenani ochish'), [I('Принять смену: рабочее место и оборудование', 'Smenani qabul qilish: ish joyi va jihozlar'), I('Проверить записи прошлой смены', 'Oldingi smena yozuvlarini tekshirish'), I('Проверить аптечку и огнетушитель', 'Quticha va oʻt oʻchirgichni tekshirish'), I('Сфотографировать рабочее место', 'Ish joyini suratga olish', 1)]),
       C('close', L('Закрытие смены', 'Smenani yopish'), [I('Убрать рабочее место', 'Ish joyini yigʻishtirish', 1), I('Записать проблемы для следующей смены', 'Keyingi smena uchun muammolarni yozish'), I('Выключить оборудование', 'Jihozlarni oʻchirish'), I('Закрыть помещение', 'Binoni yopish')]),
       C('clean', L('Уборка', 'Tozalash'), [I('Влажная уборка пола', 'Polni hoʻl tozalash'), I('Протереть поверхности и ручки дверей', 'Yuzalar va eshik dastalarini artish'), I('Вынести мусор', 'Axlatni chiqarish')])
+    ],
+    laundry: [
+      C('open', L('Открытие химчистки', 'Kimyoviy tozalashni ochish'), [I('Включить свет, вентиляцию и вытяжку в цехе', 'Sexda chiroq, ventilyatsiya va soʻrgichni yoqish'), I('Проверить машины химчистки и стиральные машины: на табло нет ошибок', 'Kimyoviy tozalash va kir yuvish mashinalarini tekshirish: tabloda xato yoʻq'), I('Проверить запас растворителя, порошка и пятновыводителей', 'Erituvchi, kukun va dogʻ ketkazgichlar zaxirasini tekshirish'), I('Включить парогенератор и проверить давление', 'Bugʻ generatorini yoqib, bosimni tekshirish'), I('Проверить огнетушитель и аптечку', 'Oʻt oʻchirgich va dori qutisini tekshirish'), I('Сфотографировать стойку приёма и полки готовых вещей', 'Qabul peshtaxtasi va tayyor buyumlar tokchalarini suratga olish', 1)]),
+      C('close', L('Закрытие химчистки', 'Kimyoviy tozalashni yopish'), [I('Выключить машины, пресс, утюги и парогенератор', 'Mashinalar, press, dazmollar va bugʻ generatorini oʻchirish'), I('Проверить, что в барабанах не осталось вещей', 'Barabanlarda buyum qolmaganini tekshirish', 1), I('Закрыть ёмкости с растворителем и химией', 'Erituvchi va kimyoviy vositalar idishlarini yopish'), I('Сверить готовые вещи на полках с квитанциями', 'Tokchalardagi tayyor buyumlarni kvitansiyalar bilan solishtirish'), I('Закрыть кассу', 'Kassani yopish'), I('Выключить свет, закрыть двери и поставить на сигнализацию', 'Chiroqni oʻchirish, eshiklarni yopib, signalizatsiyaga qoʻyish')]),
+      C('clean', L('Уборка цеха и приёмки', 'Sex va qabul punktini tozalash'), [I('Очистить фильтры ворса сушильных машин', 'Quritish mashinalarining tukli filtrlarini tozalash', 1), I('Протереть стойку приёма и примерочную', 'Qabul peshtaxtasi va kiyib koʻrish xonasini artish'), I('Влажная уборка пола в цехе', 'Sexda polni hoʻl tozalash'), I('Вынести мусор и упаковочную плёнку', 'Axlat va qadoqlash plyonkasini chiqarish'), I('Записать уборку в журнал', 'Tozalashni jurnalga yozish')]),
+      C('special', L('Приёмка вещей', 'Buyumlarni qabul qilish'), [I('Осмотреть вещь вместе с клиентом при хорошем свете', 'Buyumni mijoz bilan birga yaxshi yorugʻlikda koʻzdan kechirish'), I('Проверить карманы и вернуть клиенту забытое', 'Choʻntaklarni tekshirib, unutilgan narsalarni mijozga qaytarish'), I('Отметить пятна и спросить, от чего они', 'Dogʻlarni belgilab, nimadan ekanini soʻrash'), I('Проверить фурнитуру: пуговицы, молнии, пряжки, стразы', 'Furniturani tekshirish: tugma, zamok, toʻqa, toshchalar'), I('Проверить ярлык по уходу; нет ярлыка — предупредить клиента о риске', 'Parvarish yorligʻini tekshirish; yorliq yoʻq boʻlsa — mijozni xavf haqida ogohlantirish'), I('Сфотографировать дефекты и пятна при приёме', 'Qabulda nuqson va dogʻlarni suratga olish', 1), I('Записать в квитанцию дефекты и срок готовности, клиент подписывает', 'Kvitansiyaga nuqsonlar va tayyor boʻlish muddatini yozish, mijoz imzolaydi')], 'recv'),
+      C('special', L('Цех: машины и безопасность', 'Sex: mashinalar va xavfsizlik'), [I('Проверить машину химчистки: уровень растворителя, фильтры, нет подтёков', 'Kimyoviy tozalash mashinasini tekshirish: erituvchi darajasi, filtrlar, oqish yoʻq', 1), I('Проверить, что вентиляция и вытяжка работают', 'Ventilyatsiya va soʻrgich ishlayotganini tekshirish'), I('Записать загрузки и расход растворителя в журнал', 'Yuklamalar va erituvchi sarfini jurnalga yozish'), I('Надеть средства защиты: перчатки, очки, при необходимости респиратор', 'Himoya vositalarini kiyish: qoʻlqop, koʻzoynak, kerak boʻlsa respirator'), I('Проверить, что химия в подписанной таре и закрыта', 'Kimyoviy vositalar yorliqli idishda va yopiq ekanini tekshirish'), I('Проверить терморегуляторы утюгов и пресса', 'Dazmollar va press termoregulyatorlarini tekshirish')], 'shop')
     ]
   };
   /* стартовые задачи по должностям: [время, задача, вид чек-листа] — чек-лист по виду (open/close/clean/special) берётся из checklists типа */
@@ -40545,6 +40576,24 @@ function cg_data(L) {
       'Старший смены': [K('08:00', 'Принять смену и проверить оборудование', 'Smenani qabul qilib, jihozlarni tekshirish'), K('16:30', 'Записать проблемы для следующей смены', 'Keyingi smena uchun muammolarni yozish')],
       'Сотрудник': [K('08:15', 'Подготовить рабочее место', 'Ish joyini tayyorlash'), K('12:00', 'Выполнить задачи смены с фото', 'Smena vazifalarini surat bilan bajarish'), K('16:45', 'Убрать рабочее место', 'Ish joyini yigʻishtirish')],
       'Стажёр': [K('08:30', 'Прочитать инструкцию по рабочему месту', 'Ish joyi boʻyicha yoʻriqnomani oʻqish'), K('14:00', 'Пройти тест дня', 'Kun testidan oʻtish')]
+    },
+    laundry: {
+      'Управляющий': [CK('08:00', 'open'), K('12:00', 'Проверить вещи со сроком готовности на сегодня', 'Bugun tayyor boʻlishi kerak boʻlgan buyumlarni tekshirish'), CK('21:00', 'close')],
+      'Администратор': [K('09:00', 'Проверить график смен и замены на завтра', 'Smenalar jadvali va ertangi almashtirishlarni tekshirish'), K('15:00', 'Разобрать жалобы клиентов вместе с технологом', 'Mijozlar shikoyatlarini texnolog bilan birga koʻrib chiqish')],
+      'Старший приёмщик': [K('08:50', 'Принять кассу и полки готовых вещей у прошлой смены', 'Oldingi smenadan kassa va tayyor buyumlar tokchalarini qabul qilish'), K('13:00', 'Проверить вещи, которые клиенты давно не забирают', 'Mijozlar uzoq vaqt olib ketmayotgan buyumlarni tekshirish'), K('20:30', 'Сверить готовые вещи на полках с квитанциями', 'Tokchalardagi tayyor buyumlarni kvitansiyalar bilan solishtirish')],
+      'Приёмщик-кассир': [CK('09:00', 'recv'), K('14:00', 'Позвонить клиентам, чьи вещи готовы', 'Buyumlari tayyor boʻlgan mijozlarga qoʻngʻiroq qilish'), K('20:45', 'Закрыть кассу и сдать деньги смены', 'Kassani yopib, smena pulini topshirish')],
+      'Технолог химчистки': [CK('08:00', 'shop'), K('10:00', 'Рассортировать вещи по ткани и цвету для загрузки', 'Buyumlarni yuklash uchun mato va rang boʻyicha saralash'), K('16:00', 'Проверить качество чистки перед глажкой', 'Dazmollashdan oldin tozalash sifatini tekshirish')],
+      'Оператор машины химчистки': [K('08:15', 'Проверить уровень растворителя и фильтры машины', 'Mashinadagi erituvchi darajasi va filtrlarni tekshirish'), K('12:00', 'Записать загрузки в журнал машины', 'Yuklamalarni mashina jurnaliga yozish'), K('16:30', 'Очистить фильтр и ловушку пуговиц', 'Filtr va tugma tutgichni tozalash')],
+      'Пятновыводчик': [K('08:30', 'Проверить пятновыводители и их сроки', 'Dogʻ ketkazgichlar va ularning muddatini tekshirish'), K('10:30', 'Вывести пятна на вещах дня до загрузки', 'Kunlik buyumlardagi dogʻlarni yuklashdan oldin ketkazish'), K('16:30', 'Убрать рабочее место и закрыть химию', 'Ish joyini yigʻishtirib, kimyoviy vositalarni yopish')],
+      'Старший оператор прачечной': [K('08:00', 'Распределить загрузки по машинам', 'Yuklamalarni mashinalar boʻyicha taqsimlash'), K('14:00', 'Проверить качество стирки и сушки', 'Yuvish va quritish sifatini tekshirish'), CK('16:30', 'clean')],
+      'Оператор стиральных машин': [K('08:15', 'Рассортировать бельё по цвету и температуре стирки', 'Kirlarni rang va yuvish harorati boʻyicha saralash'), K('12:00', 'Дозировать средства по инструкции машины', 'Vositalarni mashina yoʻriqnomasi boʻyicha oʻlchab solish'), CK('16:30', 'clean')],
+      'Оператор сушки': [K('08:30', 'Очистить фильтры ворса сушильных машин', 'Quritish mashinalarining tukli filtrlarini tozalash'), K('15:00', 'Проверить, что вещи досушены и не перегреты', 'Buyumlar toʻliq quriganini va qizib ketmaganini tekshirish')],
+      'Старшая гладильщица': [K('08:00', 'Проверить утюги, пресс и парогенератор', 'Dazmollar, press va bugʻ generatorini tekshirish'), K('15:00', 'Проверить качество глажки перед упаковкой', 'Qadoqlashdan oldin dazmollash sifatini tekshirish')],
+      'Гладильщица': [K('08:15', 'Проверить подошву утюга и режимы по ярлыкам', 'Dazmol tagligi va yorliqlar boʻyicha rejimlarni tekshirish'), K('16:45', 'Выключить утюги и парогенератор', 'Dazmollar va bugʻ generatorini oʻchirish')],
+      'Упаковщица': [K('09:00', 'Упаковать готовые вещи и прикрепить бирки', 'Tayyor buyumlarni qadoqlab, birka taqish'), K('16:00', 'Разложить готовые вещи на полки выдачи', 'Tayyor buyumlarni berish tokchalariga joylash')],
+      'Швея': [K('09:00', 'Проверить вещи, которым нужен ремонт', 'Taʼmir kerak boʻlgan buyumlarni tekshirish'), K('16:00', 'Передать отремонтированные вещи на глажку', 'Taʼmirlangan buyumlarni dazmollashga topshirish')],
+      'Курьер': [K('10:00', 'Проверить маршрут и вещи к выдаче на сегодня', 'Bugungi marshrut va beriladigan buyumlarni tekshirish'), K('18:30', 'Сдать квитанции и деньги за день', 'Kunlik kvitansiyalar va pulni topshirish')],
+      'Водитель-экспедитор': [K('09:45', 'Осмотреть машину перед рейсом', 'Reysdan oldin mashinani koʻzdan kechirish'), K('18:30', 'Сдать квитанции и деньги за день', 'Kunlik kvitansiyalar va pulni topshirish')]
     }
   };
   /* общие задачи для должностей, у которых нет своего набора в типе */
@@ -40590,7 +40639,10 @@ function cg_data(L) {
     'Заведующая': S0(9000000), 'Методист': S0(6000000), 'Старший воспитатель': S0(6000000), 'Воспитатель': S0(4500000), 'Помощник воспитателя': S0(3000000), 'Няня': S0(3000000),
     'Повар': S0(4000000), 'Помощник повара': S0(3000000), 'Музыкальный руководитель': HR(50000), 'Инструктор по физкультуре': HR(50000), 'Логопед': UN(1000000, 60000, uLes),
     'Менеджер по набору': PC(3000000, 5), 'Преподаватель': HR(60000), 'Ассистент преподавателя': HR(25000),
-    'Сотрудник': S0(3500000), 'Стажёр': HR(15000), 'Старшая уборщица': S0(3500000), 'Уборщица': HR(17000)
+    'Сотрудник': S0(3500000), 'Стажёр': HR(15000), 'Старшая уборщица': S0(3500000), 'Уборщица': HR(17000),
+    /* химчистка: оклад (сдельной оплаты нет — владелец меняет схему в карточке должности) */
+    'Старший приёмщик': S0(5000000), 'Приёмщик-кассир': S0(3800000), 'Технолог химчистки': S0(7000000), 'Оператор машины химчистки': S0(4500000), 'Пятновыводчик': S0(5000000),
+    'Старший оператор прачечной': S0(4500000), 'Оператор стиральных машин': S0(3500000), 'Оператор сушки': S0(3200000), 'Старшая гладильщица': S0(4500000), 'Гладильщица': S0(3500000), 'Швея': S0(3500000)
   };
   /* точки фото открытия и закрытия смены — по отделу */
   var ph = {
@@ -40602,7 +40654,9 @@ function cg_data(L) {
     gsrv: [L('Подъёмники и инструмент', 'Koʻtargichlar va asboblar')], greg: [L('Стойка регистратуры', 'Registratura peshtaxtasi')], gdoc: [L('Кабинет врача', 'Shifokor kabineti')], gnurse: [L('Процедурный кабинет', 'Muolaja kabineti'), L('Стерилизатор', 'Sterilizator')],
     gsan: [L('Коридоры и санузлы', 'Yoʻlaklar va hojatxonalar')], ggrp: [L('Групповая комната', 'Guruh xonasi')], gkfood: [L('Пищеблок', 'Oziq-ovqat bloki')], gteach: [L('Зал для занятий', 'Mashgʻulot zali')],
     geadm: [L('Стойка администратора', 'Administrator peshtaxtasi')], gtch: [L('Учебный класс', 'Oʻquv sinfi')], gwork: [L('Рабочее место', 'Ish joyi')], gclean: [L('Санузлы', 'Hojatxonalar'), L('Входная зона', 'Kirish zonasi')],
-    sec: [L('Пост охраны', 'Qoʻriqlash posti')]
+    sec: [L('Пост охраны', 'Qoʻriqlash posti')],
+    gladm: [L('Рабочее место', 'Ish joyi')], glrecv: [L('Стойка приёма', 'Qabul peshtaxtasi'), L('Полки готовых вещей', 'Tayyor buyumlar tokchalari')], gldry: [L('Машины химчистки и журнал', 'Kimyoviy tozalash mashinalari va jurnal')],
+    glwash: [L('Стиральные и сушильные машины', 'Kir yuvish va quritish mashinalari')], gliron: [L('Гладильные доски и пресс', 'Dazmol taxtalari va press')], glsew: [L('Рабочее место швеи', 'Tikuvchining ish joyi')]
   };
   /* тексты под тип: подпись заставки, пример поиска инструкций */
   var txt = {
@@ -40617,7 +40671,8 @@ function cg_data(L) {
     clinic: [L('Команда клиники в одном телефоне', 'Klinika jamoasi bitta telefonda'), L('Например: куда выбрасывать использованные иглы?', 'Masalan: ishlatilgan ignalarni qayerga tashlash kerak?')],
     kinder: [L('Команда сада в одном телефоне', 'Bogʻcha jamoasi bitta telefonda'), L('Например: кому можно отдать ребёнка вечером?', 'Masalan: kechqurun bolani kimga berish mumkin?')],
     edu: [L('Команда учебного центра в одном телефоне', 'Oʻquv markazi jamoasi bitta telefonda'), L('Например: что делать, если ученик не пришёл на занятие?', 'Masalan: oʻquvchi darsga kelmasa, nima qilish kerak?')],
-    other: [L('Команда заведения в одном телефоне', 'Muassasa jamoasi bitta telefonda'), L('Например: как принять смену у коллеги?', 'Masalan: hamkasbdan smenani qanday qabul qilish kerak?')]
+    other: [L('Команда заведения в одном телефоне', 'Muassasa jamoasi bitta telefonda'), L('Например: как принять смену у коллеги?', 'Masalan: hamkasbdan smenani qanday qabul qilish kerak?')],
+    laundry: [L('Команда химчистки в одном телефоне', 'Kimyoviy tozalash jamoasi bitta telefonda'), L('Например: как принять у клиента вещь с пятном?', 'Masalan: mijozdan dogʻli buyumni qanday qabul qilish kerak?')]
   };
   /* знакомство «01—04»: первый слайд сотрудника и владельца — с родительным падежом типа */
   var ob = {};
@@ -40636,7 +40691,7 @@ function cg_data(L) {
   });
   /* задача стартового набора «Пройти чек-лист «…»» */
   var ckTask = {};
-  Object.keys(checklists).forEach(function (k) { checklists[k].forEach(function (c) { ckTask[k + '|' + c.kind] = L('Пройти чек-лист «' + c.title + '»', '«' + CG_UZ_SRC(c.title) + '» chek-listidan oʻtish'); }); });
+  Object.keys(checklists).forEach(function (k) { checklists[k].forEach(function (c) { ckTask[k + '|' + c.key] = L('Пройти чек-лист «' + c.title + '»', '«' + CG_UZ_SRC(c.title) + '» chek-listidan oʻtish'); }); });
   var ui = {
     step: L('Посмотреть чек-листы', 'Chek-listlarni koʻrish'), stepStaff: L('Открыть чек-лист смены', 'Smena chek-listini ochish'),
     ready: L('Готово для вашего типа', 'Turingiz uchun tayyor'), ckl: L('Чек-листы', 'Chek-listlar'), kit: L('Стартовые задачи', 'Boshlangʻich vazifalar'), kitBy: L('по должностям', 'lavozimlar boʻyicha'),
@@ -40650,7 +40705,7 @@ function cg_data(L) {
   return { groups: groups, svc: svc, pos: pos, types: types, checklists: checklists, kit: kit, kitCommon: kitCommon, earn: earn, ph: ph, txt: txt, ob: ob, stepSub: stepSub, ckTask: ckTask, ui: ui };
 }
 /* узбекский родительный для текстов знакомства (по коду типа) и поиск узбекского по русской строке (для составных строк) */
-var CG_UZ_G = { bakery: 'novvoyxona', shop: 'doʻkon', pharmacy: 'dorixona', fuel: 'shoxobcha', salon: 'salon', fitness: 'klub', leisure: 'markaz', carwash: 'avtoservis', clinic: 'klinika', kinder: 'bogʻcha', edu: 'oʻquv markazi', other: 'muassasa' };
+var CG_UZ_G = { bakery: 'novvoyxona', shop: 'doʻkon', pharmacy: 'dorixona', fuel: 'shoxobcha', salon: 'salon', fitness: 'klub', leisure: 'markaz', carwash: 'avtoservis', clinic: 'klinika', kinder: 'bogʻcha', edu: 'oʻquv markazi', other: 'muassasa', laundry: 'kimyoviy tozalash' };
 function CG_UZ_SRC(ru) { return CG_UZ[ru] || ru; }
 /*CG-DATA-END*/
 
@@ -40879,6 +40934,26 @@ var CG_Q = {
     ['service', 'Клиент благодарит вас за работу. Как ответить?', 'Mijoz ishingiz uchun rahmat aytyapti. Qanday javob berish kerak?', ['Поблагодарить в ответ и пригласить снова', 'Промолчать', 'Сказать «это моя работа» и отвернуться', 'Попросить денег'], ['Javoban minnatdorchilik bildirish va yana taklif qilish', 'Indamaslik', '«Bu mening ishim» deb, teskari oʻgirilish', 'Pul soʻrash'], 'Короткая благодарность закрепляет хорошее впечатление.', 'Qisqa minnatdorchilik yaxshi taassurotni mustahkamlaydi.'],
     ['safety', 'Каким должно быть рабочее место в конце смены?', 'Smena oxirida ish joyi qanday boʻlishi kerak?', ['Чистым: инструменты на местах, мусор вынесен — следующей смене удобно начать', 'Каким получилось', 'Уберёт следующая смена', 'Убирают раз в неделю'], ['Toza: asboblar joyida, axlat chiqarilgan — keyingi smenaga boshlash qulay', 'Qanday boʻlsa shunday', 'Keyingi smena tozalaydi', 'Haftada bir marta tozalanadi'], 'Порядок в конце смены — уважение к коллегам.', 'Smena oxiridagi tartib — hamkasblarga hurmat.'],
     ['service', 'Кто видит штрафы и премии в приложении?', 'Ilovada jarima va mukofotlarni kim koʻradi?', ['Сам сотрудник видит каждую запись с причиной', 'Никто, кроме бухгалтера', 'Только директор', 'Все сотрудники заведения'], ['Xodimning oʻzi har bir yozuvni sababi bilan koʻradi', 'Buxgalterdan boshqa hech kim', 'Faqat direktor', 'Muassasaning barcha xodimlari'], 'Каждый штраф и премия — с причиной, и сотрудник их видит.', 'Har bir jarima va mukofot — sababi bilan, xodim ularni koʻradi.']
+  ],
+  laundry: [
+    ['safety', 'Почему в цехе химчистки должна всегда работать вентиляция?', 'Nega kimyoviy tozalash sexida ventilyatsiya doim ishlashi kerak?', ['Пары растворителя (перхлорэтилена) вредны: от них кружится голова и страдает печень', 'Чтобы вещи быстрее сохли', 'Чтобы в цехе было прохладно', 'Её включают только летом'], ['Erituvchi (perxloretilen) bugʻi zararli: boshni aylantiradi va jigarga ziyon yetkazadi', 'Buyumlar tezroq qurishi uchun', 'Sexda salqin boʻlishi uchun', 'Faqat yozda yoqiladi'], 'Перхлорэтилен — токсичный растворитель. Вентиляция и закрытые ёмкости берегут здоровье команды.', 'Perxloretilen — zaharli erituvchi. Ventilyatsiya va yopiq idishlar jamoa salomatligini asraydi.'],
+    ['safety', 'Растворитель пролился на пол цеха. Что делать первым?', 'Erituvchi sex poliga toʻkildi. Avval nima qilish kerak?', ['Надеть перчатки и респиратор, проветрить, собрать сорбентом в закрытую ёмкость и сообщить технологу', 'Вытереть тряпкой и выбросить её в общий мусор', 'Смыть водой в канализацию', 'Оставить, само испарится'], ['Qoʻlqop va respirator kiyib, shamollatish, sorbent bilan yopiq idishga yigʻish va texnologga xabar berish', 'Latta bilan artib, umumiy axlatga tashlash', 'Suv bilan kanalizatsiyaga oqizish', 'Qoldirish, oʻzi bugʻlanib ketadi'], 'Растворитель нельзя сливать в канализацию и бросать в общий мусор — его собирают и сдают на утилизацию.', 'Erituvchini kanalizatsiyaga toʻkish va umumiy axlatga tashlash mumkin emas — u yigʻilib, utilizatsiyaga topshiriladi.'],
+    ['safety', 'Можно ли открывать дверцу машины химчистки до конца цикла?', 'Kimyoviy tozalash mashinasining eshigini sikl tugamasdan ochish mumkinmi?', ['Нет, только после полного окончания цикла и сушки', 'Да, если нужно добавить вещь', 'Да, если машина шумит', 'Да, в перчатках'], ['Yoʻq, faqat sikl va quritish toʻliq tugagandan keyin', 'Ha, buyum qoʻshish kerak boʻlsa', 'Ha, mashina shovqin qilsa', 'Ha, qoʻlqopda'], 'При открытии посреди цикла выходят пары растворителя, а вещи остаются мокрыми от химии.', 'Sikl oʻrtasida ochilsa, erituvchi bugʻi chiqadi, buyumlar esa kimyodan hoʻl qoladi.'],
+    ['safety', 'Можно ли есть и пить в цехе химчистки?', 'Kimyoviy tozalash sexida ovqatlanish va ichish mumkinmi?', ['Нет, только в комнате отдыха, предварительно вымыв руки', 'Да, если окна открыты', 'Да, воду можно', 'Да, если быстро'], ['Yoʻq, faqat dam olish xonasida, qoʻlni yuvgandan keyin', 'Ha, derazalar ochiq boʻlsa', 'Ha, suv ichish mumkin', 'Ha, tez boʻlsa'], 'Химия с рук и из воздуха попадает в еду и воду.', 'Qoʻl va havodagi kimyo ovqat va suvga tushadi.'],
+    ['safety', 'Пресс или утюг остаётся включённым, а вам нужно отойти. Как правильно?', 'Press yoki dazmol yoqiq qolyapti, siz esa ketishingiz kerak. Qanday toʻgʻri?', ['Поставить утюг на подставку, поднять пресс или выключить его', 'Оставить утюг на вещи', 'Положить утюг подошвой на доску', 'Ничего, вернусь быстро'], ['Dazmolni tagligiga qoʻyish, pressni koʻtarish yoki oʻchirish', 'Dazmolni buyum ustida qoldirish', 'Dazmolni tagi bilan taxtaga qoʻyish', 'Hech narsa, tez qaytaman'], 'Горячая подошва прожигает ткань за секунды и может вызвать пожар.', 'Issiq taglik matoni bir necha soniyada kuydiradi va yongʻinga sabab boʻlishi mumkin.'],
+    ['safety', 'Как защитить руки при работе с пятновыводителями?', 'Dogʻ ketkazgichlar bilan ishlaganda qoʻllarni qanday himoya qilish kerak?', ['Работать в химостойких перчатках, а при брызгах — в очках', 'Смазать руки кремом', 'Работать быстро голыми руками', 'Перчатки нужны только зимой'], ['Kimyoga chidamli qoʻlqopda, sachrasa — koʻzoynakda ishlash', 'Qoʻlga krem surtish', 'Yalangʻoch qoʻl bilan tez ishlash', 'Qoʻlqop faqat qishda kerak'], 'Пятновыводители содержат кислоты, щёлочи и растворители — они обжигают кожу и глаза.', 'Dogʻ ketkazgichlarda kislota, ishqor va erituvchilar bor — ular teri va koʻzni kuydiradi.'],
+    ['service', 'Что обязательно сделать при приёме вещи?', 'Buyumni qabul qilishda nima albatta qilinadi?', ['Осмотреть с клиентом, проверить карманы, записать и сфотографировать пятна и дефекты', 'Сразу отнести в цех', 'Только взвесить', 'Записать только имя клиента'], ['Mijoz bilan birga koʻzdan kechirish, choʻntaklarni tekshirish, dogʻ va nuqsonlarni yozib, suratga olish', 'Darhol sexga olib borish', 'Faqat tortish', 'Faqat mijoz ismini yozish'], 'Осмотр при клиенте и фото дефектов защищают от споров при выдаче.', 'Mijoz oldida koʻrik va nuqsonlar surati berishda nizolardan himoya qiladi.'],
+    ['service', 'Что означает на ярлыке значок «круг»?', 'Yorliqdagi «doira» belgisi nimani bildiradi?', ['Режим профессиональной химчистки (буква внутри — какой растворитель можно)', 'Стирка в машине', 'Глажка', 'Сушка на солнце'], ['Professional kimyoviy tozalash rejimi (ichidagi harf — qaysi erituvchi mumkinligi)', 'Mashinada yuvish', 'Dazmollash', 'Quyoshda quritish'], 'Круг — химчистка: P — перхлорэтилен, F — углеводородный растворитель, W — аквачистка. Перечёркнутый круг — химчистка запрещена.', 'Doira — kimyoviy tozalash: P — perxloretilen, F — uglevodorod erituvchi, W — akvatozalash. Ustidan chizilgan doira — kimyoviy tozalash taqiqlangan.'],
+    ['service', 'Сколько точек на значке утюга разрешают самую высокую температуру?', 'Dazmol belgisidagi nechta nuqta eng yuqori haroratga ruxsat beradi?', ['Три точки — до 200 °C (хлопок, лён)', 'Одна точка', 'Две точки', 'Точки не важны'], ['Uch nuqta — 200 °C gacha (paxta, zigʻir)', 'Bitta nuqta', 'Ikki nuqta', 'Nuqtalar muhim emas'], 'Одна точка — до 110 °C (синтетика, шёлк), две — до 150 °C (шерсть), три — до 200 °C.', 'Bitta nuqta — 110 °C gacha (sintetika, ipak), ikki — 150 °C gacha (jun), uch — 200 °C gacha.'],
+    ['service', 'На вещи нет ярлыка по уходу. Как поступить при приёме?', 'Buyumda parvarish yorligʻi yoʻq. Qabulda qanday yoʻl tutish kerak?', ['Предупредить клиента о риске и записать в квитанцию «без маркировки» с его подписью', 'Отказать без объяснений', 'Принять молча', 'Пришить свой ярлык'], ['Mijozni xavf haqida ogohlantirish va kvitansiyaga uning imzosi bilan «yorliqsiz» deb yozish', 'Tushuntirmasdan rad etish', 'Indamay qabul qilish', 'Oʻzimizning yorliqni tikib qoʻyish'], 'Без ярлыка технолог выбирает режим сам — клиент должен знать о риске заранее.', 'Yorliq boʻlmasa, texnolog rejimni oʻzi tanlaydi — mijoz xavfni oldindan bilishi kerak.'],
+    ['service', 'Зачем спрашивать клиента, от чего пятно?', 'Nega mijozdan dogʻ nimadan ekanini soʻrash kerak?', ['От вида пятна зависит средство: кровь, жир, вино и краска выводятся по-разному', 'Чтобы поддержать разговор', 'Чтобы взять больше денег', 'Это не важно'], ['Vosita dogʻ turiga bogʻliq: qon, yogʻ, vino va boʻyoq turlicha ketkaziladi', 'Suhbatni davom ettirish uchun', 'Koʻproq pul olish uchun', 'Bu muhim emas'], 'Неверное средство может закрепить пятно навсегда.', 'Notoʻgʻri vosita dogʻni butunlay mustahkamlab qoʻyishi mumkin.'],
+    ['service', 'Как выводят свежее пятно крови?', 'Yangi qon dogʻi qanday ketkaziladi?', ['Холодной водой, без горячей воды и пара', 'Горячей водой', 'Сразу утюгом', 'Растворителем и паром'], ['Sovuq suv bilan, issiq suv va bugʻsiz', 'Issiq suv bilan', 'Darhol dazmol bilan', 'Erituvchi va bugʻ bilan'], 'Тепло сворачивает белок крови, и пятно въедается в ткань.', 'Issiqlik qon oqsilini ivitadi va dogʻ matoga singib ketadi.'],
+    ['service', 'В кармане вещи клиента нашли деньги или документы. Что делать?', 'Mijoz buyumining choʻntagidan pul yoki hujjat topildi. Nima qilish kerak?', ['Вернуть клиенту сразу при приёме; нашли в цехе — записать и передать старшему', 'Оставить себе', 'Выбросить', 'Положить обратно и стирать'], ['Qabulda darhol mijozga qaytarish; sexda topilsa — yozib, kattaga topshirish', 'Oʻzingizga olib qolish', 'Tashlab yuborish', 'Joyiga solib, yuvish'], 'Честность с вещами клиента — основа доверия к химчистке.', 'Mijoz buyumlariga halollik — kimyoviy tozalashga ishonchning asosi.'],
+    ['service', 'Вещь испортилась во время чистки. Как правильно?', 'Buyum tozalash vaqtida buzildi. Qanday toʻgʻri?', ['Сразу сообщить технологу и управляющему, не прятать и не выдавать молча', 'Выдать клиенту, может, не заметит', 'Спрятать до конца смены', 'Сказать клиенту, что так и было'], ['Darhol texnolog va boshqaruvchiga xabar berish, yashirmaslik va indamay bermaslik', 'Mijozga berish, balki sezmas', 'Smena oxirigacha yashirish', 'Mijozga shunday edi deyish'], 'Порчу решает руководство: по фото при приёме видно, что было до чистки.', 'Buzilish masalasini rahbariyat hal qiladi: qabuldagi suratda tozalashdan oldin qanday boʻlgani koʻrinadi.'],
+    ['service', 'Клиент пришёл за вещью, а её нет на полке. Что делать?', 'Mijoz buyumi uchun keldi, lekin u tokchada yoʻq. Nima qilish kerak?', ['Извиниться, проверить цех, глажку и упаковку по квитанции и сообщить старшему', 'Сказать, что вещь не сдавали', 'Выдать похожую вещь', 'Попросить прийти через месяц'], ['Uzr soʻrash, kvitansiya boʻyicha sex, dazmollash va qadoqlashni tekshirish va kattaga xabar berish', 'Buyum topshirilmagan deyish', 'Oʻxshash buyumni berish', 'Bir oydan keyin kelishni soʻrash'], 'Вещь чаще всего находится на другом участке. Чужую вещь выдавать нельзя.', 'Buyum koʻpincha boshqa joyda boʻladi. Birovning buyumini berish mumkin emas.'],
+    ['service', 'Клиент недоволен результатом чистки. Как поступить?', 'Mijoz tozalash natijasidan norozi. Qanday yoʻl tutish kerak?', ['Спокойно выслушать, осмотреть вещь вместе и предложить повторную обработку после решения технолога', 'Спорить, что всё чисто', 'Повысить голос', 'Сразу вернуть деньги без старшего'], ['Xotirjam tinglash, buyumni birga koʻrish va texnolog qaroridan keyin qayta ishlovni taklif qilish', 'Hammasi toza deb bahslashish', 'Ovozni koʻtarish', 'Kattasiz darhol pulni qaytarish'], 'Повторная обработка часто решает проблему, а спокойный тон сохраняет клиента.', 'Qayta ishlov koʻpincha muammoni hal qiladi, xotirjam ohang esa mijozni saqlab qoladi.'],
+    ['safety', 'Почему перед сушкой чистят фильтр ворса?', 'Nega quritishdan oldin tukli filtr tozalanadi?', ['Забитый ворсом фильтр перегревает машину и может загореться', 'Чтобы машина меньше шумела', 'Ради красоты', 'Его чистят раз в год'], ['Tukka toʻlgan filtr mashinani qizdirib yuboradi va yonib ketishi mumkin', 'Mashina kamroq shovqin qilishi uchun', 'Chiroyli boʻlishi uchun', 'Yiliga bir marta tozalanadi'], 'Ворс легко горит — грязный фильтр частая причина пожаров в прачечных.', 'Tuk oson yonadi — iflos filtr kirxonalardagi yongʻinlarning keng tarqalgan sababi.'],
+    ['safety', 'Как хранить бельё клиентов до стирки и после?', 'Mijozlar kirlarini yuvishdan oldin va keyin qanday saqlash kerak?', ['Грязное и чистое — раздельно, в разных тележках и мешках', 'Вместе в одной корзине', 'Чистое на полу', 'Как удобнее'], ['Iflos va toza — alohida, turli aravacha va qoplarda', 'Bitta savatda birga', 'Tozasini polda', 'Qanday qulay boʻlsa'], 'Чистое бельё нельзя класть туда, где лежало грязное, — переносятся грязь и микробы.', 'Toza kirni iflos kir turgan joyga qoʻyib boʻlmaydi — kir va mikroblar oʻtadi.']
   ]
 };
 
@@ -40923,7 +40998,9 @@ var CG_BASE_SVC = VSVC.map(function (s) { return s[0]; });
   };
 })();
 
-/* 3. отделы и должности по анкете нового типа (в базовом vStruct список отделов закрыт) */
+/* 3. отделы и должности по анкете нового типа (в базовом vStruct список отделов закрыт).
+   Руководитель отдела управления (CG_MGR_DEPTS) — руководитель и при 1–2 людях в отделе (у химчистки управляющий один в «Управлении») */
+var CG_MGR_DEPTS = ['gladm'];
 function cg_struct(vp) {
   var depts = [['dir', 'Руководство']], pos = [{ id: 200, name: 'Владелец', dept_id: 'dir', access: 'director', sort: 0 }], id = 200;
   var DN = { adm: 'Администрация', sec: 'Охрана', eng: 'Техслужба', dlv: 'Доставка', sales: 'Продажи', fo: 'Ресепшен', hk: 'Хаускипинг', kitchen: 'Кухня', fnb: 'Зал' };
@@ -40940,7 +41017,7 @@ function cg_struct(vp) {
     }); });
     if (!rows.length) return;
     depts.push([d, DN[d] || d]);
-    rows.forEach(function (r) { pos.push({ id: ++id, name: r[0], dept_id: d, access: r[2] && ppl >= 3 ? 'manager' : 'staff', sort: pos.length, n: r[1], combo: r[3] || null }); });
+    rows.forEach(function (r) { pos.push({ id: ++id, name: r[0], dept_id: d, access: r[2] && (ppl >= 3 || CG_MGR_DEPTS.indexOf(d) >= 0) ? 'manager' : 'staff', sort: pos.length, n: r[1], combo: r[3] || null }); });
   });
   return { depts: depts, pos: pos };
 }
@@ -40983,7 +41060,8 @@ CGD.types.forEach(function (t) {
   var tasks = []; Object.keys(START_KIT_T[t.code] || {}).forEach(function (pn) { (START_KIT_T[t.code][pn] || []).forEach(function (k) { tasks.push({ pos: pn, time: k[0], title: k[1], title_uz: k[2], checklist: k[3] || null }); }); });
   window.CG_TYPES[t.code] = {
     code: t.code, name: t.name, name_uz: cg_uzOf(t.name), group: g[0], group_name: g[1], gen: t.gen, svc: t.svc.slice(), fit: t.fit.slice(), shifts: t.shifts.map(function (x) { return x.slice(); }),
-    checklists: (CGD.checklists[t.code] || []).map(function (c) { return { id: t.code + '_' + c.kind, kind: c.kind, title: c.title, title_uz: cg_uzOf(c.title), items: c.items.map(function (x) { return { t: x.t, uz: cg_uzOf(x.t), ph: x.ph }; }) }; }),
+    dshifts: t.dshifts ? JSON.parse(JSON.stringify(t.dshifts)) : null,
+    checklists: (CGD.checklists[t.code] || []).map(function (c) { return { id: t.code + '_' + c.key, kind: c.kind, key: c.key, title: c.title, title_uz: cg_uzOf(c.title), items: c.items.map(function (x) { return { t: x.t, uz: cg_uzOf(x.t), ph: x.ph }; }) }; }),
     tasks: tasks,
     quiz: cg_quizRows(t.code)
   };
@@ -40995,16 +41073,18 @@ var CG_HORECA = /гост[ьяиюей]|\bстол(ы|ов|а|у|ам|ами|а�
 function cg_hm(t) { var p = String(t || '0:0').split(':'); return (+p[0]) * 60 + (+p[1] || 0); }
 function cg_p2(n) { return ('0' + n).slice(-2); }
 function cg_seedShifts(DB, vp) {
-  var I = CG_INFO[vp.type], SH = I.shifts, codes = SH.map(function (x) { return x[0]; }), my = {};
+  var I = CG_INFO[vp.type], my = {};
+  var shOf = function (d) { return (I.dshifts && I.dshifts[d]) || I.shifts; }, codesOf = function (d) { return shOf(d).map(function (x) { return x[0]; }); };
   (vp.svc || []).forEach(function (s) { var d = vDeptOf(s); if (CG_DEPTS[d]) my[d] = 1; });
   var mx = 0; (DB.shift_types || []).forEach(function (t) { mx = Math.max(mx, +t.id || 0); });
   DB.shift_types = (DB.shift_types || []).filter(function (t) { return !my[t.dept_id]; });
-  Object.keys(my).forEach(function (d) { SH.forEach(function (x, i) { DB.shift_types.push({ id: ++mx, dept_id: d, code: x[0], name: x[1], start_time: x[2] + ':00', end_time: x[3] + ':00', active: true, sort: i + 1 }); }); });
+  Object.keys(my).forEach(function (d) { shOf(d).forEach(function (x, i) { DB.shift_types.push({ id: ++mx, dept_id: d, code: x[0], name: x[1], start_time: x[2] + ':00', end_time: x[3] + ':00', active: true, sort: i + 1 }); }); });
   var emp = {}; (DB.employees || []).forEach(function (e) { emp[e.id] = e; });
   var work = function (k) { try { return typeof isW === 'function' ? isW(k) : k !== 'o'; } catch (e) { return k !== 'o'; } };
   var sch = {};
   (DB.schedule || []).forEach(function (s) {
     var e = emp[s.employee_id]; if (!e || !my[e.dept_id]) return;
+    var codes = codesOf(e.dept_id);
     if (s.kind && work(s.kind) && codes.indexOf(s.kind) < 0) s.kind = s.kind === 'v' && codes.indexOf('n') >= 0 ? 'n' : codes[0];
     s.t_start = null; s.t_end = null; sch[s.employee_id + '|' + s.day] = s;
   });
@@ -41012,6 +41092,7 @@ function cg_seedShifts(DB, vp) {
   var now = Date.now();
   DB.attendance = (DB.attendance || []).filter(function (a) {
     var e = emp[a.employee_id]; if (!e || !my[e.dept_id] || !a.clock_in) return true;
+    var SH = shOf(e.dept_id), codes = codesOf(e.dept_id);
     var s = sch[a.employee_id + '|' + a.day], k = s && codes.indexOf(s.kind) >= 0 ? s.kind : codes[0], t = SH.filter(function (x) { return x[0] === k; })[0] || SH[0];
     var late = +a.late_min || 0, hh = 0; String(a.employee_id).split('').forEach(function (c) { hh = (hh * 31 + c.charCodeAt(0)) % 97; });
     var m = late > 0 ? cg_hm(t[2]) + late : cg_hm(t[2]) - 2 - hh % 9; if (m < 0 || m >= 1440) return false;
@@ -41020,6 +41101,24 @@ function cg_seedShifts(DB, vp) {
     if (a.clock_out) { var em = cg_hm(t[3]) + 3 + hh % 12, eo = em >= 1440 || cg_hm(t[3]) <= cg_hm(t[2]) ? null : a.day + 'T' + cg_p2(Math.floor(em / 60) % 24) + ':' + cg_p2(em % 60) + ':00+05:00'; a.clock_out = eo && Date.parse(eo) <= now ? eo : null; }
     return true;
   });
+}
+/* быстрые смены службы (dh_std части H, «Восстановить стандартные» и первый вход владельца на сервере): свои смены отдела типа (dshifts) — раньше общих.
+   Функция dh_std объявлена в 92h и поднята в общем замыкании, поэтому обёртка здесь её видит. */
+(function () {
+  if (typeof dh_std !== 'function') return;
+  var d0 = dh_std;
+  dh_std = function (dept) {
+    var ty = ''; try { ty = typeof dh_vtype === 'function' ? dh_vtype() : cg_type(); } catch (e) {}
+    var I = CG_INFO[ty], L = I && I.dshifts && I.dshifts[dept];
+    if (L && L.length) return L.map(function (x) { return [x[0], x[1], x[2], x[3]]; });
+    return d0.apply(this, arguments);
+  };
+})();
+/* управляющий из отдела управления (CG_MGR_DEPTS) — руководитель руководителей отделов и людей без руководителя отдела (учебные люди; на сервере — как назначит владелец) */
+function cg_topMgr(DB) {
+  var act = (DB.employees || []).filter(function (e) { return e.active !== false; }), dir = act.filter(function (e) { return e.role === 'director'; })[0];
+  var top = act.filter(function (e) { return e.role === 'manager' && CG_MGR_DEPTS.indexOf(e.dept_id) >= 0; })[0]; if (!top || !dir) return;
+  act.forEach(function (e) { if (e !== top && e.role !== 'director' && e.manager_id === dir.id) e.manager_id = top.id; });
 }
 function cg_boot() {
   var DB = window.__DB, snap = window.__CG_DB0; if (!DB || !snap || cg_boot.done) return;
@@ -41048,6 +41147,7 @@ function cg_boot() {
   /* 7.3 люди, записи, смены, задачи; учебные задачи и записи гостиницы и общепита — убираем */
   try {
     sxDemoPeopleVP(DB, vp0, pf0, oldPos); sxDemoScrub(DB, true);
+    cg_topMgr(DB);
     var KEEP = ['employees', 'positions', 'departments', 'hotel_settings', 'shift_types', 'quiz_questions', 'quiz_attempts', 'attendance', 'schedule', 'staff_devices', 'shift_photos'];
     Object.keys(DB).forEach(function (k) {
       if (KEEP.indexOf(k) >= 0 || !Array.isArray(DB[k])) return;
@@ -41076,7 +41176,7 @@ function cg_boot() {
       var cls = (window.CG_TYPES[vp0.type] || {}).checklists || [];
       (DB.tasks || []).forEach(function (t) {
         if (!t.kit || DB.cd_ck.some(function (c) { return c.task_id === t.id; })) return;
-        var c = cls.filter(function (x) { return CGD.ckTask[vp0.type + '|' + x.kind] === t.title; })[0]; if (!c) return;
+        var c = cls.filter(function (x) { return CGD.ckTask[vp0.type + '|' + (x.key || x.kind)] === t.title; })[0]; if (!c) return;
         DB.cd_ck.push({ id: 700000 + t.id, task_id: t.id, items: c.items.map(function (x) { return { t: x.t, ph: x.ph, done: t.status === 'done' }; }), by: null, at: new Date().toISOString() });
         if (c.items.some(function (x) { return x.ph; })) t.needs_photo = true;
       });
@@ -41228,7 +41328,7 @@ function cg_fixText(root) {
 })();
 
 /* отладка: ?w4dbg — window.__cg */
-if (/[?&]w4dbg/.test(location.search)) window.__cg = { CGD: CGD, quiz: cg_quizRows, type: cg_type, on: cg_on, struct: function (vp) { return vStruct(vp); }, vType: function (x) { return vType(x); } };
+if (/[?&]w4dbg/.test(location.search)) window.__cg = { CGD: CGD, quiz: cg_quizRows, type: cg_type, on: cg_on, struct: function (vp) { return vStruct(vp); }, vType: function (x) { return vType(x); }, dh: function (d) { return typeof dh_std === 'function' ? dh_std(d) : null; }, seed: function (t) { return vStruct(vDefault(t)); } };
 
 
 /* ===== ВОЛНА 4 · 92f-home.js ===== */
@@ -43101,7 +43201,7 @@ function di_login(first, last, skip) {
     return r;
   };
 })();
-var DI_FEM_POS = /^(Старшая медсестра|Медсестра|Заведующая|Старший воспитатель|Воспитатель|Помощник воспитателя|Няня|Санитарка|Горничная|Кормящая)$/;
+var DI_FEM_POS = /^(Старшая медсестра|Медсестра|Заведующая|Старший воспитатель|Воспитатель|Помощник воспитателя|Няня|Санитарка|Горничная|Кормящая|Старшая гладильщица|Гладильщица|Упаковщица|Швея)$/;
 function di_fem(e) {
   if (!e) return false;
   if (typeof cf_fem === 'function') try { return !!cf_fem(e); } catch (x) {}
