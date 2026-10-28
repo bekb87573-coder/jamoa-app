@@ -36488,6 +36488,32 @@ function sv_t(s) { try { return trUi(s); } catch (e) { return s; } }
     return VTYPES.map(function (t) { return '<option value="' + t[0] + '"' + (t[0] === sel ? ' selected' : '') + '>' + h(sv_t(t[1])) + '</option>'; }).join('');
   }
 
+  /* ---------- 0. новое заведение: структура по типу ----------
+     venue_create на сервере создаёт только «Руководство / Владелец». Без отделов и должностей владелец не может добавить сотрудника.
+     При первом входе владельца заполняем отделы, должности (как в анкете демо: vStruct(vDefault(тип))) и быстрые смены (dh_std). Один раз:
+     если в заведении уже больше одного отдела или должности — ничего не делаем. */
+  SV.seed = async function () {
+    var me = SV.me || {}, D = SV.T.departments || [], P = SV.T.positions || [];
+    if (me.role !== 'owner' || D.length > 1 || P.length > 1) return false;
+    var ty = (SV.venue && SV.venue.type) || ((SV.venues || []).filter(function (v) { return v.venue_id === SV.venueId; })[0] || {}).type;
+    var st = null; try { st = vStruct(vDefault(ty)); } catch (e) { st = null; }
+    if (!st || !st.depts || st.depts.length < 2) return false;
+    var DNU = { adm: 'Maʼmuriyat', fo: 'Qabulxona', hk: 'Xaskiping', kitchen: 'Oshxona', fnb: 'Zal', eng: 'Texnik xizmat', sec: 'Qoʻriqlash', sales: 'Sotuv', dlv: 'Yetkazib berish' };
+    var uz = function (s) { try { var t = (window.CG_UZ || {})[s]; return typeof t === 'string' ? t : null; } catch (e) { return null; } };
+    for (var i = 0; i < st.depts.length; i++) { var d = st.depts[i]; if (d[0] === 'dir') continue;
+      await sb.from('departments').insert({ id: d[0], code: d[0], name: d[1], name_uz: DNU[d[0]] || uz(d[1]), sort: i }); }
+    for (var j = 0; j < st.pos.length; j++) { var p = st.pos[j]; if (p.dept_id === 'dir') continue;
+      await sb.from('positions').insert({ name: p.name, name_uz: uz(p.name), dept_id: p.dept_id, sort: j }); }
+    if (typeof dh_std === 'function') {
+      for (var k = 0; k < st.depts.length; k++) { var dc = st.depts[k][0]; if (dc === 'dir') continue;
+        var L = dh_std(dc) || [];
+        for (var m = 0; m < L.length; m++) { try { await sb.from('shift_types').insert({ dept_id: dc, name: L[m][1], start_time: L[m][2], end_time: L[m][3], sort: m }); } catch (e) {} } }
+    }
+    return true;
+  };
+  /* вход мог завершиться раньше, чем загрузился этот фрагмент: тогда заполняем сейчас и один раз перезагружаем экран */
+  if (SV.ready) SV.seed().then(function (ok) { if (ok) location.reload(); }).catch(function (e) { try { console.warn('[sv] seed', e); } catch (x) {} });
+
   /* ---------- 1. вход ---------- */
   var rl0 = renderLogin;
   renderLogin = function () {

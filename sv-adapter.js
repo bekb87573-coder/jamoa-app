@@ -488,7 +488,7 @@
         return {};
       },
       departments: async function (qq) {
-        if (qq.op === 'insert') { for (var i = 0; i < qq.payload.length; i++) { var d = qq.payload[i]; var r = await real.from('departments').insert({ venue_id: V(), code: /^[a-z_]{2,20}$/.test(String(d.id || '')) ? d.id : d.code || null, name: d.name, name_uz: d.name_uz || null, sort: d.sort || 0, parent_id: ds(d.parent_id) }); if (r.error) throw r.error; } await load('base', true); return {}; }
+        if (qq.op === 'insert') { for (var i = 0; i < qq.payload.length; i++) { var d = qq.payload[i]; var r = await real.from('departments').insert({ venue_id: V(), code: /^[a-z][a-z0-9_]{0,31}$/.test(String(d.id || '')) ? d.id : /^[a-z][a-z0-9_]{0,31}$/.test(String(d.code || '')) ? d.code : 'd' + Date.now().toString(36) + i, name: d.name, name_uz: d.name_uz || null, sort: d.sort || 0, parent_id: ds(d.parent_id) }); if (r.error) throw r.error; } await load('base', true); return {}; }
         var L = target(qq, 'departments');
         for (var j = 0; j < L.length; j++) { var r2 = qq.op === 'delete' ? await real.from('departments').delete().eq('id', L[j].sid) : await real.from('departments').update(pick(qq.payload, ['name', 'name_uz', 'sort'])).eq('id', L[j].sid); if (r2.error) throw r2.error; }
         await load('base', true); return {};
@@ -787,6 +787,8 @@
       SV.setVenue(vid);
       try { await load('base', true); } catch (e) { SV.state = 'error'; SV.err = e; return; }
       SV.state = 'in'; SV.ready = true;
+      /* новое заведение: только «Руководство / Владелец» — заполнить отделы, должности и быстрые смены по типу (90-server, SV.seed) */
+      if (SV.seed) { try { if (await SV.seed()) await load('base', true); } catch (e) { try { console.warn('[sv] seed', e); } catch (x) {} } }
     };
 
     /* ----- клиент для приложения ----- */
