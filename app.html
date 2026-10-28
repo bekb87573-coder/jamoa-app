@@ -38337,7 +38337,9 @@ async function cb_press(action, btn, sure) {
       if (lateQ > Pn('explain_after_min', 0)) return cb_lateQSheet(item);
       return cb_why('nonet', action, at, { pos: pos });
     }
-    if (g.err) { reset(); return cb_why(g.err === 'denied' ? 'denied' : 'nogps', action, at, { pos: pos, vp: vp }); }
+    /* точка заведения не задана — место не проверяем: отметка проходит и без геолокации (запрета или GPS) */
+    if (g.err && vp) { reset(); return cb_why(g.err === 'denied' ? 'denied' : 'nogps', action, at, { pos: pos, vp: vp }); }
+    if (g.err) pos = { lat: null, lng: null, acc: null, dist: null };
     if (vp && dist > vp.rad) { reset(); return cb_why('far', action, at, { pos: pos, vp: vp }); }
     var r = await clockFn({ action: action, lat: g.lat, lng: g.lng, acc: g.acc, device_id: deviceId(), screen: screenTxt() });
     reset();

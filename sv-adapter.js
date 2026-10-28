@@ -654,6 +654,9 @@
       if (!b.action) return { data: { ok: false, reason: 'server', message: 'Нет действия' }, error: null };
       var photo = b.selfie || b.photo || null;
       if (photo && /^data:|^blob:/.test(photo)) { try { photo = await SV.upload(photo, 'clock'); } catch (e) { return { data: { ok: false, reason: 'cam', message: 'Фото не загрузилось: ' + (e.message || e) }, error: null }; } }
+      /* путь фото демо («<сотрудник>/clock-….jpg» в корзине task-photos) → путь в бакете сервера; чужой или непонятный путь не отправляем */
+      if (photo && SV.me) { var pre = V() + '/' + SV.me.id + '/';
+        if (String(photo).indexOf(pre) !== 0) { var mp = SV.pmap['task-photos|' + photo] || SV.pmap['media|' + photo] || null; photo = mp && mp.indexOf(pre) === 0 ? mp : null; } }
       var dev = b.device_id ? await sha256('jamoa|' + b.device_id) : null;
       var hp = null; if (b.action === 'in' && SV.health && SV.health.day === tday()) hp = SV.health.answers;
       var p = { p_action: b.action, p_at: b.at || null, p_lat: b.lat == null ? null : +b.lat, p_lng: b.lng == null ? null : +b.lng, p_acc: b.acc == null ? null : Math.round(+b.acc), p_photo_path: photo, p_device: dev, p_offline: !!b.offline, p_late_why: b.late_why || null, p_late_note: b.late_note || null, p_health: hp };
