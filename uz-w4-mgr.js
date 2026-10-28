@@ -1,0 +1,63 @@
+/* Часть 45 · mgr — узбекский (латиница). Перевод по точной строке. */
+Object.assign(window.MLX_UZ_EXTRA = window.MLX_UZ_EXTRA || {}, {
+  /* --- таймеры --- */
+  'Таймеры': 'Taymerlar', 'Таймеры рабочего места': 'Ish joyi taymerlari', '+ Таймер': '+ Taymer', 'Запустить': 'Ishga tushirish', 'Своё название': 'Oʻz nomingiz', 'Минут': 'Daqiqa',
+  'Минут: от 1 до 1440': 'Daqiqa: 1 dan 1440 gacha', 'Напишите, что за таймер': 'Taymer nima uchunligini yozing', 'Например, курица в духовке': 'Masalan, duxovkadagi tovuq',
+  'Увидит вся смена': 'Butun smena koʻradi', 'Таймер запущен': 'Taymer ishga tushdi', 'Время вышло': 'Vaqt tugadi', 'Таймер: время вышло': 'Taymer: vaqt tugadi', 'Стоп': 'Toʻxtatish', 'Снять': 'Olib tashlash',
+  'Таймеров нет. Поставьте — время увидит вся смена.': 'Taymerlar yoʻq. Qoʻying — vaqtni butun smena koʻradi.', 'Идут сейчас': 'Hozir ketmoqda', 'Сегодня закончились': 'Bugun tugaganlar', 'Пока нет': 'Hozircha yoʻq',
+  'Таймер видят все в вашей службе. Звук и вибрация — у того, кто поставил.': 'Taymerni xizmatingizdagi hamma koʻradi. Ovoz va tebranish — qoʻygan odamda.',
+  'Духовка, казан, тандыр, стирка — время видит вся смена': 'Duxovka, qozon, tandir, kir yuvish — vaqtni butun smena koʻradi',
+  'Духовка': 'Duxovka', 'Духовка: выпечка': 'Duxovka: pishiriq', 'Тандыр: закладка': 'Tandir: yopish', 'Ош: зирвак → рис → дамлама': 'Osh: zirvak → guruch → dam', 'Ош: Зирвак': 'Osh: Zirvak', 'Ош: Рис': 'Osh: Guruch', 'Ош: Дамлама': 'Osh: Dam',
+  'Казан: зирвак': 'Qozon: zirvak', 'Казан: рис': 'Qozon: guruch', 'Казан: дамлама': 'Qozon: dam', 'Зирвак': 'Zirvak', 'Рис': 'Guruch', 'Дамлама': 'Dam', 'Расстойка теста': 'Xamir koʻpchishi', 'Маринад': 'Marinad', 'Фритюр': 'Frityur',
+  'Фильтр-кофе': 'Filtr-qahva', 'Колд брю': 'Kold bryu', 'Сироп остывает': 'Sirop sovumoqda', 'Лёд в формах': 'Qoliplarda muz', 'Кальян: угли': 'Qalyon: koʻmir',
+  'Стиральная машина': 'Kir yuvish mashinasi', 'Сушильная машина': 'Quritish mashinasi', 'Гладильный каток': 'Dazmol katogi', 'Средство на поверхности': 'Sirtdagi vosita', 'Прачечная и уборка': 'Kirxona va tozalash', 'до': 'gacha',
+  /* --- жалобы гостей --- */
+  'Жалоба гостя': 'Mehmon shikoyati', '+ Жалоба гостя': '+ Mehmon shikoyati', 'Жалобы гостей': 'Mehmonlar shikoyatlari', 'Жалобы гостей сегодня': 'Bugungi mehmon shikoyatlari', 'Жалобы гостей — решаете вы': 'Mehmon shikoyatlari — siz hal qilasiz',
+  'Записать жалобу': 'Shikoyatni yozish', 'Жалоба записана': 'Shikoyat yozildi', 'Жалоба решена': 'Shikoyat hal qilindi', 'Жалоба не найдена': 'Shikoyat topilmadi', 'Все жалобы': 'Barcha shikoyatlar',
+  'Записать жалобу: кто решает, срок, «Решено» и компенсация': 'Shikoyatni yozish: kim hal qiladi, muddat, «Hal qilindi» va kompensatsiya', 'С ответственным и сроком решения': 'Masʼul va hal qilish muddati bilan',
+  'Срок решения': 'Hal qilish muddati', 'владелец увидит сегодня': 'egasi bugun koʻradi', 'Номер или место': 'Xona yoki joy', 'Стол или место': 'Stol yoki joy', 'Клиент или заказ': 'Mijoz yoki buyurtma', 'Мероприятие или стол': 'Tadbir yoki stol', 'Номер заказа или место': 'Buyurtma raqami yoki joy',
+  'например, 305': 'masalan, 305', 'например, стол 7': 'masalan, 7-stol', 'например, заказ 12': 'masalan, 12-buyurtma', 'например, «Узпромстрой»': 'masalan, «Uzpromstroy»',
+  'О чём': 'Nima haqida', 'Кухня, еда': 'Oshxona, taom', 'Обслуживание': 'Xizmat', 'Уборка': 'Tozalash', 'Шум': 'Shovqin', 'Поломка': 'Buzilish', 'Опоздание доставки': 'Yetkazib berish kechikdi', 'Банкет, мероприятие': 'Banket, tadbir',
+  'Холодное блюдо': 'Sovuq taom', 'Холодный кофе': 'Sovuq qahva', 'Невкусно': 'Mazasiz', 'Долго готовили': 'Uzoq tayyorlashdi', 'Не тот заказ': 'Boshqa buyurtma keldi', 'Волос или мусор в блюде': 'Taomda soch yoki axlat',
+  'Долго ждали': 'Uzoq kutishdi', 'Грубость': 'Qoʻpollik', 'Ошибка в счёте': 'Hisobda xato', 'Не принесли заказ': 'Buyurtmani olib kelishmadi',
+  'Не убран номер': 'Xona tozalanmagan', 'Грязное бельё': 'Kir choyshab', 'Нет полотенец': 'Sochiq yoʻq', 'Грязно в общих местах': 'Umumiy joylar iflos', 'Грязный стол': 'Stol iflos', 'Грязно в туалете': 'Hojatxona iflos', 'Грязная посуда': 'Idish iflos',
+  'Шум ночью': 'Tunda shovqin', 'Шум в соседнем номере': 'Qoʻshni xonada shovqin', 'Ремонт': 'Taʼmirlash', 'Громкая музыка': 'Baland musiqa', 'Шумные гости': 'Shovqinli mehmonlar',
+  'Не работает кондиционер': 'Konditsioner ishlamayapti', 'Нет горячей воды': 'Issiq suv yoʻq', 'Не работает телевизор': 'Televizor ishlamayapti', 'Опоздали': 'Kechikishdi', 'Остыло': 'Sovib qoldi', 'Не всё привезли': 'Hammasini olib kelishmadi',
+  'Не хватило блюд': 'Taom yetmadi', 'Поздно подали': 'Kech tortildi', 'Не по договору': 'Shartnomaga mos emas',
+  'Что случилось': 'Nima boʻldi', 'Решает': 'Hal qiladi', 'решает': 'hal qiladi', 'Записал(а)': 'Yozgan', 'записал(а)': 'yozgan', 'Вид': 'Turi', 'Ответ гостю': 'Mehmonga javob',
+  'Новая': 'Yangi', 'Принято': 'Qabul qilindi', 'Решено': 'Hal qilindi', 'Просрочено': 'Muddati oʻtdi', 'осталось': 'qoldi', 'Принято — занимаюсь': 'Qabul qilindi — shugʻullanyapman',
+  'Что ответили гостю': 'Mehmonga nima deb javob berildi', 'Например, извинились, заменили блюдо': 'Masalan, uzr soʻrashdi, taomni almashtirishdi', 'Напишите, что ответили гостю': 'Mehmonga nima deb javob berganingizni yozing',
+  'Компенсация гостю, если была': 'Mehmonga kompensatsiya, agar boʻlgan boʻlsa', 'Без компенсации': 'Kompensatsiyasiz', 'Десерт за счёт заведения': 'Muassasa hisobidan desert', 'Скидка': 'Chegirma', 'Замена блюда': 'Taomni almashtirish', 'Поздний выезд': 'Kech chiqish', 'Возврат денег': 'Pulni qaytarish',
+  'Сумма компенсации, сум': 'Kompensatsiya summasi, soʻm', 'Компенсация': 'Kompensatsiya', 'Компенсаций гостям': 'Mehmonlarga kompensatsiyalar',
+  'Укажите, где: номер, стол или клиент': 'Qayerda ekanini koʻrsating: xona, stol yoki mijoz', 'Выберите тему или напишите, что случилось': 'Mavzuni tanlang yoki nima boʻlganini yozing',
+  'Открытые': 'Ochiq', 'Решённые': 'Hal qilinganlar', 'Неделя': 'Hafta', 'Открытых жалоб нет': 'Ochiq shikoyatlar yoʻq', 'Решённых пока нет': 'Hal qilinganlar hozircha yoʻq',
+  'За 7 дней': '7 kunda', 'жалоб': 'shikoyat', 'не решено в срок': 'muddatida hal qilinmagan', 'в среднем до решения': 'hal qilishgacha oʻrtacha', 'Главное': 'Asosiysi', 'открыто': 'ochiq', 'просрочено': 'muddati oʻtgan',
+  'Жалобу записывает любой сотрудник. Решает ответственный по виду жалобы, срок —': 'Shikoyatni istalgan xodim yozadi. Shikoyat turiga koʻra masʼul hal qiladi, muddat —', '. Владелец видит жалобы в тот же день.': '. Egasi shikoyatlarni oʻsha kuni koʻradi.',
+  'Добавить фото': 'Rasm qoʻshish', 'Фото прикреплено': 'Rasm biriktirildi',
+  /* учебные жалобы */
+  'После уборки не оставили полотенца': 'Tozalashdan keyin sochiq qoldirishmadi', 'Принесли полотенца': 'Sochiq olib kelishdi', 'Соседи шумели после 23:00': 'Qoʻshnilar 23:00 dan keyin shovqin qilishdi', 'Сделали замечание соседям': 'Qoʻshnilarga tanbeh berildi',
+  'Кондиционер не включается': 'Konditsioner yoqilmayapti', 'Инженер починил': 'Muhandis tuzatdi', 'На завтраке кофе остыл, пока ждали': 'Nonushtada kutguncha qahva sovib qoldi', 'Заменили кофе, извинились': 'Qahvani almashtirib, uzr soʻrashdi',
+  'Кофе на завтраке холодный': 'Nonushtada qahva sovuq', 'Сварили новый': 'Yangisini damlashdi', 'Снова холодный кофе на завтраке': 'Nonushtada yana sovuq qahva', 'Поставили второй термос': 'Ikkinchi termos qoʻyildi', 'Кофе на завтраке остыл': 'Nonushtada qahva sovidi',
+  'Гость жалуется на шум в коридоре': 'Mehmon yoʻlakdagi shovqindan shikoyat qilyapti', 'Номер не убран к 15:00': 'Xona 15:00 gacha tozalanmagan',
+  'Лагман подали едва тёплым': 'Lagʻmon zoʻrgʻa iliq holda tortildi', 'Латте остыл, пока собирали заказ': 'Buyurtma yigʻilguncha latte sovib qoldi', 'Заменили, извинились': 'Almashtirib, uzr soʻrashdi', 'Ждали официанта 20 минут': 'Ofitsiantni 20 daqiqa kutishdi',
+  'Извинились, объяснили': 'Uzr soʻrab, tushuntirishdi', 'Шашлык остыл': 'Shashlik sovib qoldi', 'Подогрели, принесли новый': 'Isitib, yangisini olib kelishdi', 'Стол не протёрли после прошлых гостей': 'Oldingi mehmonlardan keyin stol artilmagan',
+  'Протёрли, извинились': 'Artib, uzr soʻrashdi', 'Суп холодный': 'Shoʻrva sovuq', 'Капучино холодный': 'Kapuchino sovuq', 'стол 2': '2-stol', 'стол 4': '4-stol', 'стол 7': '7-stol', 'стол 9': '9-stol', 'стол 12': '12-stol', 'Офис «Kapital»': '«Kapital» ofisi', '«Агробанк»': '«Agrobank»', '«Узпромстрой»': '«Uzpromstroy»',
+  /* --- оценка задач --- */
+  'Оценка работы': 'Ish bahosi', 'Оценки работы': 'Ish baholari', 'Хорошо': 'Yaxshi', 'Можно лучше': 'Yaxshiroq boʻlishi mumkin', 'Переделать': 'Qayta qilish', 'Переделать задачу': 'Vazifani qayta qilish',
+  'Оценка видна в карточке сотрудника. Рейтинг не меняется.': 'Baho xodim kartochkasida koʻrinadi. Reyting oʻzgarmaydi.', 'Оценка руководителя': 'Rahbar bahosi', 'Руководитель вернул': 'Rahbar qaytardi',
+  'Задача: хорошо': 'Vazifa: yaxshi', 'Задача: можно лучше': 'Vazifa: yaxshiroq boʻlishi mumkin', 'за 30 дней': '30 kunda', 'Оценок пока нет. Оценка ставится в выполненной задаче.': 'Baholar hozircha yoʻq. Baho bajarilgan vazifada qoʻyiladi.',
+  'Разводы': 'Dogʻlar', 'Не до конца': 'Oxirigacha emas', 'Не по стандарту': 'Standartga mos emas', 'Грязно': 'Iflos', 'Не то': 'Boshqa narsa', 'Подробнее': 'Batafsil', 'Например, разводы на бокалах у мойки': 'Masalan, yuvgich yonidagi qadahlarda dogʻlar',
+  'Сфотографировать, что не так': 'Nima notoʻgʻriligini suratga olish', 'Задача вернётся исполнителю. Рейтинг не меняется.': 'Vazifa ijrochiga qaytadi. Reyting oʻzgarmaydi.', 'Вернуть исполнителю': 'Ijrochiga qaytarish', 'Укажите причину': 'Sababini koʻrsating', 'Задача возвращена исполнителю': 'Vazifa ijrochiga qaytarildi',
+  'Протереть бокалы': 'Qadahlarni artish', 'Разобрать холодильник бара': 'Bar muzlatgichini tartibga solish', 'Почистить кофемашину': 'Qahva mashinasini tozalash', 'Поддон не вымыт': 'Poddon yuvilmagan',
+  /* --- норма людей --- */
+  'Норма людей на смену': 'Smenaga odamlar meʼyori', 'Изменить норму': 'Meʼyorni oʻzgartirish', '+ Задать норму': '+ Meʼyor belgilash', '+ Должность': '+ Lavozim', 'Норм пока нет': 'Meʼyorlar hozircha yoʻq', 'Норма сохранена': 'Meʼyor saqlandi', 'Любая': 'Istalgan',
+  'стоит': 'turibdi', 'Красным — дни, где людей меньше нормы.': 'Qizil — odamlar meʼyordan kam boʻlgan kunlar.',
+  'Задайте, сколько людей нужно по дням недели: например, «пятница вечер — 6 официантов». Недобор подсветится красным.': 'Hafta kunlari boʻyicha qancha odam kerakligini belgilang: masalan, «juma kechqurun — 6 ofitsiant». Yetishmovchilik qizil rangda koʻrinadi.',
+  /* --- «Сейчас» руководителя --- */
+  'Зал сейчас': 'Zal hozir', 'Зал сейчас (руководителю)': 'Zal hozir (rahbarga)', 'Пик': 'Tigʻiz vaqt', 'Пик (руководителю)': 'Tigʻiz vaqt (rahbarga)', 'занято': 'band', 'столов занято': 'stol band', 'выручка с начала смены': 'smena boshidan tushum',
+  'Долго ждут': 'Uzoq kutishmoqda', 'готово, не подано': 'tayyor, tortilmagan', 'счёт просили': 'hisob soʻrashgan', 'назад': 'oldin', 'Нужна помощь': 'Yordam kerak', 'Никто не ждёт дольше': 'Hech kim kutmayapti, chegara', 'Столы': 'Stollar',
+  'за сегодня заказов': 'bugun buyurtmalar', 'заказов за 15 минут': '15 daqiqada buyurtmalar', 'в среднем «оплата → готово»': 'oʻrtacha «toʻlov → tayyor»', 'номеров на раздаче': 'tarqatishdagi raqamlar', 'доставок без курьера': 'kuryersiz yetkazmalar',
+  'Казаны': 'Qozonlar', 'Закончилось': 'Tugadi', 'столов': 'stol',
+  /* --- тест из меню --- */
+  'Наше меню': 'Bizning menyu', 'Тест дня из нашего меню': 'Menyumizdan kun testi'
+});

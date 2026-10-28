@@ -1,0 +1,40 @@
+/* 91 «Режим ядра» — узбекский (латиница). Строки приложения — MLX_UZ_EXTRA, строки кабинета основателя — FD_UZ (переводит fd_t). */
+Object.assign(window.MLX_UZ_EXTRA = window.MLX_UZ_EXTRA || {}, {
+  'Режим ядра: включён': 'Yadro rejimi: yoqilgan',
+  'У всех заведений только ядро: люди, отметка, смены, задачи, тест дня, заработок, рейтинг.': 'Barcha muassasalarda faqat yadro: odamlar, belgi, smenalar, vazifalar, kun testi, daromad, reyting.',
+  'Здесь ваши задачи, смены и график, заработок, тест дня и новости заведения — всё в одном месте.': 'Bu yerda vazifalaringiz, smena va jadvalingiz, daromadingiz, kun testi va muassasa yangiliklari — hammasi bir joyda.',
+  'Здесь пульт заведения: кто на смене, задачи команды, заявки сотрудников, заработок и рейтинг.': 'Bu yerda muassasa pulti: kim smenada, jamoa vazifalari, xodimlar arizalari, daromad va reyting.',
+  'Пульс — кто на смене, опоздания и задачи. Всё, что ждёт вашего решения: отгулы, отпуска, авансы и обмен сменами, — в «Ждут решения».': 'Puls — kim smenada, kechikishlar va vazifalar. Qaroringizni kutayotgan hamma narsa: javob soʻrash, taʼtil, avans va smena almashish — «Qaror kutmoqda» boʻlimida.',
+  'Задачи — во вкладке «Задачи»: срок, исполнитель, фото-отчёт. Срочное приходит экраном с сигналом — нажмите «Принял».': 'Vazifalar — «Vazifalar» boʻlimida: muddat, ijrochi, foto-hisobot. Shoshilinch ish signalli ekran bilan keladi — «Qabul qildim» tugmasini bosing.',
+  'Рейтинг и тест дня, объявления, инструкции, «Сообщить о проблеме». Отпроситься — в «Разрешениях».': 'Reyting va kun testi, eʼlonlar, yoʻriqnomalar, «Muammo haqida xabar berish». Ruxsat soʻrash — «Ruxsatlar» boʻlimida.',
+  'Все разделы заведения: заявки сотрудников, расчётные листы, рейтинг, объявления и инструкции.': 'Muassasaning barcha boʻlimlari: xodimlar arizalari, hisob varaqalari, reyting, eʼlonlar va yoʻriqnomalar.',
+  'Срочное от коллег и руководителя. Нажмите «Беру» или «Принял» — все увидят, что дело ваше.': 'Hamkasblar va rahbardan shoshilinch ishlar. «Olaman» yoki «Qabul qildim» tugmasini bosing — hamma ish sizniki ekanini koʻradi.',
+  'Новые задачи. Нажмите «Принял», чтобы взять в работу.': 'Yangi vazifalar. Ishga olish uchun «Qabul qildim» tugmasini bosing.',
+  'Фото чек-листа открытия смены': 'Smena ochilishi chek-listi surati',
+  'за выполненную задачу': 'bajarilgan vazifa uchun',
+  'выполненную задачу': 'bajarilgan vazifa',
+  'Деньги': 'Pullar',
+  'Администраторы, смены ресепшена': 'Administratorlar, qabulxona smenalari',
+  'Горничные и уборщицы': 'Xizmatchi ayollar va farroshlar',
+  'Официанты, хостес, кассиры': 'Ofitsiantlar, xostes, kassirlar',
+  'Повара, заготовщики, мойщики': 'Oshpazlar, tayyorlovchilar, idish yuvuvchilar',
+  'Бармены и бариста': 'Barmenlar va baristalar',
+  'Инженеры и техники': 'Muhandislar va texniklar',
+  'Посты охраны': 'Qoʻriqlash postlari',
+  'Менеджеры по продажам': 'Savdo menejerlari',
+  'Бухгалтеры, расчётные листы': 'Buxgalterlar, hisob varaqalari',
+  'Закупщики и кладовщики': 'Xaridorlar va omborchilar',
+  'Курьеры, водители': 'Kuryerlar, haydovchilar',
+  'Разрешения, отгулы, авансы и обмены сменами — одним списком': 'Ruxsatlar, javob olish, avanslar va smena almashish — bitta roʻyxatda',
+  'ФОТ — начислено до удержаний: оклад, ночные, сверхурочные, премии минус штрафы.': 'Ish haqi fondi — ushlanmalargacha hisoblangan: maosh, tungi, qoʻshimcha ish, mukofotlar minus jarimalar.',
+  'Команда заведения в одном телефоне': 'Muassasa jamoasi bitta telefonda',
+  'Конфликт, нарушение, поломка, идея': 'Nizo, qoidabuzarlik, buzilish, gʻoya'
+});
+Object.assign(window.FD_UZ = window.FD_UZ || {}, {
+  'Режим ядра: включён': 'Yadro rejimi: yoqilgan',
+  'У всех заведений только ядро: люди, отметка, смены, задачи, тест дня, заработок, рейтинг.': 'Barcha muassasalarda faqat yadro: odamlar, belgi, smenalar, vazifalar, kun testi, daromad, reyting.',
+  'Активное заведение — за день была хотя бы одна отметка прихода.': 'Faol muassasa — kun davomida kamida bitta kelish belgisi boʻlgan.',
+  'Подписка выключена. Решение о включении — когда 20–30 заведений работают каждый день 2+ месяца. «Каждый день» — не больше {m} дней без отметок за последние {d} дней.': 'Obuna oʻchirilgan. Yoqish haqida qaror — 20–30 ta muassasa 2+ oy har kuni ishlaganda. «Har kuni» — oxirgi {d} kunda belgisiz kunlar {m} tadan koʻp emas.',
+  'Были рабочие дни, но 3 дня и больше нет отметок.': 'Ish kunlari boʻlgan, lekin 3 kun va undan koʻp belgi yoʻq.',
+  'Составили график смен': 'Smenalar jadvali tuzildi'
+});

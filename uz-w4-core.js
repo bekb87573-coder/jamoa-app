@@ -1,0 +1,77 @@
+/* Волна 4 · 00-core: узбекский (латиница) — меню, стоп-лист, права, разделы */
+Object.assign(window.MLX_UZ_EXTRA = window.MLX_UZ_EXTRA || {}, {
+  /* функции и разделы */
+  'Меню': 'Menyu', 'Столы и заказы': 'Stollar va buyurtmalar', 'Стойка': 'Peshtaxta', 'Экран кухни': 'Oshxona ekrani', 'Экран бара': 'Bar ekrani',
+  'Касса': 'Kassa', 'Доставки': 'Yetkazishlar', 'Банкеты': 'Banketlar', 'Заказы клиентов': 'Mijozlar buyurtmalari', 'Заказ в номер': 'Xonaga buyurtma',
+  'Мини-бар': 'Mini-bar', 'Прайс мелочей': 'Mayda narsalar narxi', 'Зал (Пульт)': 'Zal (Pult)',
+  'Блюда, цены, фото, стоп-лист': 'Taomlar, narxlar, rasmlar, stop-roʻyxat', 'Полотенце, стирка, трансфер — цены для гостей': 'Sochiq, kir yuvish, transfer — mehmonlar uchun narxlar',
+  'для кофейни, кафе и фастфуда или включите вручную': 'qahvaxona, kafe va fastfud uchun yoki qoʻlda yoqing', 'для ресторана, кафе и отеля с рестораном': 'restoran, kafe va restoranli mehmonxona uchun', 'для ресторана и кафе': 'restoran va kafe uchun',
+  'нужна должность «Кассир» или включите вручную': '«Kassir» lavozimi kerak yoki qoʻlda yoqing', 'только для тойхоны': 'faqat toʻyxona uchun', 'только для кейтеринга': 'faqat ketering uchun',
+  /* разделы меню, единицы, цеха, курсы, аллергены */
+  'Зал': 'Zal', 'Банкет': 'Banket', 'Прачечная': 'Kir yuvish', 'Услуги': 'Xizmatlar', 'Раздел меню': 'Menyu boʻlimi',
+  'порция': 'porsiya', 'шт': 'dona', '100 г': '100 g', 'кг': 'kg',
+  'Горячий цех': 'Issiq sex', 'Холодный цех': 'Sovuq sex', 'Мангал': 'Mangal', 'Тандыр': 'Tandir', 'Казан': 'Qozon', 'Кондитерский цех': 'Qandolat sexi', 'Бар': 'Bar',
+  'Сразу': 'Darhol', 'Первым': 'Birinchi', 'Вторым': 'Ikkinchi', 'Третьим (десерт)': 'Uchinchi (desert)',
+  'Орехи': 'Yongʻoq', 'Кунжут': 'Kunjut', 'Молоко': 'Sut', 'Глютен': 'Glyuten', 'Яйца': 'Tuxum', 'Рыба': 'Baliq',
+  /* экран меню */
+  '+ Блюдо': '+ Taom', 'Стоп-лист': 'Stop-roʻyxat', 'Ещё': 'Yana', 'Снять фото для блюд без фото': 'Rasmsiz taomlarni suratga olish',
+  'Поиск: 2 буквы или номер в кассе': 'Qidirish: 2 harf yoki kassadagi raqam', 'Все': 'Hammasi', 'нет': 'yoʻq', 'осталось': 'qoldi', 'блюдо дня': 'kun taomi',
+  'нет номера в кассе': 'kassada raqami yoʻq', 'скрыта': 'yashirilgan', 'Введите 2 буквы': '2 ta harf kiriting', 'Ничего не найдено': 'Hech narsa topilmadi',
+  'В этом разделе пока нет позиций': 'Bu boʻlimda hozircha pozitsiyalar yoʻq',
+  /* карточка блюда */
+  'Выход': 'Chiqishi', 'Номер в кассе (PLU)': 'Kassadagi raqam (PLU)', 'нет номера в кассе — найдите по названию': 'kassada raqami yoʻq — nomi boʻyicha toping',
+  'Аллергены': 'Allergenlar', 'Модификаторы': 'Modifikatorlar', 'выбрать одно': 'bittasini tanlash', 'по желанию': 'ixtiyoriy', 'обязательно': 'majburiy',
+  'Подаётся': 'Beriladi', 'продаётся': 'sotiladi', 'Закончилось': 'Tugadi', 'Закончилось в': 'Tugagan vaqti', 'до отмены': 'bekor qilinguncha', 'снимется в 06:00': '06:00 da olib tashlanadi',
+  'Осталось': 'Qoldi', 'Осталось, шт': 'Qoldi, dona', 'Осталось N': 'N ta qoldi', 'До отмены (не снимать утром)': 'Bekor qilinguncha (ertalab olib tashlamaslik)',
+  'Вернуть в продажу': 'Sotuvga qaytarish', 'Сообщить: закончилось': 'Xabar berish: tugadi', 'Изменить': 'Oʻzgartirish',
+  'В стопе': 'Stopda', 'Снова в продаже': 'Yana sotuvda', 'Укажите, сколько осталось': 'Qancha qolganini kiriting',
+  'Сообщили: закончилось': 'Xabar berildi: tugadi', 'Отправлено': 'Yuborildi', 'Некому отправить': 'Yuboradigan odam yoʻq',
+  /* правка */
+  'Новая позиция': 'Yangi pozitsiya', 'Снять': 'Suratga olish', 'Из галереи': 'Galereyadan', 'Убрать фото': 'Rasmni olib tashlash',
+  'Название': 'Nomi', 'Например, «Лагман»': 'Masalan, «Lagʻmon»', 'Название по-узбекски': 'Oʻzbekcha nomi', 'Кириллицей — само, по буквам': 'Kirillchada — avtomatik, harfma-harf',
+  'Категория': 'Kategoriya', '+ Новая категория': '+ Yangi kategoriya', 'Название новой категории': 'Yangi kategoriya nomi',
+  'Цена, сум': 'Narxi, soʻm', 'Цену меняет руководитель с правом «Меню: цены»': 'Narxni «Menyu: narxlar» huquqi bor rahbar oʻzgartiradi',
+  'Единица': 'Birlik', 'Цех': 'Sex', 'Объёмы с ценами': 'Hajmlar va narxlar', '+ Объём': '+ Hajm', 'Цена': 'Narx', 'Убрать объём': 'Hajmni olib tashlash',
+  'Например, «Острота»': 'Masalan, «Achchiqlik»', 'Убрать группу': 'Guruhni olib tashlash', 'обязательно выбрать': 'tanlash majburiy', 'Вариант': 'Variant',
+  'Убрать вариант': 'Variantni olib tashlash', '+ Вариант': '+ Variant', '+ Группа модификаторов': '+ Modifikatorlar guruhi',
+  'Галочка у варианта — выбран по умолчанию; сумма — доплата': 'Variantdagi belgi — sukut boʻyicha tanlangan; summa — qoʻshimcha toʻlov',
+  'Подавать': 'Berish', 'Время продажи': 'Sotish vaqti', 'Продаётся с': 'Sotiladi, dan', 'Продаётся до': 'Sotiladi, gacha', 'Блюдо дня': 'Kun taomi',
+  'Для кассы': 'Kassa uchun', 'Например, 105': 'Masalan, 105', 'ИКПУ (MXIK)': 'MXIK (IKPU)', '17 цифр': '17 ta raqam',
+  'Номер в кассе обязателен: по нему кассир переносит заказ в кассовый аппарат': 'Kassadagi raqam majburiy: kassir u boʻyicha buyurtmani kassa apparatiga kiritadi',
+  'уже есть': 'allaqachon bor', 'Сохранить': 'Saqlash', 'Скрыть из меню': 'Menyudan yashirish', 'Вернуть в меню': 'Menyuga qaytarish',
+  'Укажите название': 'Nomini kiriting', 'Выберите категорию': 'Kategoriyani tanlang', 'Укажите номер в кассе (PLU) — без него кассир не найдёт позицию': 'Kassadagi raqamni (PLU) kiriting — usiz kassir pozitsiyani topa olmaydi',
+  'Номер в кассе уже занят': 'Kassadagi raqam band', 'Укажите цену': 'Narxni kiriting', 'Добавлено': 'Qoʻshildi', 'Сохранено': 'Saqlandi',
+  'Скрыть из меню?': 'Menyudan yashirilsinmi?', 'Скрыть': 'Yashirish', 'позиция уйдёт в архив, её можно вернуть': 'pozitsiya arxivga oʻtadi, uni qaytarish mumkin',
+  'Скрыто из меню': 'Menyudan yashirildi', 'Возвращено в меню': 'Menyuga qaytarildi', 'Не получилось прочитать фото': 'Rasmni oʻqib boʻlmadi',
+  /* «Ещё», категории */
+  'Категории: порядок, скрыть, новая': 'Kategoriyalar: tartib, yashirish, yangi', 'Загрузить таблицу': 'Jadvalni yuklash', 'Журнал цен': 'Narxlar jurnali',
+  'Скрытые из меню': 'Menyudan yashirilganlar', 'Без номера в кассе': 'Kassada raqamsiz', 'кассир найдёт их только по названию': 'kassir ularni faqat nomi boʻyicha topadi',
+  'Категории': 'Kategoriyalar', 'Порядок — как у вкладок меню': 'Tartib — menyu yorliqlaridagidek', 'Перетащить': 'Sudrash', 'Выше': 'Yuqoriga', 'Показать': 'Koʻrsatish',
+  'Новая категория': 'Yangi kategoriya', '+ Категория': '+ Kategoriya', 'Порядок сохранён': 'Tartib saqlandi', 'Напишите название категории': 'Kategoriya nomini yozing',
+  'Категория добавлена': 'Kategoriya qoʻshildi', 'Пусто — весь день. Например, завтраки 07:00–11:30': 'Boʻsh — kun boʻyi. Masalan, nonushtalar 07:00–11:30',
+  /* стоп-лист и главная */
+  'Сам снимается в 06:00, если не стоит «до отмены»': '«Bekor qilinguncha» belgilanmagan boʻlsa, 06:00 da oʻzi olib tashlanadi',
+  'Всё в продаже': 'Hammasi sotuvda', 'Поставить в стоп': 'Stopga qoʻyish', 'закончился в': 'tugagan vaqti', 'Вернуть': 'Qaytarish',
+  'Стоп': 'Stop', 'Мало': 'Kam qoldi',
+  /* загрузка таблицы, фото, журнал цен */
+  'Скопируйте строки из Excel и вставьте сюда — или выберите файл CSV': 'Excel’dan qatorlarni nusxalab, shu yerga qoʻying — yoki CSV faylni tanlang',
+  'Столбцы по порядку': 'Ustunlar tartibi', 'Номер в кассе': 'Kassadagi raqam', 'ИКПУ': 'MXIK', 'Образец CSV': 'CSV namunasi', 'Выбрать файл CSV': 'CSV faylni tanlash',
+  'нет цены': 'narxi yoʻq', 'номер уже есть': 'raqam allaqachon bor', 'цех не найден': 'sex topilmadi', '№': '№',
+  'Строк с замечаниями': 'Izohli qatorlar', 'их можно добавить и поправить потом': 'ularni qoʻshib, keyin tuzatish mumkin', 'Добавить': 'Qoʻshish',
+  'позицию': 'pozitsiya', 'позиции': 'pozitsiya', 'позиций': 'pozitsiya', 'Добавлено позиций': 'Qoʻshilgan pozitsiyalar',
+  'Фото для блюд': 'Taomlar uchun rasm', 'Пропустить': 'Oʻtkazib yuborish', 'Готово': 'Tayyor', 'У всех блюд есть фото': 'Hamma taomlarda rasm bor',
+  'Новая цена действует для новых позиций заказа; в открытых заказах остаётся прежняя': 'Yangi narx buyurtmaning yangi pozitsiyalari uchun amal qiladi; ochiq buyurtmalarda avvalgisi qoladi',
+  'Цены ещё не меняли': 'Narxlar hali oʻzgartirilmagan',
+  /* права */
+  'Права в меню и кассе': 'Menyu va kassadagi huquqlar',
+  'Галочки — что может должность. Владелец может всё. Шеф правит блюда кухни, бармен — бара. Официант без прав только сообщает «закончилось» шефу.': 'Belgilar — lavozim nima qila oladi. Egasi hammasini qila oladi. Oshpaz oshxona taomlarini, barmen — bar taomlarini tahrirlaydi. Huquqsiz ofitsiant faqat oshpazga «tugadi» deb xabar beradi.',
+  'по умолчанию': 'sukut boʻyicha', 'Как по умолчанию': 'Sukut boʻyicha', 'Какие блюда': 'Qaysi taomlar', 'Все цеха': 'Barcha sexlar', 'Только кухня': 'Faqat oshxona', 'Только бар': 'Faqat bar',
+  'Меню: блюда и фото': 'Menyu: taomlar va rasmlar', 'Меню: цены': 'Menyu: narxlar', 'Меню: цеха и модификаторы': 'Menyu: sexlar va modifikatorlar',
+  'Отменяет отправленные позиции': 'Yuborilgan pozitsiyalarni bekor qiladi', 'Даёт ручную скидку': 'Qoʻlda chegirma beradi', 'Принимает оплату (касса)': 'Toʻlov qabul qiladi (kassa)',
+  'Права сохранены': 'Huquqlar saqlandi', 'Права — как по умолчанию': 'Huquqlar — sukut boʻyicha',
+  /* включить вручную */
+  'Включить вручную': 'Qoʻlda yoqish', 'Заказ у стойки: касса принимает заказ и отправляет на кухню или бар': 'Peshtaxtada buyurtma: kassa buyurtmani qabul qilib, oshxona yoki barga yuboradi',
+  'Экран «Перенести в кассу» для того, кто принимает оплату': 'Toʻlov qabul qiluvchi uchun «Kassaga oʻtkazish» ekrani',
+  'Анкета их не включает: нет должности «Кассир» или тип заведения другой.': 'Anketa ularni yoqmaydi: «Kassir» lavozimi yoʻq yoki muassasa turi boshqa.',
+  'Включено': 'Yoqildi', 'Выключено': 'Oʻchirildi', 'сум': 'soʻm'
+});

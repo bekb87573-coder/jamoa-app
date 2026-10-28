@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E0F11">
+<title>Jamoa · проверка сервера</title>
+<style>
+:root{--bg:#F2F4F6;--card:#FFFFFF;--ink:#17202A;--muted:#5D6874;--line:#E1E6EB;--gold:#A57F35;--ok:#1F6B47;--okbg:#E3F2EA;--warn:#8A5A0B;--warnbg:#FBF0D9;--bad:#A3321F;--badbg:#FBE7E3}
+@media (prefers-color-scheme:dark){:root{--bg:#0E0F11;--card:#17191C;--ink:#F3EEE4;--muted:#A9A397;--line:#2A2D31;--gold:#D1A958;--ok:#7FD1A4;--okbg:#14261C;--warn:#E8C27A;--warnbg:#2A2214;--bad:#F09A88;--badbg:#2C1713}}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font-family:Manrope,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;-webkit-text-size-adjust:100%}
+main{max-width:560px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top)) 16px 40px;display:flex;flex-direction:column;gap:14px}
+.k{font-size:12px;font-weight:700;letter-spacing:.18em;color:var(--gold);text-transform:uppercase}
+h1{margin:2px 0 0;font-size:22px;line-height:1.2}p{margin:0;color:var(--muted);font-size:14px;line-height:1.5}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px}
+label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
+input{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:12px;min-height:46px;padding:0 12px;width:100%}
+button{font:inherit;min-height:48px;border-radius:14px;border:0;font-weight:700;cursor:pointer}
+.go{background:var(--gold);color:#17140E}.ghost{background:none;border:1px solid var(--line);color:var(--ink)}
+button:disabled{opacity:.5}
+.row{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}.row:first-child{border-top:0}
+.dot{flex:none;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}
+.ok .dot{background:var(--okbg);color:var(--ok)}.bad .dot{background:var(--badbg);color:var(--bad)}.warn .dot{background:var(--warnbg);color:var(--warn)}.wait .dot{background:var(--line);color:var(--muted)}
+.t{font-weight:600;font-size:14.5px;line-height:1.35}.d{font-size:13px;color:var(--muted);line-height:1.45;word-break:break-word}
+.sum{font-weight:700;font-size:16px}.sum.ok{color:var(--ok)}.sum.bad{color:var(--bad)}.sum.warn{color:var(--warn)}
+details summary{cursor:pointer;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <div><div class="k">Jamoa</div><h1>Проверка сервера</h1></div>
+  <p>Страница стучится в настоящий сервер (Supabase-проект <b id="pj"></b>) и показывает: <b>зелёный</b> — работает, <b>жёлтый</b> — работает, но есть замечание, <b>красный</b> — не работает. Пароль никуда не сохраняется.</p>
+  <form class="card" id="f" autocomplete="on">
+    <label>Логин сотрудника или почта владельца<input id="lg" autocapitalize="none" autocomplete="username" placeholder="например, owner@mail.uz или akbar.a" required></label>
+    <label>Пароль<input id="pw" type="password" autocomplete="current-password" required></label>
+    <button class="go" id="run" type="submit">Проверить</button>
+    <p>Лучше всего — вход владельца: тогда проверяются и «Сейчас в заведении», и фото, и приглашения. Без входа проверяется только связь.</p>
+  </form>
+  <div class="card"><div id="sum" class="sum">Нажмите «Проверить»</div><div id="out"></div></div>
+  <details class="card"><summary>Что проверяется</summary><p>1) адрес сервера отвечает; 2) без входа rpc закрыты; 3) вход по логину или почте; 4) профиль и заведение; 5) rpc ядра отвечают; 6) RLS: в ответах только своё заведение, чужие уведомления не видны, прямая запись отметки запрещена; 7) хранилище фото jamoa-photos (миграция 0011): своя папка — можно, чужая — нельзя; 8) edge-функция staff-auth на месте; 9) обновления в реальном времени (колокольчик).</p></details>
+</main>
+<script>window.JAMOA_SELFCHECK = true;</script>
+<script src="server-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.JAMOA_SERVER || {}, out = document.getElementById('out'), sumEl = document.getElementById('sum'), N = { ok: 0, warn: 0, bad: 0 };
+  document.getElementById('pj').textContent = String(C.url || '').replace(/^https:\/\//, '').split('.')[0] || '—';
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function row(title) { var d = document.createElement('div'); d.className = 'row wait'; d.innerHTML = '<span class="dot">…</span><div><div class="t">' + esc(title) + '</div><div class="d">проверяю…</div></div>'; out.appendChild(d);
+    return function (st, text) { N[st]++; d.className = 'row ' + st; d.querySelector('.dot').textContent = st === 'ok' ? '✓' : st === 'warn' ? '!' : '×'; d.querySelector('.d').textContent = text || ''; }; }
+  function msg(e) { return e ? (e.message || e.error_description || String(e)) + (e.details ? ' [' + e.details + ']' : '') : ''; }
+  function timeout(p, ms) { return Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('нет ответа ' + ms / 1000 + ' с')); }, ms); })]); }
+  document.getElementById('f').onsubmit = function (ev) { ev.preventDefault(); run(); };
+  async function run() {
+    var btn = document.getElementById('run'); btn.disabled = true; out.innerHTML = ''; N = { ok: 0, warn: 0, bad: 0 }; sumEl.className = 'sum'; sumEl.textContent = 'Проверяю…';
+    var venue = null, sb = null;
+    try {
+      /* 1. адрес */
+      var r1 = row('Адрес сервера отвечает');
+      try { var h = await timeout(fetch(C.url + '/auth/v1/health', { headers: { apikey: C.key } }), 10000); r1(h.ok ? 'ok' : 'bad', C.url + ' · ответ ' + h.status); } catch (e) { r1('bad', 'Нет связи: ' + msg(e) + '. Проверьте интернет.'); throw e; }
+      if (!window.supabase) { row('Библиотека supabase-js')('bad', 'Не загрузилась с cdn.jsdelivr.net — проверьте интернет'); throw new Error('lib'); }
+      sb = window.supabase.createClient(C.url, C.key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: function (u, i) { i = i || {}; var hd = new Headers(i.headers || {}); if (venue) hd.set('x-venue-id', venue); i.headers = hd; return fetch(u, i); } } });
+      /* 2. без входа */
+      var r2 = row('Без входа rpc закрыты');
+      var a0 = await sb.rpc('quiz_today', { p_count: 5 }); r2(a0.error ? 'ok' : 'bad', a0.error ? 'Отказ, как и должно быть: ' + msg(a0.error) : 'Сервер ответил без входа — права открыты!');
+      /* 3. вход */
+      var r3 = row('Вход'), lg = document.getElementById('lg').value.trim().toLowerCase(), email = lg.indexOf('@') > 0 ? lg : lg + '@' + (C.staffDomain || 'staff.jamoa.uz');
+      var si = await sb.auth.signInWithPassword({ email: email, password: document.getElementById('pw').value });
+      if (si.error) { r3('bad', email + ': ' + msg(si.error)); throw new Error('login'); }
+      r3('ok', email);
+      var uid = si.data.user.id;
+      /* 4. профиль */
+      var r4 = row('Профиль и заведение');
+      var mm = await sb.from('members').select('id,venue_id,role,first_name,must_change_password,venues(name,type)').eq('user_id', uid).is('archived_at', null);
+      if (mm.error || !mm.data.length) { r4('bad', mm.error ? msg(mm.error) : 'Вход не привязан ни к одному заведению'); throw new Error('nomember'); }
+      var me = mm.data[0]; venue = me.venue_id; var myVenues = mm.data.map(function (x) { return x.venue_id; });
+      var pr = await sb.rpc('my_profile');
+      r4(me.must_change_password ? 'warn' : pr.error ? 'bad' : 'ok', (me.venues && me.venues.name) + ' · ' + me.role + ' · ' + me.first_name + (mm.data.length > 1 ? ' · заведений: ' + mm.data.length : '') +
+        (me.must_change_password ? ' · временный пароль: войдите в приложение и смените его, иначе rpc отвечают must_change' : '') + (pr.error ? ' · my_profile: ' + msg(pr.error) : ''));
+      /* 5. rpc ядра */
+      var boss = me.role === 'owner' || me.role === 'manager', ym = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tashkent' }).format(new Date()).slice(0, 7);
+      var calls = [['colleagues', {}], ['earn_today', {}], ['my_month', { p_ym: ym }], ['pending_all', {}], ['rating', { p_ym: ym }], ['quiz_today', { p_count: 5 }]];
+      if (boss) calls.push(['now_in_venue', {}], ['timesheet', { p_ym: ym }]);
+      for (var i = 0; i < calls.length; i++) {
+        var rr = row('rpc ' + calls[i][0]), t0 = Date.now(), x = await sb.rpc(calls[i][0], calls[i][1]), ms = Date.now() - t0;
+        if (!x.error) rr(ms > 3000 ? 'warn' : 'ok', 'ответ за ' + ms + ' мс' + (Array.isArray(x.data) ? ' · строк ' + x.data.length : ''));
+        else if (x.error.details === 'not_ready' || x.error.details === 'must_change') rr('warn', msg(x.error));
+        else rr('bad', msg(x.error));
+      }
+      /* 6. RLS */
+      var r6 = row('RLS: в ответах только мои заведения');
+      var bad = [], tbls = ['members', 'attendance', 'schedule', 'tasks', 'notifications', 'pay_adjustments', 'payslips'];
+      for (var j = 0; j < tbls.length; j++) { var q = await sb.from(tbls[j]).select('venue_id').limit(500); if (q.error) bad.push(tbls[j] + ': ' + msg(q.error)); else if (q.data.some(function (z) { return myVenues.indexOf(z.venue_id) < 0; })) bad.push(tbls[j] + ': ЧУЖИЕ СТРОКИ'); }
+      r6(bad.length ? 'bad' : 'ok', bad.length ? bad.join('; ') : tbls.length + ' таблиц, чужих строк нет');
+      var r7 = row('RLS: чужие уведомления не видны');
+      var nn = await sb.from('notifications').select('member_id').neq('member_id', me.id).limit(5);
+      r7(nn.error ? 'warn' : nn.data.length ? 'bad' : 'ok', nn.error ? msg(nn.error) : nn.data.length ? 'Видно чужих: ' + nn.data.length : 'Только свои');
+      var r8 = row('RLS: отметку нельзя записать напрямую');
+      var wi = await sb.from('attendance').insert({ venue_id: venue, member_id: me.id, day: '2000-01-01', clock_in: new Date().toISOString() });
+      r8(wi.error ? 'ok' : 'bad', wi.error ? 'Отказ: ' + msg(wi.error) : 'ЗАПИСАЛОСЬ — права открыты!');
+      var r9 = row('Координаты заведения закрыты от select(*)');
+      var vs = await sb.from('venues').select('*').limit(1);
+      r9(vs.error ? 'ok' : 'warn', vs.error ? 'Отказ, как задумано в 0012' : 'Читается целиком — миграция 0012 ещё не загружена');
+      /* 7. хранилище */
+      var r10 = row('Фото: своя папка (бакет jamoa-photos, 0011)');
+      var png = await (await fetch('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')).blob();
+      var path = venue + '/' + me.id + '/selfcheck-' + Date.now() + '.png', up = await sb.storage.from(C.bucket || 'jamoa-photos').upload(path, png, { contentType: 'image/png', upsert: false });
+      if (up.error) r10('bad', msg(up.error) + ' — вставьте 0011_storage.sql в SQL Editor');
+      else { var sg = await sb.storage.from(C.bucket || 'jamoa-photos').createSignedUrl(path, 60), rm = await sb.storage.from(C.bucket || 'jamoa-photos').remove([path]); r10(sg.error ? 'warn' : 'ok', 'загрузка, подписанная ссылка' + (sg.error ? ' — ошибка: ' + msg(sg.error) : '') + ', удаление' + (rm.error ? ' — ошибка: ' + msg(rm.error) : '')); }
+      var r11 = row('Фото: чужая папка запрещена');
+      var up2 = await sb.storage.from(C.bucket || 'jamoa-photos').upload(venue + '/00000000-0000-4000-8000-000000000000/x-' + Date.now() + '.png', png, { contentType: 'image/png' });
+      r11(up2.error ? 'ok' : 'bad', up2.error ? 'Отказ: ' + msg(up2.error) : 'ЗАПИСАЛОСЬ в чужую папку!');
+      /* 8. staff-auth */
+      var r12 = row('Edge-функция staff-auth');
+      var fn = await sb.functions.invoke('staff-auth', { body: { action: 'check' } }), code = fn.error && fn.error.context ? fn.error.context.status : null, body = null;
+      try { body = fn.error && fn.error.context && fn.error.context.json ? await fn.error.context.json() : fn.data; } catch (e) {}
+      r12(code === 400 || (body && body.code === 'bad_input') ? 'ok' : code === 404 ? 'bad' : 'warn', code === 400 || (body && body.code === 'bad_input') ? 'На месте, проверяет запросы' : 'Ответ ' + (code || '?') + ': ' + (body && body.message || msg(fn.error)));
+      /* 9. realtime */
+      var r13 = row('Обновления в реальном времени (колокольчик)');
+      await new Promise(function (done) {
+        var ok = false, ch = sb.channel('selfcheck-' + me.id).on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: 'member_id=eq.' + me.id }, function () {})
+          .subscribe(function (st, e) { if (st === 'SUBSCRIBED') { ok = true; r13('ok', 'Подписка открыта'); sb.removeChannel(ch); done(); } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') { if (!ok) { ok = true; r13('bad', st + (e ? ': ' + msg(e) : '')); done(); } } });
+        setTimeout(function () { if (!ok) { ok = true; r13('warn', 'Нет ответа за 8 с — проверьте Database → Publications: таблица notifications в supabase_realtime'); done(); } }, 8000);
+      });
+    } catch (e) { /* остановка: причина уже в строке */ }
+    try { if (sb) await sb.auth.signOut(); } catch (e) {}
+    btn.disabled = false;
+    sumEl.className = 'sum ' + (N.bad ? 'bad' : N.warn ? 'warn' : 'ok');
+    sumEl.textContent = N.bad ? 'Есть проблемы: красных ' + N.bad + ', жёлтых ' + N.warn : N.warn ? 'Работает, замечаний: ' + N.warn : 'Всё работает (' + N.ok + ')';
+  }
+})();
+</script>
+</body>
+</html>
