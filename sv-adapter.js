@@ -1551,3 +1551,62 @@
   }
 })(typeof window !== 'undefined' ? window : globalThis);
 /* === end 92s === */
+/* === 92v praise === */
+/* Часть dv (92v-praise, 0025_praise.sql): «Спасибо», доска почёта, «Оспорить баллы». Блок не трогает код выше: как 92s — оборачивает
+   SVAdapter.make / supabase.createClient и дополняет SV.rpcMap. rpc 0025 идут на сервер как есть; staff_rating (рейтинг) дополняется
+   строками разбора (опоздания, задачи, «Спасибо», корректировка) и bonus — баллы «Спасибо» + принятые корректировки
+   (экран пересчитывает основу баллов сам, bonus прибавляет 92v). Уведомления о «Спасибо» и спорах шлёт сервер — с телефона не дублируются. */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dv) return; A.__dv = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dv) return cl; SV.__dv = true;
+    var real = SV.real, R = SV.rpcMap; if (!R) return cl;
+    function pass(n, st) { return async function (a) { var r = await real.rpc(n, a || {}); if (!r.error && st) SV.stale.apply(null, st); return r; }; }
+    R.praise_send = pass('praise_send', ['notif']);
+    R.praise_feed = pass('praise_feed');
+    R.honor_get = pass('honor_get'); R.honor_set = pass('honor_set', ['notif']); R.honor_clear = pass('honor_clear');
+    R.rating_dispute = pass('rating_dispute', ['notif']); R.dispute_list = pass('dispute_list'); R.dispute_decide = pass('dispute_decide', ['notif']);
+    var sr0 = R.staff_rating;
+    if (sr0) R.staff_rating = async function (a) {
+      var ym = String((a && (a.p_from || a.p_to)) || '').slice(0, 7), r = await real.rpc('rating', ym ? { p_ym: ym } : {}); if (r.error) return r;
+      var by = {}; (r.data || []).forEach(function (x) { by[x.member_id] = x.parts || {}; });
+      var o = await sr0(a); if (!o || o.error || !Array.isArray(o.data)) return o;
+      o.data.forEach(function (x) { var p = by[x.id] || {};
+        x.late_days = p.late_days; x.tasks_done = p.tasks_done; x.tasks_all = p.tasks_all; x.base = p.base;
+        x.praise = +p.praise || 0; x.praise_pts = +p.praise_pts || 0; x.adj = +p.adj || 0; x.bonus = (+p.praise_pts || 0) + (+p.adj || 0); x.sv_bonus = true; });
+      return o;
+    };
+    return cl;
+  }
+  A.dvExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92v === */
+/* === 92u daily === */
+/* Часть du (92u-daily, 0024_daily.sql): «Ушёл раньше», «Итоги вчера», дни рождения, знакомство один раз. Блок не трогает код выше:
+   как 92o/92q/92s — оборачивает SVAdapter.make и supabase.createClient и дополняет SV.rpcMap.
+   rpc: bday_today (карточка «Сегодня день рождения»), tour_state / tour_done (знакомство с приложением — один раз на любом телефоне).
+   Уведомления «Ушёл раньше», «Итоги вчера», «День рождения» шлёт сервер (задание jamoa-daily) — с телефона их не шлём. */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__du) return; A.__du = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__du) return cl; SV.__du = true;
+    var real = SV.real, R = SV.rpcMap;
+    function pass(n) { return async function (a) { return real.rpc(n, a || {}); }; }
+    R.bday_today = pass('bday_today'); R.tour_state = pass('tour_state'); R.tour_done = pass('tour_done');
+    return cl;
+  }
+  A.duExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92u === */
