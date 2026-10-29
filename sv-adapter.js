@@ -255,6 +255,7 @@
         cb_auto: !!a.auto_closed, cb_off: !!a.offline, offline: !!a.offline, time_status: a.time_status || 'ok', delayed: a.time_status === 'pending', in_tap_at: a.in_tap_at, in_sent_at: a.in_sent_at,
         out_zone: a.zone_status !== 'ok', zone_status: a.zone_status, zone_ok: a.zone_status === 'approved', zone_no: a.zone_status === 'rejected', zone_m: a.in_dist_m,
         cb_zone: a.zone_status !== 'ok' ? { dist: a.in_dist_m, lat: a.in_lat, lng: a.in_lng, why: a.in_zone === 'nogps' ? 'nogps' : 'far' } : null,
+        in_lat: a.in_lat, in_lng: a.in_lng, in_zone: a.in_zone, in_dist_m: a.in_dist_m, out_lat: a.out_lat, out_lng: a.out_lng, out_zone: a.out_zone, out_dist_m: a.out_dist_m, /* 92m: точки отметок для карты */
         in_photo: a.in_photo_path, out_photo: a.out_photo_path, in_source: a.in_source, in_device: a.in_source === 'kiosk' ? 'kiosk' : 'phone', cb_kiosk: a.in_source === 'kiosk', face_flag: false };
     }
     /* ссылки уведомлений: на сервере «swap» — обмен сменами (в демо — xchg), «sub» — замена заболевшего (в демо — swap) */
@@ -587,7 +588,7 @@
     var RPC = {
       task_status: async function (a) { await load('tasks'); var t = rows('tasks', a.p_id)[0]; if (!t) return { data: null, error: E('Задача не найдена', 'not_found') }; await taskStatus(t, a.p_status, a); await load('tasks', true); return ok(rows('tasks', a.p_id)[0] || null); },
       generate_daily_tasks: async function () { if (!SV.me || SV.me.role === 'staff' || SV.me.role === 'accountant') return ok(0); var r = await real.rpc('tasks_generate_daily', { p_day: tday() }); SV.stale('tasks'); return r.error ? ok(0) : r; },
-      late_explain: async function (a) { return rr('late_explain', { p_att: a.p_att, p_why: lateWhy(a.p_why), p_note: a.p_text || a.p_note || null }); },
+      late_explain: async function (a) { var LW = { 'Транспорт, пробка': 'transport', 'Семейные обстоятельства': 'family', 'Предупредил руководителя': 'warned' }, w = a.p_why || LW[a.p_text] || null; /* 92m: готовая причина из 92b приходит текстом — сохраняем кодом, без дубля в late_note */ return rr('late_explain', { p_att: a.p_att, p_why: lateWhy(w), p_note: w && w !== 'other' ? null : (a.p_text || a.p_note || null) }); },
       prefs_save: async function (a) { try { var r = await settingsSave(a.p || {}); var hs = (SV.T.hotel_settings || [])[0] || {}; return ok(Object.assign({ radius_m: hs.radius_m, late_grace_min: hs.late_grace_min, require_geo: hs.require_geo }, hs.prefs || {}, r && r.data ? {} : {})); } catch (e) { return { data: null, error: e }; } },
       quiz_today: async function (a) {
         var hs = (SV.T.hotel_settings || [])[0] || {}, n = Math.max(1, Math.min(20, +(a && a.p_count) || +((hs.prefs || {}).quiz_count) || 10));

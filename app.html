@@ -58,6 +58,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-mgr2.js"></script>
 <script src="uz-w4-nav.js"></script>
 <script src="uz-w4-owner.js"></script>
+<script src="uz-w4-paint.js"></script>
 <script src="uz-w4-polish.js"></script>
 <script src="uz-w4-server.js"></script>
 <script src="uz-w4-shift.js"></script>
@@ -44113,6 +44114,495 @@ async function dk_homeCards() {
 
 /* для автотестов */
 window.__dk = { save: function () { dk_save(); }, api: function (n, a) { return dk_api(n, a); }, rpc: function (n, a) { return sb.rpc(n, a); }, go: function (v) { go(v); }, open: function (c) { dk_open(c); }, DK: DK, demo: DK_DEMO, qz: DK_QZ, load: dk_load };
+
+
+/* ===== ВОЛНА 4 · 92l-paint.js ===== */
+/* ===== 92l-paint — «График команды» кистью (префикс dl_), 29.10 по отзыву владельца =====
+   Владелец не нашёл, как ставить смены: клетка открывала окно, легенда была подписью. Теперь (режим ядра, владелец и руководители):
+   1. Над таблицей — закреплённый ряд одинаковых кнопок-«кистей»: быстрые смены службы (название + время), Выходной, Отпуск,
+      Больничный, Стереть и «+ Своя смена». Одна выбрана (золотая рамка). Нажатие на клетку сразу ставит выбранное (без окна),
+      клетка перекрашивается и получает пометку «не опубликовано»; внизу «Отменить» для последнего действия.
+   2. Провести пальцем по строке — закрасить несколько дней; «вся неделя» у имени — вся неделя человека текущей кистью.
+   3. Долгое нажатие на клетку — подробное окно дня части H (92h) в режиме черновика; в нём блок «Своё время на этот день»
+      раскрыт сразу: «с / до», −1 ч / −30 мин / +30 мин / +1 ч, «Поставить это время», «+ Сохранить как быструю смену».
+   4. Подсказка при первом входе (запоминается), «Опубликовать» прилипает к низу экрана с числом изменений.
+   5. Главная владельца: «Составьте график на неделю», если на неделе нет ни одной смены. Нижнее меню владельца в ядре:
+      Сегодня · Команда · График · Задачи · Разделы; «Пульт» — первой строкой в «Разделах» и в «Профиле».
+   Публикация — прежняя (черновик S.sub.grid / S.sub.tm / S.sub.dirty → sb.from('schedule').upsert / delete), работает и через
+   серверный адаптер. Узбекский — w4/uz/paint.js. */
+
+function dl_uz() { try { return uiLang() === 'uz'; } catch (e) { return false; } }
+function dl_L(ru, uz) { return dl_uz() ? uz : ru; }
+function dl_core() { return window.JAMOA_CORE === true; }
+function dl_can() { return !!S.me && (isDirector() || myTeam().length > 0); }
+function dl_on() { return dl_core() && dl_can() && S.view === 'teamsched' && !!S.sub && !!S.sub.grid; }
+function dl_vib(ms) { try { navigator.vibrate && navigator.vibrate(ms || 8); } catch (e) {} }
+function dl_min(t) { var p = String(t || '0:0').split(':'); return (+p[0]) * 60 + (+p[1] || 0); }
+function dl_hm(m) { m = ((m % 1440) + 1440) % 1440; return ('0' + Math.floor(m / 60)).slice(-2) + ':' + ('0' + (m % 60)).slice(-2); }
+function dl_rng(a, b) { return t5(a) + '–' + t5(b); }
+
+(function () {
+  var st = document.createElement('style'); st.id = 'dlCss'; st.textContent =
+    '.dl-bar{position:sticky;top:var(--dl-top,64px);z-index:4;background:var(--bg);margin:0 -4px 8px;padding:6px 4px 8px;box-shadow:0 8px 10px -10px rgba(0,0,0,.35)}' +
+    '.dl-bh{font-size:13px;color:var(--muted);margin:0 2px 6px;line-height:1.3}.dl-bh b{color:var(--ink);font-weight:600}' +
+    '.dl-g{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}' +
+    '.dl-b{min-width:0;min-height:50px;padding:5px 3px;border-radius:12px;border:1px solid var(--fieldln,var(--line));background:var(--field,var(--card));color:var(--ink);font:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent}' +
+    '.dl-b b{display:block;font-size:13px;font-weight:700;line-height:1.15;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.dl-b span{display:block;font-size:11px;color:var(--muted);white-space:nowrap;letter-spacing:-.02em;max-width:100%;overflow:hidden;text-overflow:ellipsis}' +
+    '.dl-b:active{transform:scale(.97)}' +
+    '.dl-b.dl-o b{color:var(--muted)}.dl-b.dl-i{background:var(--infobg)}.dl-b.dl-i b{color:var(--info)}' +
+    '.dl-b.dl-x b{color:var(--muted);font-weight:600}.dl-b.dl-add{border-style:dashed}.dl-b.dl-add b{color:var(--goldink);white-space:normal;font-size:12.5px}.dl-b.dl-ln b{font-size:11.5px;letter-spacing:-.02em}' +
+    '.dl-b.on{border-color:var(--gold);box-shadow:inset 0 0 0 1.5px var(--gold);background:var(--goldbg)}.dl-b.on b{color:var(--goldink)}.dl-b.dl-i.on{background:var(--infobg)}.dl-b.dl-i.on b{color:var(--info)}' +
+    '.dl-hint{position:relative}.dl-hint ol{margin:6px 0 0;padding-left:20px;font-size:14px;line-height:1.5}.dl-hint .meta{margin-top:6px;white-space:normal}.dl-hint .btn{margin-top:10px;min-height:44px}' +
+    '.dl-grid .cd-tsw{overflow:visible}.dl-grid .cd-tsw>.cd-tsi{min-width:0}' +
+    '.dl-grid .cd-tsw .sg{grid-template-columns:68px repeat(7,minmax(0,1fr))!important}.dl-grid .cd-tsw .cell{min-width:0;height:44px}' +
+    '.dl-grid [data-cell]{touch-action:pan-y;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}' +
+    '.dl-nm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.dl-wk{display:inline-block;margin-top:3px;padding:2px 6px;min-height:22px;border:1px solid var(--line);border-radius:999px;background:none;color:var(--goldink);font:inherit;font-size:10.5px;font-weight:600;line-height:1.2;text-align:left;cursor:pointer;max-width:100%;white-space:normal}' +
+    '.dl-lp{font-size:12px;color:var(--muted);margin:6px 4px 0;line-height:1.35}' +
+    '#pub.dl-pub{position:sticky;bottom:calc(var(--dl-nav,72px) + 10px);z-index:4;box-shadow:0 8px 22px -6px rgba(0,0,0,.45)}' +
+    '.dl-sh{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:8px 0 0}.dl-sh .pick{min-width:0!important;min-height:42px;padding:0 2px!important;justify-content:center;font-size:13px!important;white-space:nowrap;letter-spacing:-.01em}' +
+    '.dl-ct{margin:12px 0 0;padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--surface-2,var(--card))}.dl-ct .dh-h{margin:0}' +
+    '.dl-sv{display:block;width:100%;margin:8px 0 0;min-height:44px;border:1px dashed var(--fieldln,var(--line));border-radius:14px;background:none;font:inherit;font-size:14px;font-weight:600;color:var(--goldink);cursor:pointer}' +
+    '.dl-qn{margin-top:8px}.dl-qn .in{width:100%;box-sizing:border-box;margin:0;height:46px}' +
+    '.dl-own{display:flex;align-items:center;gap:14px;padding:12px 14px;min-height:56px;width:100%;text-align:left}' +
+    '.nav .in:has(>button:nth-child(6))>button{min-width:0;padding-left:0;padding-right:0}.nav .in:has(>button:nth-child(6))>button span{font-size:10.5px;letter-spacing:-.01em;white-space:nowrap}' +
+    '@media (max-width:359px){.dl-b.dl-ln b{font-size:10.5px}.dl-b.dl-add b{font-size:11.5px}.nav .in:has(>button:nth-child(6))>button span{font-size:9.5px}.nav .in:has(>button:nth-child(6))>button svg{width:20px;height:20px}.dl-grid .cd-tsw .sg{grid-template-columns:58px repeat(7,minmax(0,1fr))!important}.dl-g{gap:4px}.dl-b{padding:5px 1px}.dl-b b{font-size:12px}.dl-b span{font-size:10px}.dl-sh{gap:4px}.dl-sh .pick{font-size:11.5px!important}}';
+  document.head.appendChild(st);
+})();
+
+/* ---------- кисть ---------- */
+function dl_dept() { return S.sub.tsDept; }
+function dl_brushes(dept) {
+  var o = deptShifts(dept).map(function (t) { return { k: t.code, ct: null, n: t.name, t: dl_rng(t.start_time, t.end_time) }; });
+  var c = S.sub.dlCus && S.sub.dlCus[dept]; if (c) o.push({ k: c.k, ct: c.ct, n: dl_L('Своё', 'Oʻzim'), t: c.ct.replace('-', '–'), cus: 1 });
+  ['o', 'h', 'b'].forEach(function (k) { o.push({ k: k, ct: null, n: KD(k).label, t: '' }); });
+  o.push({ k: 'x', ct: null, n: 'Стереть', t: '' });
+  return o;
+}
+function dl_brush() {
+  var dept = dl_dept(); S.sub.dlB = S.sub.dlB || {};
+  var b = S.sub.dlB[dept], L = dl_brushes(dept);
+  if (!b || !L.some(function (x) { return x.k === b.k && (x.ct || null) === (b.ct || null); })) { var f = L[0]; b = S.sub.dlB[dept] = { k: f.k, ct: f.ct, n: f.n }; }
+  return b;
+}
+function dl_setBrush(x) { S.sub.dlB = S.sub.dlB || {}; S.sub.dlB[dl_dept()] = { k: x.k, ct: x.ct || null, n: x.n }; }
+function dl_bLabel(b) { if (b.k === 'x') return trUi('Стереть'); if (!isW(b.k)) return trUi(KD(b.k).label); return b.ct ? b.ct.replace('-', '–') : trUi(stName(dl_dept(), b.k)); }
+
+function dl_barHtml() {
+  var dept = dl_dept(), cur = dl_brush();
+  var html = '<div class="dl-bar" id="dlBar"><div class="dl-bh"><b>Выберите смену</b> <span>— потом нажимайте на дни</span></div><div class="dl-g" role="group" aria-label="Смена для клеток">';
+  html += dl_brushes(dept).map(function (x, i) {
+    var on = x.k === cur.k && (x.ct || null) === (cur.ct || null), cls = x.k === 'o' ? ' dl-o' : x.k === 'h' || x.k === 'b' ? ' dl-i' : x.k === 'x' ? ' dl-x' : '';
+    if (String(trUi(x.n)).length >= 9) cls += ' dl-ln';
+    return '<button type="button" class="dl-b' + cls + (on ? ' on' : '') + '" data-dlb="' + i + '" aria-pressed="' + on + '"><b>' + h(trUi(x.n)) + '</b>' + (x.t ? '<span class="num">' + h(x.t) + '</span>' : '<span>&nbsp;</span>') + '</button>';
+  }).join('');
+  html += '<button type="button" class="dl-b dl-add" id="dlAdd"><b>+ Своя смена</b></button>';
+  return html + '</div></div>';
+}
+
+/* ---------- черновик: те же объекты, что публикует базовая кнопка «Опубликовать» ---------- */
+function dl_mark(key) {
+  var g = S.sub.grid, tm = S.sub.tm, o = S.sub.orig || {}, ot = S.sub.origTm || {}, d = S.sub.dirty;
+  if (o[key] === g[key] && (ot[key] || '') === (tm[key] || '')) delete d[key]; else d[key] = 1;
+}
+function dl_put(key, k, ct) {
+  var g = S.sub.grid, tm = S.sub.tm;
+  if (!k || k === 'x') { delete g[key]; delete tm[key]; } else { g[key] = k; if (ct) tm[key] = ct; else delete tm[key]; }
+  dl_mark(key);
+}
+function dl_cellStyle(b, k) {
+  if (k === 'h' || k === 'b') { b.style.background = 'var(--infobg)'; b.style.color = 'var(--info)'; }
+}
+function dl_repaint(key) {
+  var b = document.querySelector('#main [data-cell="' + key + '"]'); if (!b) return;
+  var dept = dl_dept(), k = S.sub.grid[key], ct = S.sub.tm[key], kk = k ? kdFor(dept, k) : null, p = key.split('|'), e = emp(p[0]), wd = WD[weekday(p[1])];
+  b.className = 'cell' + (S.sub.dirty[key] ? ' dirty' : '');
+  b.setAttribute('style', 'background:' + (kk ? kk.bg : '#FFFFFF') + ';color:' + (kk ? kk.fg : '#C3CBD3') + ';' + (kk ? '' : 'border:1px dashed #D5DCE3') + (ct ? ';line-height:1' : ''));
+  b.innerHTML = (kk ? h(kk.short) : '+') + (ct ? '<span style="display:block;font-size:8.5px;font-weight:600;margin-top:2px;letter-spacing:-.02em">' + ct.replace(/:00/g, '') + '</span>' : '');
+  b.setAttribute('aria-label', (e ? e.first_name : '') + ', ' + wd + ': ' + (kk ? kk.label + (ct ? ' ' + ct : '') : 'не задано'));
+  dl_cellStyle(b, k);
+}
+function dl_counts() {
+  var card = $('cdTsG') || document.querySelector('#main .dl-grid'); if (!card) return;
+  var rows = card.querySelectorAll('.sg'), last = rows[rows.length - 1]; if (!last || last.querySelector('[data-cell]')) return;
+  var ids = []; card.querySelectorAll('[data-cell]').forEach(function (c) { var id = c.getAttribute('data-cell').split('|')[0]; if (ids.indexOf(id) < 0) ids.push(id); });
+  var sp = last.children, mon = S.sub.tsWeek;
+  for (var i = 0; i < 7; i++) {
+    var d = addDays(mon, i), n = 0, s = sp[i + 1]; if (!s) continue;
+    ids.forEach(function (id) { var k = S.sub.grid[id + '|' + d]; if (k && isW(k)) n++; });
+    s.textContent = n; s.style.color = n ? 'var(--ok)' : 'var(--faint)';
+  }
+}
+function dl_pub() {
+  var p = $('pub'); if (!p) return; var n = Object.keys(S.sub.dirty || {}).length;
+  p.disabled = !n; p.classList.toggle('dark', !!n); p.classList.toggle('ghost', !n); p.classList.toggle('dl-pub', !!n);
+  p.textContent = n ? 'Опубликовать изменения (' + n + ')' : 'Изменений нет';
+}
+var DL_RR = null;
+function dl_after() {
+  dl_counts(); dl_pub();
+  clearTimeout(DL_RR);
+  DL_RR = setTimeout(function rr() {
+    if (S.view !== 'teamsched') return;
+    if (DLG || document.querySelector('#layer #sh') || document.querySelector('#layer .sheet')) { DL_RR = setTimeout(rr, 900); return; }
+    vTeamSched();
+  }, 1800);
+}
+
+/* тост «Отменить» — над прилипшей кнопкой «Опубликовать», а не поверх неё */
+(function () {
+  var tp0 = toastPlace;
+  toastPlace = function (el) {
+    var r = tp0.apply(this, arguments);
+    try {
+      if (S.view === 'teamsched' && !document.querySelector('#layer .sheet .box') && !(el.style.bottom && el.style.bottom !== '')) {
+        var p = $('pub'); if (p && p.classList.contains('dl-pub')) { var rp = p.getBoundingClientRect(); if (rp.top > 0 && rp.top < innerHeight) el.style.bottom = Math.round(innerHeight - rp.top + 8) + 'px'; }
+      }
+    } catch (e) {}
+    return r;
+  };
+})();
+/* нажатие, мазок, «вся неделя»: одна группа отмены */
+function dl_paint(keys, what) {
+  var b = dl_brush(), prev = keys.map(function (k) { return [k, S.sub.grid[k] || null, S.sub.tm[k] || null]; });
+  keys.forEach(function (k) { dl_put(k, b.k, b.ct); dl_repaint(k); });
+  dl_vib(8); dl_after(); dl_undoToast(prev, what);
+}
+function dl_undoToast(prev, what) {
+  if (!prev.length) return;
+  var lab = dl_bLabel(dl_brush()), n = prev.length, msg = what || (n === 1 ? lab + ' · ' + dl_dayTxt(prev[0][0].split('|')[1]) : lab + ' · ' + n + ' ' + dl_L('дн.', 'kun'));
+  toastUndo(msg, function () {
+    prev.forEach(function (x) { dl_put(x[0], x[1], x[2]); dl_repaint(x[0]); });
+    dl_after();
+  }, 6000);
+}
+function dl_dayTxt(d) { return trUi(WD[weekday(d)]) + ' ' + dm(d); }
+
+/* ---------- жесты по таблице ---------- */
+var DLG = null;
+function dl_bindGrid(card) {
+  card.classList.add('dl-grid');
+  card.addEventListener('pointerdown', dl_down);
+  card.addEventListener('contextmenu', function (e) { if (e.target.closest && e.target.closest('[data-cell]')) e.preventDefault(); });
+  card.querySelectorAll('[data-cell]').forEach(function (b) {
+    b.onclick = function (ev) { if (ev.detail === 0) dl_paint([b.getAttribute('data-cell')]); }; /* клавиатура: Enter / пробел */
+    dl_cellStyle(b, S.sub.grid[b.getAttribute('data-cell')]);
+  });
+}
+function dl_down(ev) {
+  var c = ev.target.closest && ev.target.closest('[data-cell]'); if (!c || (ev.pointerType === 'mouse' && ev.button !== 0)) return;
+  dl_end();
+  var key = c.getAttribute('data-cell');
+  DLG = { id: ev.pointerId, key0: key, row: key.split('|')[0], x: ev.clientX, y: ev.clientY, moved: false, last: null, prev: [], seen: {}, mouse: ev.pointerType === 'mouse' };
+  DLG.t = setTimeout(function () { if (!DLG || DLG.moved) return; var k = DLG.key0; dl_end(); dl_vib(18); dl_swallow(); dl_detail(k); }, 480);
+  document.addEventListener('pointermove', dl_move, { passive: false });
+  document.addEventListener('pointerup', dl_up);
+  document.addEventListener('pointercancel', dl_cancel);
+}
+function dl_end() {
+  if (DLG) clearTimeout(DLG.t); DLG = null;
+  document.removeEventListener('pointermove', dl_move); document.removeEventListener('pointerup', dl_up); document.removeEventListener('pointercancel', dl_cancel);
+}
+function dl_strokeAdd(key) {
+  if (!DLG || DLG.seen[key]) return; DLG.seen[key] = 1;
+  var b = dl_brush(); DLG.prev.push([key, S.sub.grid[key] || null, S.sub.tm[key] || null]);
+  dl_put(key, b.k, b.ct); dl_repaint(key); dl_vib(5);
+}
+function dl_strokeTo(key) {
+  var a = DLG.last.split('|')[1], z = key.split('|')[1], step = z >= a ? 1 : -1, d = a;
+  for (var i = 0; i < 8 && d !== z; i++) { d = addDays(d, step); dl_strokeAdd(DLG.row + '|' + d); }
+  DLG.last = key;
+}
+function dl_move(ev) {
+  if (!DLG || ev.pointerId !== DLG.id) return;
+  var dx = ev.clientX - DLG.x, dy = ev.clientY - DLG.y;
+  if (!DLG.moved) {
+    if (Math.abs(dx) < 9 && Math.abs(dy) < 9) return;
+    clearTimeout(DLG.t);
+    if (!DLG.mouse && Math.abs(dy) > Math.abs(dx)) return; /* вертикально — это прокрутка страницы */
+    DLG.moved = true; DLG.last = DLG.key0; dl_strokeAdd(DLG.key0);
+  }
+  if (ev.cancelable) ev.preventDefault();
+  var el = document.elementFromPoint(ev.clientX, ev.clientY), c = el && el.closest && el.closest('[data-cell]'); if (!c) return;
+  var key = c.getAttribute('data-cell'); if (key.split('|')[0] !== DLG.row || key === DLG.last) return;
+  dl_strokeTo(key);
+}
+function dl_up(ev) {
+  if (!DLG || ev.pointerId !== DLG.id) return;
+  var g = DLG; dl_end();
+  if (!g.moved) { if (document.querySelector('#main [data-cell="' + g.key0 + '"]')) dl_paint([g.key0]); return; }
+  dl_after(); dl_undoToast(g.prev);
+}
+function dl_cancel(ev) {
+  if (!DLG || ev.pointerId !== DLG.id) return;
+  var g = DLG; dl_end();
+  if (g.moved && g.prev.length) { dl_after(); dl_undoToast(g.prev); }
+}
+/* после долгого нажатия палец отпускают уже над открытым окном: этот «щелчок» не должен нажать кнопку окна */
+var DL_SW = null;
+function dl_swallow() {
+  DL_SW = { until: Infinity };
+  var up = function () { document.removeEventListener('pointerup', up, true); document.removeEventListener('touchend', up, true); if (DL_SW) DL_SW.until = Date.now() + 450; };
+  document.addEventListener('pointerup', up, true); document.addEventListener('touchend', up, true);
+  setTimeout(function () { if (DL_SW && DL_SW.until === Infinity) DL_SW.until = Date.now() + 450; }, 4000);
+}
+document.addEventListener('click', function (e) { if (DL_SW && Date.now() < DL_SW.until) { e.preventDefault(); e.stopPropagation(); DL_SW = null; } else if (DL_SW && Date.now() >= DL_SW.until) DL_SW = null; }, true);
+/* подробное окно дня (часть H) — в черновик графика */
+function dl_detail(key) { try { schedCellSheet(key, dl_mark); } catch (e) { console.warn(e); } }
+
+/* ---------- «+ Своя смена» ---------- */
+function dl_near(dept, s) {
+  var work = deptShifts(dept), k = work[0] ? work[0].code : 'u', best = 1e9, sm = dl_min(s);
+  work.forEach(function (t) { var d = Math.abs(dl_min(t.start_time) - sm); d = Math.min(d, 1440 - d); if (d < best) { best = d; k = t.code; } });
+  return k;
+}
+function dl_cusSheet() {
+  var dept = dl_dept(), b = dl_brush(), t0 = b.ct ? b.ct.split('-') : null;
+  if (!t0) { var t = isW(b.k) ? stFor(dept, b.k) : deptShifts(dept)[0]; t0 = t ? [t5(t.start_time), t5(t.end_time)] : ['09:00', '18:00']; }
+  var qOpen = false;
+  function draw(s, e) {
+    sheet(sheetHead(h(trUi('Своя смена')), h(dl_L('Время станет кистью — потом нажимайте на дни', 'Vaqt moʻyqalam boʻladi — keyin kunlarni bosing'))) +
+      '<div class="dh-2"><label class="dh-f"><span>с</span><input class="in num" type="time" id="dlS" value="' + s + '"></label><label class="dh-f"><span>до</span><input class="in num" type="time" id="dlE" value="' + e + '"></label></div>' +
+      dl_shBtns() +
+      '<button type="button" class="btn gold full" id="dlPut" style="margin-top:12px"></button>' +
+      (qOpen ? dl_qnHtml(s) : '<button type="button" class="dl-sv" id="dlSv">+ Сохранить как быструю смену</button>'));
+    $('sh').onclick = function (ev) { if (ev.target.id === 'sh') closeLayer(); }; if ($('shx')) $('shx').onclick = closeLayer;
+    var upd = function () { var a = $('dlS').value, z = $('dlE').value; $('dlPut').textContent = a && z ? dl_L('Поставить кистью ', 'Moʻyqalam bilan qoʻyish ') + dl_rng(a, z) : trUi('Укажите начало и конец смены'); $('dlPut').disabled = !(a && z); };
+    $('dlS').oninput = $('dlE').oninput = $('dlS').onchange = $('dlE').onchange = upd; upd();
+    dl_shBind($('layer'), 'dlS', 'dlE', upd);
+    $('dlPut').onclick = function () {
+      var a = $('dlS').value, z = $('dlE').value; if (!a || !z) return;
+      var same = deptShifts(dept).filter(function (t) { return t5(t.start_time) === a && t5(t.end_time) === z; })[0];
+      if (same) dl_setBrush({ k: same.code, ct: null, n: same.name });
+      else { var k = dl_near(dept, a); S.sub.dlCus = S.sub.dlCus || {}; S.sub.dlCus[dept] = { k: k, ct: a + '-' + z }; dl_setBrush({ k: k, ct: a + '-' + z, n: 'Своё' }); }
+      closeLayer(); vTeamSched(); toast(dl_L('Кисть: ', 'Moʻyqalam: ') + dl_rng(a, z) + dl_L(' — нажимайте на дни', ' — kunlarni bosing'));
+    };
+    if ($('dlSv')) $('dlSv').onclick = function () { qOpen = true; draw($('dlS').value, $('dlE').value); setTimeout(function () { var q = $('dlQn'); if (q) q.focus(); }, 30); };
+    if ($('dlQa')) $('dlQa').onclick = async function () {
+      var a = $('dlS').value, z = $('dlE').value, nm = $('dlQn').value;
+      var t = await dh_stInsert(dept, nm, a, z, false, this); if (!t) return;
+      dl_setBrush({ k: t.code, ct: null, n: t.name }); closeLayer(); vTeamSched();
+      toast(dl_L('Быстрая смена «' + t.name + '» добавлена', '«' + t.name + '» tezkor smenasi qoʻshildi'));
+    };
+  }
+  draw(t0[0], t0[1]);
+}
+function dl_qnHtml(s) {
+  return '<div class="dl-qn"><label class="dh-f"><span>название кнопки</span><input class="in" id="dlQn" maxlength="30" value="' + h(dl_L('Смена ', 'Smena ') + s) + '"></label>' +
+    '<button type="button" class="btn ghost full" id="dlQa" style="margin-top:8px;min-height:46px">Добавить в быстрые</button></div>';
+}
+function dl_shBtns() { return '<div class="dl-sh" role="group">' + [-60, -30, 30, 60].map(function (m) { return '<button type="button" class="pick" data-dlsh="' + m + '">' + (m > 0 ? '+' : '−') + (Math.abs(m) === 60 ? '1 ч' : '30 мин') + '</button>'; }).join('') + '</div><div class="meta" style="white-space:normal;margin-top:4px;font-size:12px">Кнопки сдвигают всю смену раньше или позже.</div>'; }
+function dl_shBind(box, sId, eId, upd) {
+  box.querySelectorAll('[data-dlsh]').forEach(function (b) {
+    b.onclick = function () {
+      var m = +b.getAttribute('data-dlsh');
+      [sId, eId].forEach(function (id) { var el = $(id); if (el && el.value) el.value = dl_hm(dl_min(el.value) + m); });
+      dl_vib(5); upd();
+    };
+  });
+}
+
+/* ---------- «График команды»: обёртка (последняя из частей) ---------- */
+(function () {
+  var ts0 = vTeamSched;
+  vTeamSched = async function () {
+    var r = await ts0.apply(this, arguments);
+    try { if (dl_on()) dl_mount(); } catch (e) { console.warn(e); }
+    return r;
+  };
+})();
+function dl_metrics() {
+  try {
+    var top = document.querySelector('#app > .top'), nav = document.querySelector('.nav'), rs = document.documentElement.style;
+    if (top) rs.setProperty('--dl-top', Math.round(top.getBoundingClientRect().height) + 'px');
+    if (nav) rs.setProperty('--dl-nav', Math.round(nav.getBoundingClientRect().height) + 'px');
+  } catch (e) {}
+}
+function dl_hintKey() { return 'dl-hint-' + (S.me ? S.me.id : ''); }
+function dl_hintSeen() { try { return localStorage.getItem(dl_hintKey()) === '1'; } catch (e) { return !!dl_hintSeen.mem; } }
+function dl_mount() {
+  var m = $('main'), cell = m && m.querySelector('[data-cell]'), card = cell && cell.closest('.card');
+  if (!m || $('dlBar')) return;
+  dl_metrics();
+  /* старая подпись «Нажмите на клетку…» и легенда — теперь это ряд кистей */
+  var lg = $('stEdit') ? $('stEdit').closest('.card') : null;
+  if (!lg) m.querySelectorAll('.card').forEach(function (c) { if (!lg && c !== card && c.querySelector('.chips') && !c.querySelector('[data-cell]') && /клетк|katak/i.test(c.textContent)) lg = c; });
+  var anchor = card || (lg && lg.nextSibling) || null;
+  var wrap = document.createElement('div'); wrap.id = 'dlWrap';
+  var html = '';
+  if (!dl_hintSeen()) html += '<div class="card dl-hint" id="dlHint"><h2><span>Как составить график</span></h2><ol><li>Выберите смену сверху</li><li>Нажимайте на дни — или ведите пальцем по строке</li><li>Готово — «Опубликовать»</li></ol>' +
+    '<div class="meta">Удерживайте клетку — своё время на один день. «вся неделя» у имени — вся неделя одной смены.</div><button type="button" class="btn ghost full" id="dlHintOk">Понятно</button></div>';
+  if (card) html += dl_barHtml();
+  wrap.innerHTML = html;
+  while (wrap.firstChild) m.insertBefore(wrap.firstChild, anchor);
+  if (lg) lg.style.display = 'none';
+  if ($('dlHintOk')) $('dlHintOk').onclick = function () { try { localStorage.setItem(dl_hintKey(), '1'); } catch (e) { dl_hintSeen.mem = 1; } var x = $('dlHint'); if (x) x.remove(); };
+  if (!card) return;
+  /* кисти */
+  var L = dl_brushes(dl_dept());
+  m.querySelectorAll('[data-dlb]').forEach(function (b) {
+    b.onclick = function () {
+      var x = L[+b.getAttribute('data-dlb')]; dl_setBrush(x); dl_vib(5);
+      m.querySelectorAll('[data-dlb]').forEach(function (o) { var on = o === b; o.classList.toggle('on', on); o.setAttribute('aria-pressed', on); });
+    };
+  });
+  $('dlAdd').onclick = dl_cusSheet;
+  /* таблица: имя + «вся неделя» */
+  dl_bindGrid(card);
+  card.querySelectorAll('.sg').forEach(function (row) {
+    var c = row.querySelector('[data-cell]'); if (!c) return;
+    var id = c.getAttribute('data-cell').split('|')[0], e = emp(id), nm = row.firstElementChild; if (!e || !nm) return;
+    nm.innerHTML = '<span class="dl-nm" title="' + h(posName(e.position_id) || '') + '">' + h(e.first_name) + '</span><button type="button" class="dl-wk" data-dlwk="' + h(id) + '">вся неделя</button>';
+  });
+  card.querySelectorAll('[data-dlwk]').forEach(function (b) {
+    b.onclick = function () {
+      var id = b.getAttribute('data-dlwk'), e = emp(id), keys = []; for (var i = 0; i < 7; i++) keys.push(id + '|' + addDays(S.sub.tsWeek, i));
+      dl_paint(keys, (e ? e.first_name + ' · ' : '') + dl_bLabel(dl_brush()) + ' · ' + dl_L('вся неделя', 'butun hafta'));
+    };
+  });
+  if (!$('dlLp')) { var lp = document.createElement('div'); lp.className = 'dl-lp'; lp.id = 'dlLp'; lp.textContent = trUi('Удерживайте клетку — своё время на этот день.'); card.appendChild(lp); }
+  /* «Быстрые смены» (настройка кнопок) — рядом с «Скопировать прошлую неделю» */
+  var cp = $('cpPrev'), canSt = isDirector() || P('shift_edit', 'leads') === 'leads';
+  if (cp && canSt && !$('dlStEd')) { var a = document.createElement('button'); a.type = 'button'; a.className = 'btn ghost sm full'; a.id = 'dlStEd'; a.style.margin = '8px 0'; a.textContent = trUi('Изменить быстрые смены'); cp.parentNode.parentNode.insertBefore(a, cp.parentNode.nextSibling); a.onclick = function () { if (typeof dh_shSheet === 'function') dh_shSheet(dl_dept()); else shiftTimesSheet(); }; }
+  dl_pub();
+}
+
+/* ---------- окно дня части H: «Своё время на этот день» раскрыто сразу ---------- */
+(function () {
+  if (typeof dh_draw !== 'function') return;
+  dh_draw = function () {
+    if (!DH) return;
+    var M = DH.M, e = M.e, d = DH.day, v = M.get(d), work = dh_work(M.dept);
+    var prevOk = !M.lo || addDays(d, -1) >= M.lo, nextOk = !M.hi || addDays(d, 1) <= M.hi, wd = dh_weekDays(d);
+    var html = '<div id="dhRoot"></div><div class="dh-hd"><button type="button" class="iconbtn dh-ar" id="dhPrev" aria-label="Предыдущий день"' + (prevOk ? '' : ' disabled') + '>‹</button>' +
+      '<div class="dh-tt"><h3>' + h(e ? e.first_name + ' ' + e.last_name : '') + '</h3><div class="dh-sb"><span class="num">' + h(dh_dayTxt(d)) + '</span> · <span>' + h(dh_L('сейчас', 'hozir')) + '</span>: <span>' + h(dh_label(M, v)) + '</span></div></div>' +
+      '<button type="button" class="iconbtn dh-ar" id="dhNext" aria-label="Следующий день"' + (nextOk ? '' : ' disabled') + '>›</button></div>';
+    try { if (M.mode === 'grid' && typeof swCellBtn === 'function') html += swCellBtn(e, d, v.kind) || ''; } catch (x) {}
+    html += '<label class="dh-wk"><input type="checkbox" id="dhWk"' + (DH.week ? ' checked' : '') + '><span><span>Применить на всю неделю</span> <span class="muted">(' + h(trUi(WD[0])) + '–' + h(trUi(WD[6])) + ')</span></span></label>';
+    var cur = v.kind, ct = v.ct;
+    html += '<div class="dh-g" role="group">' + work.map(function (t) {
+      var dt = dh_defT(M, t.code), on = cur === t.code && (!ct || ct === dt.join('-'));
+      return '<button type="button" class="dh-o' + (on ? ' on' : '') + '" data-dh="' + h(t.code) + '" aria-pressed="' + on + '"><b>' + h(trUi(t.name)) + '</b><span class="num">' + dh_rng(dt[0], dt[1]) + '</span></button>';
+    }).join('') + ['o', 'h', 'b'].map(function (k, i) {
+      var on = cur === k;
+      return '<button type="button" class="dh-o' + (on ? ' on' : '') + (i === 0 && work.length % 3 ? ' dh-off1' : '') + '" data-dh="' + k + '" aria-pressed="' + on + '"><b>' + h(trUi(KD(k).label)) + '</b><span>&nbsp;</span></button>';
+    }).join('') + '</div>';
+    if (DH.last) html += '<div class="dh-un" role="status"><span>' + h(DH.last.msg) + '</span> · <button type="button" class="dh-lk" id="dhUndo">Отменить</button></div>';
+    var ini = DH.ini || (ct ? ct.split('-') : dh_defT(M, cur && isW(cur) ? cur : (work[0] ? work[0].code : 'u')));
+    html += '<div class="dl-ct"><div class="dh-h"><b>Своё время на этот день</b></div>' +
+      '<div class="dh-2"><label class="dh-f"><span>с</span><input class="in num" type="time" id="dhS" value="' + ini[0] + '"></label><label class="dh-f"><span>до</span><input class="in num" type="time" id="dhE" value="' + ini[1] + '"></label></div>' +
+      dl_shBtns() +
+      '<button type="button" class="btn green full" id="dhSet" style="margin-top:10px"></button>' +
+      '<div id="dhQw"></div><button type="button" class="dl-sv" id="dlSvQ">+ Сохранить как быструю смену</button></div>';
+    html += '<button type="button" class="dh-lk dh-ln" id="dhClr">' + (DH.week ? 'Очистить неделю' : 'Очистить день') + '</button>';
+    DH.more = false;
+    sheet(html);
+    dh_bind(wd);
+    /* своё время: блок «Добавить в быстрые» — только по кнопке «+ Сохранить как быструю смену» */
+    var s0 = $('dhS'), upd0 = s0 && s0.oninput;
+    if (upd0) {
+      var upd = function () {
+        upd0.call(s0);
+        var qw = $('dhQw'), has = qw && qw.querySelector('#dhQ'), sv = $('dlSvQ');
+        if (!DH || !DH.dlQ) { if (qw) qw.innerHTML = ''; if (sv) sv.style.display = ''; }
+        else if (sv) sv.style.display = has ? 'none' : '';
+      };
+      s0.oninput = s0.onchange = $('dhE').oninput = $('dhE').onchange = upd; upd();
+      dl_shBind($('layer'), 'dhS', 'dhE', upd);
+      $('dlSvQ').onclick = function () {
+        var a = $('dhS').value, z = $('dhE').value, same = dh_hasTime(M.dept, a, z);
+        if (same) return toast(dh_L('Это время уже есть у смены «' + trUi(same.name) + '»', 'Bu vaqt «' + trUi(same.name) + '» smenasida bor'));
+        DH.dlQ = true; DH.qAuto = true; upd(); var q = $('dhQn'); if (q) q.focus();
+      };
+    }
+  };
+})();
+
+/* ---------- главная владельца: «Составьте график на неделю» ---------- */
+W3.home.push(function () { if (dl_core() && S.me && isDirector()) dl_homeCard(); });
+async function dl_homeCard() {
+  var el = w3HomeSlot('dlHomeC'); if (!el) return; el.setAttribute('data-cp', '2.5');
+  var staff = (S.emps || []).filter(function (e) { return e.active !== false && e.role !== 'director'; });
+  if (!staff.length) { el.innerHTML = ''; return; }
+  var mon = monday(today()), nx = addDays(mon, 7), ids = {}; staff.forEach(function (e) { ids[e.id] = 1; });
+  var r = await qSafe(sb.from('schedule').select('*').gte('day', mon).lte('day', addDays(nx, 6)));
+  var rows = ((r && r.data) || []).filter(function (x) { return ids[x.employee_id]; });
+  var has = function (a) { return rows.some(function (x) { return x.day >= a && x.day <= addDays(a, 6); }); };
+  var wk = null;
+  if (!has(mon)) wk = mon; else if (weekday(today()) >= 3 && !has(nx)) wk = nx;
+  el = $('dlHomeC'); if (!el) return; el.setAttribute('data-cp', '2.5');
+  if (!wk) { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="card w3-yel" id="dlHomeCard"><h2><span>' + (wk === mon ? 'Составьте график на неделю' : 'Составьте график на следующую неделю') + '</span></h2>' +
+    '<div class="meta" style="white-space:normal"><span class="num">' + dm(wk) + ' – ' + dm(addDays(wk, 6)) + '</span> · <span>' + h(dl_L('сотрудников без смен', 'smenasiz xodimlar')) + '</span>: <b class="num">' + staff.length + '</b></div>' +
+    '<div class="meta" style="white-space:normal;margin-top:4px">Выберите смену и нажимайте на дни — без лишних окон.</div>' +
+    '<button type="button" class="btn gold full" id="dlHomeGo" style="margin-top:10px;min-height:48px">' + icon('cal', 18) + '<span>Открыть график</span></button></div>';
+  $('dlHomeGo').onclick = function () {
+    try { if (typeof CD_TSOPEN !== 'undefined' && S.me) CD_TSOPEN[S.me.id] = 1; } catch (e) {}
+    S.sub.tsWeek = wk; S.sub.grid = null; try { NAV.origin = 'tsched'; } catch (e) {} go('teamsched');
+  };
+}
+
+/* ---------- нижнее меню владельца (ядро), как в Mir Luxe One: Сегодня · Задачи · График · Команда · Разделы · Пульт ---------- */
+(function () {
+  var c0 = nav_cfg;
+  nav_cfg = function () {
+    var c = c0.apply(this, arguments);
+    if (!c || !dl_core() || !S.me || !isDirector()) return c;
+    try { if (typeof NAV_T !== 'undefined' && NAV_T && !NAV_T.tsched) NAV_T.tsched = ['teamsched', 'График', 'cal']; } catch (e) {}
+    return Object.assign({}, c, { t: ['home', 'tasks', 'tsched', 'team', 'more', 'desk'] });
+  };
+  var k0 = nav_tabOk;
+  nav_tabOk = function (k) { if (k === 'tsched') return !!S.me && (isDirector() || myTeam().length > 0); return k0.apply(this, arguments); };
+  /* 96-nav режет меню до 5 вкладок — владельцу в ядре шестая «Пульт» */
+  var t0 = nav_tabs0;
+  nav_tabs0 = function () {
+    var o = t0.apply(this, arguments);
+    try {
+      if (o && dl_core() && S.me && isDirector() && !o.some(function (t) { return t.k === 'desk'; }) && nav_tabOk('desk')) {
+        var c = nav_cfg(); if (c && c.t.indexOf('desk') >= 0) { var T = NAV_T.desk; o.push({ k: 'desk', v: T[0], l: T[1], ic: T[2], sub: null, h: null }); }
+      }
+    } catch (e) {}
+    return o;
+  };
+})();
+/* «Пульт» без вкладки: первой строкой в «Разделах» и в «Профиле» (после обёрток 96-nav) */
+function dl_deskRow(id) {
+  return '<button type="button" class="card row dl-own" id="' + id + '"><span class="secb sm">' + icon('desk', 21) + '</span><span class="grow"><span class="name" style="display:block">Пульт</span><span class="meta">' + h(dl_L('Настройки заведения, смены, права', 'Muassasa sozlamalari, smenalar, huquqlar')) + '</span></span>' + icon('chev', 18) + '</button>';
+}
+function dl_deskTab() { try { return (nav_tabs() || []).some(function (t) { return t.k === 'desk'; }); } catch (e) { return true; } }
+function dl_deskGo() { S.sub = S.sub || {}; S.sub.desk = null; try { PL.stack = []; } catch (e) {} try { NAV.origin = 'more'; } catch (e) {} go('desk'); }
+setTimeout(function () {
+  var vm0 = vMore;
+  vMore = function () {
+    var r = vm0.apply(this, arguments);
+    try {
+      var m = $('main');
+      if (m && S.view === 'more' && dl_core() && isDirector() && !dl_deskTab() && !$('dlDesk')) {
+        var d = document.createElement('div'); d.innerHTML = dl_deskRow('dlDesk'); var el = d.firstChild;
+        var at = m.querySelector('.seg') ? m.querySelector('.seg').parentNode : null;
+        if (at && at.parentNode === m) m.insertBefore(el, at.nextSibling); else m.insertBefore(el, m.firstChild);
+        el.onclick = dl_deskGo;
+      }
+    } catch (e) { console.warn(e); }
+    return r;
+  };
+  var vp0 = vProfile;
+  vProfile = async function () {
+    var r = await vp0.apply(this, arguments);
+    try {
+      var m = $('main');
+      if (m && S.view === 'profile' && dl_core() && isDirector() && !dl_deskTab() && !$('dlDeskP')) {
+        var d = document.createElement('div'); d.innerHTML = dl_deskRow('dlDeskP'); var el = d.firstChild;
+        m.insertBefore(el, m.children[1] || null); el.onclick = dl_deskGo;
+      }
+    } catch (e) { console.warn(e); }
+    return r;
+  };
+}, 0);
+
+/* отладка (только ?w4dbg) */
+if (/[?&]w4dbg/.test(location.search)) window.__dl = { go: function (v) { go(v); }, S: function () { return S; }, brush: function () { return dl_brush(); } };
 
 
 /* ===== ВОЛНА 4 · 93-u45.js ===== */
