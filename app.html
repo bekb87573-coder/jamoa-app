@@ -41233,7 +41233,7 @@ cg_boot();
   var gh0 = guidesHint; guidesHint = function () { var t = cg_type(); return cg_isNew(t) ? CGD.txt[t][1] : gh0.apply(this, arguments); };
   var st0 = splashTag; splashTag = function () { var t = cg_type(); return cg_isNew(t) ? CGD.txt[t][0] : st0.apply(this, arguments); };
   /* подпись логотипа: у новых типов и на регистрации, пока тип не выбран или выбран новый, — без «HoReCa · отели, рестораны, кафе» */
-  var jm0 = jmLogo; jmLogo = function () { var x = jm0.apply(this, arguments), su = !!document.getElementById('sxSu') || /signup/.test(location.hash || ''); return typeof x === 'string' && (cg_on() || su && (!CG_SU.type || cg_isNew(CG_SU.type))) ? x.replace('HoReCa · отели, рестораны, кафе', CGD.ui.tag) : x; };
+  var jm0 = jmLogo; jmLogo = function () { var x = jm0.apply(this, arguments), su = !!document.getElementById('sxSu') || /signup/.test(location.hash || ''); return typeof x === 'string' && (window.JAMOA_DEMO === false || cg_on() || su && (!CG_SU.type || cg_isNew(CG_SU.type))) ? x.replace('HoReCa · отели, рестораны, кафе', CGD.ui.tag) : x; };
   var ob0 = obSlides; obSlides = function () {
     var L = ob0.apply(this, arguments), t = cg_type(); if (!cg_isNew(t) || !Array.isArray(L) || !L[0]) return L;
     L[0].p = isDirector() ? CGD.ob[t][1] : CGD.ob[t][0]; return L;
