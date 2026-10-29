@@ -36538,8 +36538,8 @@ function sv_t(s) { try { return trUi(s); } catch (e) { return s; } }
       var ov = document.createElement('div');
       ov.id = 'svSplash'; ov.className = 'splash';
       ov.style.cssText = 'position:fixed;inset:0;z-index:2147483600;display:flex;align-items:center;justify-content:center;background:var(--bg);transition:opacity .35s ease';
-      var tag = ''; try { tag = splashTag(); } catch (e) {}
-      try { ov.innerHTML = sxLockup(tag, motion, true); } catch (e) { ov.innerHTML = ''; }
+      var uz = false; try { uz = /^uz/.test(String((window.MLX_I18N && MLX_I18N.lang) || '')); } catch (e) {}
+      try { ov.innerHTML = sxLockup('', motion, true).replace('HoReCa · отели, рестораны, кафе', uz ? 'Smenalar · vazifalar · jamoa' : 'Смены · задачи · команда'); } catch (e) { ov.innerHTML = ''; }
       if (!ov.innerHTML) return;
       var put = function () { if (document.body && !document.getElementById('svSplash')) document.body.appendChild(ov); };
       if (document.body) put(); else document.addEventListener('DOMContentLoaded', put);
