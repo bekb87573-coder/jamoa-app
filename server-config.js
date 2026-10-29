@@ -3,7 +3,7 @@
    mode: 'demo' — по умолчанию; 'server' — сборка W4OUT=srv JAMOA_DEMO=false (build.py подставляет сам).
    Проверить сервер с телефона: selfcheck.html рядом с app.html. */
 window.JAMOA_SERVER = {
-  mode: 'demo',
+  mode: 'server',
   url: 'https://yysodxwxpfdaalwjfizs.supabase.co',          // Supabase-проект jamoa-dev (только учебные данные)
   key: 'sb_publishable_qIUfJQ-qTgJ3L1wGrR6img_iPJhg9pA',     // publishable-ключ (публичный)
   staffDomain: 'staff.jamoa.uz',                            // почта входа сотрудника = <логин>@staff.jamoa.uz (как в staff-auth)
@@ -12,12 +12,8 @@ window.JAMOA_SERVER = {
 };
 (function () {
   var C = window.JAMOA_SERVER;
-  /* ручной переключатель для проверки: app.html?server=1 / ?demo=1 (запоминается на этом телефоне) */
-  try {
-    var m = /[?&](server|demo)=1/.exec(location.search);
-    if (m) localStorage.setItem('jamoa-mode', m[1] === 'server' ? 'server' : 'demo');
-    var lm = localStorage.getItem('jamoa-mode'); if (lm === 'server' || lm === 'demo') C.mode = lm;
-  } catch (e) {}
+  /* рабочий сайт: всегда настоящий сервер, учебного режима нет */
+  try { localStorage.setItem('jamoa-mode', 'server'); } catch (e) {}
   if (C.mode === 'server' && window.JAMOA_DEMO === undefined) window.JAMOA_DEMO = false;
   if (window.JAMOA_DEMO === false && !window.JAMOA_SELFCHECK) {   /* selfcheck.html берёт только адрес и ключ */
     C.mode = 'server';
