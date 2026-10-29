@@ -61,6 +61,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-polish.js"></script>
 <script src="uz-w4-server.js"></script>
 <script src="uz-w4-shift.js"></script>
+<script src="uz-w4-skills.js"></script>
 <script src="uz-w4-tasks2.js"></script>
 <script src="uz-w4-types.js"></script>
 <script src="uz-w4-u0.js"></script>
@@ -43470,6 +43471,630 @@ function dj_kind(tx, m) {
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 window.__dj = { mark: function () { dj_mark(document); }, map: function () { return dj_map(); } };
+
+
+/* ===== ВОЛНА 4 · 92k-skills.js ===== */
+/* ===== 92k-skills — волна E: «Допуск к работе» (решение владельца 29.10, вариант C; префикс dk_) =====
+   Сотрудник: «Профиль → Мои допуски» (и карточка на главной, когда есть навыки «учусь» / «ждёт проверки»):
+     уровень (1 Стажёр · 2 Самостоятельно · 3 Наставник), навыки должности со статусами; навык → 3 карточки урока «так / не так»
+     → «Пройти тест» (10 вопросов по одному на экране) → результат с пояснениями → 8 из 10 — «ждёт проверки».
+   Руководитель и владелец: «Команда → Кто что умеет» (и «Разделы»): «Ждут вашей проверки» (Засчитать / Ещё рано),
+     таблица «люди × навыки» по отделам и должностям, цвета 92j (изумруд — допущен, янтарь — ждёт проверки, сапфир — учится, серый — не начато).
+   Данные: сервер (window.JAMOA_DEMO === false) — rpc 0016_skills через «голый» клиент JAMOA_SV.real (заголовок x-venue-id ставит переходник);
+     демо — window.__DB.dk_ms / dk_att / dk_meta (сохраняются между входами, как таблицы волны 3), учебный контент — w4/files/dk-skills-<тип>.js
+     (собирает server/tools/skills_build.py, подгружается только в учебной химчистке).
+   Тест дня в демо: если есть навыки «учусь» — 2 вопроса дня из них (на сервере — quiz_today 0016). */
+var DK = { C: null, loading: null, my: null, team: null, back: {}, t: null, res: null, i: 0, ans: [], card: 0, busy: false, cache: {} };
+var DK_TYPES = ['laundry'];
+function dk_L(ru, uz) { try { return uiLang() === 'uz' && uz ? uz : ru; } catch (e) { return ru; } }
+function dk_sv() { return window.JAMOA_DEMO === false && window.JAMOA_SV ? window.JAMOA_SV : null; }
+function dk_type() { try { var sv = dk_sv(); if (sv) return (sv.venue && sv.venue.type) || null; var v = venueP(); return v && v.type ? v.type : null; } catch (e) { return null; } }
+/* функция включена: сервер (что вернёт my_skills) или учебное заведение типа с контентом */
+function dk_maybe() { return !!S.me && (!!dk_sv() || DK_TYPES.indexOf(dk_type()) >= 0); }
+function dk_lead() { return !!S.me && (isDirector() || S.me.role === 'manager' || myTeam().length > 0); }
+function dk_t(s) { try { return trUi(s); } catch (e) { return s; } }
+function dk_day() { return today(); }
+function dk_hash(s) { var x = 0; s = String(s); for (var i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) % 100003; return x; }
+function dk_err(e) { var m = e && (e.message || e.msg) || String(e || ''); try { return typeof err === 'function' ? err(e) : m; } catch (x) { return m; } }
+
+/* ---------- учебный контент (демо) ---------- */
+function dk_load() {
+  var t = dk_type(); if (!t || dk_sv()) return Promise.resolve(null);
+  if (window.DK_CONTENT && DK_CONTENT[t]) { DK.C = DK_CONTENT[t]; return Promise.resolve(DK.C); }
+  if (DK_TYPES.indexOf(t) < 0) return Promise.resolve(null);
+  if (!DK.loading) DK.loading = new Promise(function (res) {
+    var s = document.createElement('script'); s.src = 'dk-skills-' + t + '.js';
+    s.onload = function () { DK.C = (window.DK_CONTENT || {})[t] || null; dk_cyr(); res(DK.C); };
+    s.onerror = function () { DK.loading = null; res(null); };
+    document.head.appendChild(s);
+  });
+  return DK.loading;
+}
+/* узбекская кириллица: слова контента — в словарь перевода (94-cyr) */
+function dk_cyr(list) {
+  try {
+    if (!window.MLX_CYR || typeof cy_on !== 'function' || !cy_on()) return;
+    var L = list || [];
+    if (!list && DK.C) DK.C.forEach(function (P) { L.push(P.pos_uz); P.skills.forEach(function (s) { L.push(s.title_uz, s.practice_uz); (s.lesson || []).forEach(function (c) { L.push(c.uz, c.do_uz, c.dont_uz); }); (s.q || []).forEach(function (q) { L.push(q[1], q[6]); (q[3] || []).forEach(function (o) { L.push(o); }); }); }); });
+    L = L.filter(function (x) { return typeof x === 'string' && x; });
+    var n0 = MLX_CYR.vocabSize(); MLX_CYR.addVocab(L); if (MLX_CYR.vocabSize() > n0 && MLX_I18N.cySet) MLX_I18N.cySet('uzc');
+  } catch (e) {}
+}
+function dk_posId(name) {
+  var n = String(name || '').trim().toLowerCase();
+  var p = (S.pos || []).filter(function (x) { return String(x.name || '').trim().toLowerCase() === n; })[0];
+  return p ? p.id : null;
+}
+function dk_skillsAll() {
+  if (!DK.C) return [];
+  var key = (S.pos || []).length + '|' + (S.pos || []).map(function (p) { return p.id; }).join(',');
+  if (DK._sk && DK._skK === key) return DK._sk;
+  var out = [];
+  DK.C.forEach(function (P) {
+    var pid = dk_posId(P.pos_ru);
+    P.skills.forEach(function (s, i) { out.push({ id: s.code, code: s.code, position_id: pid, pos_ru: P.pos_ru, pos_uz: P.pos_uz, title_ru: s.title_ru, title_uz: s.title_uz, level: s.level, lesson: s.lesson || [], practice_ru: s.practice_ru, practice_uz: s.practice_uz, q: s.q || null, sort: i }); });
+  });
+  DK._sk = out; DK._skK = key; return out;
+}
+function dk_skillsOf(e) {
+  if (!e) return [];
+  var A = dk_skillsAll(), P = [e.position_id].concat(e.extra_pos || []).filter(function (x) { return x != null; });
+  for (var i = 0; i < P.length; i++) { var L = A.filter(function (s) { return s.position_id === P[i]; }); if (L.length) return L.slice().sort(function (a, b) { return a.level - b.level || a.sort - b.sort; }); }
+  return [];
+}
+function dk_rows() { var DB = window.__DB || {}; DB.dk_ms = DB.dk_ms || []; return DB.dk_ms; }
+function dk_row(mid, code) { return dk_rows().filter(function (r) { return r.employee_id === mid && r.code === code; })[0] || null; }
+function dk_rowMk(mid, code) { var r = dk_row(mid, code); if (!r) { r = { employee_id: mid, code: code, status: 'none', test_best: 0, test_total: 0, attempts: 0 }; dk_rows().push(r); } return r; }
+function dk_level(sts) {
+  var tot = sts.length, ok = sts.filter(function (x) { return x === 'approved'; }).length;
+  return { level: tot > 0 && ok === tot ? 3 : tot > 0 && ok >= Math.ceil(tot * 0.6) ? 2 : 1, approved: ok, total: tot,
+    pending: sts.filter(function (x) { return x === 'pending'; }).length, learning: sts.filter(function (x) { return x === 'learning'; }).length,
+    need2: Math.max(0, Math.ceil(tot * 0.6) - ok), need3: Math.max(0, tot - ok) };
+}
+function dk_lvOf(e) { return dk_level(dk_skillsOf(e).map(function (s) { var r = dk_row(e.id, s.code); return r ? r.status : 'none'; })); }
+function dk_save() { try { if (typeof w3Save === 'function') w3Save(); } catch (e) {} }
+function dk_fio(e) { return e ? (e.first_name + (e.last_name ? ' ' + e.last_name.charAt(0) + '.' : '')) : ''; }
+function dk_boss(e) { try { return typeof w3Boss === 'function' ? w3Boss(e) : null; } catch (x) { return null; } }
+async function dk_note(to, kind, title, text, ref) {
+  try { if (typeof jc_notify === 'function') return await jc_notify(to, kind, title, text, ref); if (typeof w3Notify === 'function') return await w3Notify(to, title, text, ref.type, ref.id); } catch (e) {}
+}
+/* учебные статусы: у каждого сотрудника химчистки часть навыков уже засчитана, у некоторых — ждёт проверки */
+function dk_seed() {
+  var DB = window.__DB; if (!DB || dk_sv() || !DK.C) return;
+  DB.dk_meta = DB.dk_meta || []; var sig = (typeof w3Sig === 'function' ? w3Sig() : 'x') + '|' + dk_day();
+  if (DB.dk_meta.some(function (m) { return m.sig === sig; })) return;
+  DB.dk_meta.push({ sig: sig }); DB.dk_ms = DB.dk_ms || []; DB.dk_att = DB.dk_att || [];
+  (S.emps || []).forEach(function (e) {
+    if (e.active === false || e.role === 'director') return;
+    var L = dk_skillsOf(e); if (!L.length || DB.dk_ms.some(function (r) { return r.employee_id === e.id; })) return;
+    var h = dk_hash(e.id + (e.login || '')), k = Math.min(L.length - 2, h % 3), b = dk_boss(e), d0 = addDays(dk_day(), -(10 + h % 40));
+    L.forEach(function (s, i) {
+      if (i < k) DB.dk_ms.push({ employee_id: e.id, code: s.code, status: 'approved', test_best: 9 + (h + i) % 2, test_total: 10, attempts: 1 + (h + i) % 2, approved_by: b ? b.id : null, approved_at: addDays(d0, i * 2) + 'T10:00:00+05:00', requested_at: addDays(d0, i * 2 - 1) + 'T16:00:00+05:00' });
+      else if (i === k && h % 3 === 0) DB.dk_ms.push({ employee_id: e.id, code: s.code, status: 'pending', test_best: 9, test_total: 10, attempts: 1, requested_at: addDays(dk_day(), -1) + 'T15:20:00+05:00' });
+      else if (i === k && h % 3 === 1) DB.dk_ms.push({ employee_id: e.id, code: s.code, status: 'learning', test_best: 6, test_total: 10, attempts: 1 });
+    });
+  });
+  dk_save();
+}
+/* таблицы демо сохраняются между входами (как W3P_T волны 3); восстановление — здесь, потому что общее прошло до этой части */
+(function () {
+  try {
+    if (dk_sv() || typeof W3P_T === 'undefined') return;
+    ['dk_ms', 'dk_att', 'dk_meta'].forEach(function (k) { if (W3P_T.indexOf(k) < 0) W3P_T.push(k); });
+    var DB = window.__DB, o = JSON.parse(localStorage.getItem(W3P_K) || 'null');
+    if (DB && o && o.sig === w3Sig() && o.day === today() && o.t) ['dk_ms', 'dk_att', 'dk_meta'].forEach(function (k) { if (Array.isArray(o.t[k])) DB[k] = o.t[k]; });
+  } catch (e) {}
+})();
+
+/* ---------- демо-версии rpc (тот же ответ, что у сервера 0016) ---------- */
+function dk_skOut(s, r, e) {
+  return { id: s.code, code: s.code, title_ru: s.title_ru, title_uz: s.title_uz, level: s.level, lesson: s.lesson, practice_ru: s.practice_ru, practice_uz: s.practice_uz,
+    status: r ? r.status : 'none', test_best: r ? r.test_best : 0, test_total: r ? r.test_total : 0, attempts: r ? r.attempts : 0, requested_at: r && r.requested_at || null,
+    approved_at: r && r.approved_at || null, approved_by: r && r.approved_by ? dk_fio(emp(r.approved_by)) : null, note: r && r.note || null, questions: s.q ? s.q.length : 0 };
+}
+function dk_E(msg, code) { var e = new Error(msg); e.details = code; e.code = code; return e; }
+var DK_DEMO = {
+  my_skills: function () {
+    var e = S.me, L = dk_skillsOf(e), b = dk_boss(e);
+    return { member_id: e.id, position_id: e.position_id, position: posName(e.position_id), checker_id: b ? b.id : null, checker: b ? dk_fio(b) : null,
+      level: dk_lvOf(e), skills: L.map(function (s) { return dk_skOut(s, dk_row(e.id, s.code), e); }) };
+  },
+  _mine: function (code) { var s = dk_skillsOf(S.me).filter(function (x) { return x.code === code; })[0]; if (!s) throw dk_E('Навык не найден', 'not_found'); return s; },
+  skill_start: function (a) {
+    var s = DK_DEMO._mine(a.p_code), r = dk_rowMk(S.me.id, s.code); if (r.status === 'none') { r.status = 'learning'; r.started_at = new Date().toISOString(); }
+    dk_save(); return { code: s.code, status: r.status };
+  },
+  skill_test_get: function (a) {
+    var s = DK_DEMO._mine(a.p_code), DB = window.__DB; DB.dk_att = DB.dk_att || [];
+    if (!s.q || s.q.length < 5) throw dk_E('Тест этого навыка ещё не готов', 'not_ready');
+    var at = DB.dk_att.filter(function (x) { return x.employee_id === S.me.id && x.code === s.code && !x.done; })[0];
+    if (!at) {
+      if (DB.dk_att.filter(function (x) { return x.employee_id === S.me.id && x.code === s.code && x.day === dk_day(); }).length >= 5) throw dk_E('Сегодня по этому навыку попыток больше нет — попробуйте завтра', 'limit');
+      var ord = s.q.map(function (_, i) { return i; }); for (var i = ord.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = ord[i]; ord[i] = ord[j]; ord[j] = t; }
+      at = { id: Date.now(), employee_id: S.me.id, code: s.code, day: dk_day(), qids: ord.slice(0, 10), done: false }; DB.dk_att.push(at);
+      DK_DEMO.skill_start({ p_code: s.code });
+    }
+    dk_save();
+    return { attempt_id: at.id, code: s.code, total: at.qids.length, pass: Math.ceil(at.qids.length * 0.8),
+      questions: at.qids.map(function (i) { var q = s.q[i]; return { id: i, q_ru: q[0], q_uz: q[1], opts_ru: q[2], opts_uz: q[3] }; }) };
+  },
+  skill_test_submit: function (a) {
+    var s = DK_DEMO._mine(a.p_code), DB = window.__DB, at = (DB.dk_att || []).filter(function (x) { return x.employee_id === S.me.id && x.code === s.code && !x.done; })[0];
+    if (!at) throw dk_E('Сначала откройте тест', 'bad_input');
+    var ans = Array.isArray(a.p_answers) ? a.p_answers : at.qids.map(function (id) { return a.p_answers[id]; }), ok = 0;
+    var items = at.qids.map(function (id, k) { var q = s.q[id], av = ans[k] == null ? null : +ans[k], good = av === q[4]; if (good) ok++; return { id: id, ok: good, answer: av, correct: q[4], expl_ru: q[5], expl_uz: q[6] }; });
+    var tot = at.qids.length, pass = ok * 10 >= tot * 8; at.done = true; at.correct = ok; at.answers = ans;
+    var r = dk_rowMk(S.me.id, s.code), becomes = pass && (r.status === 'none' || r.status === 'learning');
+    if (r.status === 'none') r.status = 'learning';
+    r.attempts = (r.attempts || 0) + 1; if (ok * Math.max(r.test_total || 0, 1) >= (r.test_best || 0) * tot) { r.test_best = ok; r.test_total = tot; }
+    r.tested_at = new Date().toISOString();
+    var b = dk_boss(S.me);
+    if (becomes) { r.status = 'pending'; r.requested_at = new Date().toISOString(); r.note = null; if (b) dk_note(b.id, 'skill_check', 'Проверьте навык на практике', dk_fio(S.me) + ' · ' + s.title_ru + ' · тест ' + ok + '/' + tot, { type: 'skill_check', id: S.me.id + ':' + s.code }); }
+    /* ошибки вернутся в тесте дня */
+    items.forEach(function (it) { if (!it.ok) DK_QZ.wrong(S.me.id, s.code, it.id); });
+    dk_save();
+    return { code: s.code, correct: ok, total: tot, passed: pass, status: r.status, checker: b ? dk_fio(b) : null, items: items, level: dk_lvOf(S.me) };
+  },
+  skill_decide: function (a) {
+    var e = emp(a.p_member); if (!e) throw dk_E('Сотрудник не найден', 'not_found');
+    if (e.id === S.me.id) throw dk_E('Свой навык засчитывает ваш руководитель', 'no_rights');
+    if (!isDirector() && !myTeam().some(function (x) { return x.id === e.id; })) throw dk_E('Это не ваш сотрудник', 'no_rights');
+    var s = dk_skillsOf(e).filter(function (x) { return x.code === a.p_code; })[0], r = s && dk_row(e.id, s.code);
+    if (!r || (a.p_yes && r.status !== 'pending') || (!a.p_yes && r.status !== 'pending' && r.status !== 'approved')) throw dk_E('Навык не ждёт проверки — обновите экран', 'conflict');
+    var nt = String(a.p_note || '').trim().slice(0, 300) || null;
+    r.status = a.p_yes ? 'approved' : 'learning'; r.approved_by = a.p_yes ? S.me.id : null; r.approved_at = a.p_yes ? new Date().toISOString() : null;
+    r.decided_by = S.me.id; r.decided_at = new Date().toISOString(); r.note = nt;
+    if (a.p_yes) dk_note(e.id, 'skill_ok', 'Допуск получен', s.title_ru + ' · засчитал(а) ' + dk_fio(S.me), { type: 'skill', id: s.code });
+    else dk_note(e.id, 'skill_no', 'Навык: пока ещё рано', s.title_ru + (nt ? ' · ' + nt : ''), { type: 'skill', id: s.code });
+    dk_save();
+    return { member_id: e.id, code: s.code, status: r.status, level: dk_lvOf(e) };
+  },
+  team_skills: function () {
+    var P = (isDirector() ? (S.emps || []).filter(function (e) { return e.active !== false && e.role !== 'director' && e.id !== S.me.id; }) : myTeam()).filter(function (e) { return dk_skillsOf(e).length; });
+    var sk = [], seen = {}, cells = [], pend = [];
+    P.forEach(function (e) {
+      dk_skillsOf(e).forEach(function (s) {
+        if (!seen[s.code]) { seen[s.code] = 1; sk.push({ id: s.code, code: s.code, title_ru: s.title_ru, title_uz: s.title_uz, level: s.level, position_id: s.position_id, practice_ru: s.practice_ru, practice_uz: s.practice_uz }); }
+        var r = dk_row(e.id, s.code); if (!r || r.status === 'none') return;
+        cells.push({ member_id: e.id, skill_id: s.code, status: r.status, test_best: r.test_best, test_total: r.test_total, attempts: r.attempts, requested_at: r.requested_at, approved_at: r.approved_at, approved_by: r.approved_by ? dk_fio(emp(r.approved_by)) : null, note: r.note });
+        if (r.status === 'pending') pend.push({ member_id: e.id, name: dk_fio(e), skill_id: s.code, code: s.code, title_ru: s.title_ru, title_uz: s.title_uz, practice_ru: s.practice_ru, practice_uz: s.practice_uz, test_best: r.test_best, test_total: r.test_total, requested_at: r.requested_at });
+      });
+    });
+    pend.sort(function (a, b) { return String(a.requested_at).localeCompare(String(b.requested_at)); });
+    return { people: P.map(function (e) { return { id: e.id, name: dk_fio(e), first_name: e.first_name, last_name: e.last_name, dept_id: e.dept_id, position_id: e.position_id, role: e.role, hire_date: e.hire_date, level: dk_lvOf(e) }; }), skills: sk, cells: cells, pending: pend };
+  }
+};
+async function dk_api(n, a) {
+  var sv = dk_sv();
+  if (sv) { var r = await sv.real.rpc(n, a || {}); if (r.error) throw r.error; return r.data; }
+  await dk_load(); dk_seed();
+  return DK_DEMO[n](a || {});
+}
+
+/* ---------- тест дня в демо: 2 вопроса из навыков «учусь», ошибки возвращаются через 1, 3, 7 дней ---------- */
+var DK_QZ = {
+  base: 9900000,
+  rep: function () { var DB = window.__DB || {}; DB.dk_att = DB.dk_att || []; var m = DB.dk_att.filter(function (x) { return x.kind === 'rep'; })[0]; if (!m) { m = { kind: 'rep', id: 0, done: true, L: {} }; DB.dk_att.push(m); } return m.L; },
+  wrong: function (mid, code, qi) { var L = DK_QZ.rep(), k = mid + '|' + code + '|' + qi, o = L[k] || { n: 0 }; o.n = Math.min(9, o.n + 1); o.due = addDays(dk_day(), o.n <= 1 ? 1 : o.n === 2 ? 3 : 7); L[k] = o; },
+  right: function (mid, code, qi) { var L = DK_QZ.rep(); delete L[mid + '|' + code + '|' + qi]; },
+  /* вопрос навыка в общей таблице вопросов демо (cat 'skill' — в обычный набор не попадает, проверка ответа работает) */
+  put: function (s, qi) {
+    var DB = window.__DB, id = DK_QZ.base + dk_hash(s.code) * 10 + qi; DB.quiz_questions = DB.quiz_questions || [];
+    if (!DB.quiz_questions.some(function (q) { return q.id === id; })) { var q = s.q[qi]; DB.quiz_questions.push({ id: id, cat: 'skill', q_ru: q[0], q_uz: q[1], opts_ru: q[2], opts_uz: q[3], correct: q[4], expl_ru: q[5], expl_uz: q[6], active: true, dk_code: s.code, dk_qi: qi }); }
+    return id;
+  },
+  pick: function (n) {
+    var me = S.me; if (!me || !DK.C) return [];
+    var L = dk_skillsOf(me).filter(function (s) { var r = dk_row(me.id, s.code); return r && r.status === 'learning' && s.q && s.q.length; });
+    if (!L.length) return [];
+    var R = DK_QZ.rep(), d = dk_day(), out = [];
+    Object.keys(R).forEach(function (k) { var p = k.split('|'); if (out.length < n && p[0] === me.id && R[k].due <= d) { var s = L.filter(function (x) { return x.code === p[1]; })[0]; if (s) out.push(DK_QZ.put(s, +p[2])); } });
+    var h = dk_hash(me.id + d), i = 0;
+    while (out.length < n && i < 40) { var s2 = L[(h + i) % L.length], qi = (h * 7 + i * 3) % s2.q.length, id = DK_QZ.put(s2, qi); if (out.indexOf(id) < 0) out.push(id); i++; }
+    return out;
+  }
+};
+(function () {
+  if (dk_sv() || typeof sb === 'undefined' || !sb.rpc) return;
+  var r0 = sb.rpc;
+  sb.rpc = function (n, a) {
+    if (n === 'quiz_submit' && a && Array.isArray(a.p_qids) && S.me) {
+      try { (window.__DB.quiz_questions || []).forEach(function (q) { var k = a.p_qids.indexOf(q.id); if (k >= 0 && q.dk_code) { if (a.p_answers[k] === q.correct) DK_QZ.right(S.me.id, q.dk_code, q.dk_qi); else DK_QZ.wrong(S.me.id, q.dk_code, q.dk_qi); } }); dk_save(); } catch (e) {}
+    }
+    var p = r0.apply(this, arguments);
+    if (n !== 'quiz_today' || !S.me || DK_TYPES.indexOf(dk_type()) < 0) return p;
+    return Promise.resolve(p).then(function (r) {
+      try {
+        var D = r && r.data; if (!D || D.done || !Array.isArray(D.questions) || D.questions.length < 3 || !DK.C) return r;
+        if (D.questions.some(function (q) { return q.id >= DK_QZ.base; })) return r;
+        var ids = DK_QZ.pick(2); if (!ids.length) return r;
+        var Q = window.__DB.quiz_questions, k = D.questions.length;
+        ids.forEach(function (id, j) { var q = Q.filter(function (x) { return x.id === id; })[0]; if (q) D.questions[(k - 1 - j * 2 + k) % k] = { id: q.id, cat: q.cat, q_ru: q.q_ru, q_uz: q.q_uz, opts_ru: q.opts_ru, opts_uz: q.opts_uz }; });
+      } catch (e) { console.warn(e); }
+      return r;
+    });
+  };
+})();
+
+/* ---------- общие кусочки разметки ---------- */
+var DK_ST = { none: ['не начато', 't-mute', 'dk-n'], learning: ['учусь', 't-info', 'dk-l'], pending: ['ждёт проверки', 't-warn', 'dk-p'], approved: ['допущен', 't-ok', 'dk-a'] };
+function dk_chip(st, mgr) { var x = DK_ST[st] || DK_ST.none; return '<span class="chip ' + x[1] + ' dk-chip">' + h(mgr && st === 'learning' ? 'учится' : x[0]) + '</span>'; }
+function dk_lvName(n) { return n === 3 ? 'Наставник' : n === 2 ? 'Самостоятельно' : 'Стажёр'; }
+function dk_dt(iso) { if (!iso) return ''; var d = String(iso).slice(0, 10); return d === dk_day() ? dk_t('сегодня') : d === addDays(dk_day(), -1) ? dk_t('вчера') : dm(d); }
+function dk_title(s) { return dk_L(s.title_ru, s.title_uz); }
+function dk_dot(st) { return '<span class="dk-dot ' + (DK_ST[st] || DK_ST.none)[2] + '" aria-hidden="true"></span>'; }
+function dk_lvCard(lv, sub) {
+  var n = lv.level, tl = function (k) {
+    var cls = k < n ? 'done' : k === n ? 'now' : '', st = k < n ? 'пройден' : k === n ? 'сейчас' : '';
+    var more = k > n ? (k === 2 ? lv.need2 : lv.need3) : 0;
+    return '<div class="dk-lt ' + cls + '"><b><span class="num">' + k + '</span> · <span>' + h(k === 2 ? 'Сам' : dk_lvName(k)) + '</span></b><small>' + (st ? '<span>' + st + '</span>' : '<span>ещё</span> <span class="num">' + more + '</span>') + '</small></div>';
+  };
+  return '<div class="shift dk-lv"><div class="dk-lvh"><span class="dk-cap">Уровень</span><span class="dk-lvc"><b class="num">' + lv.approved + '</b>/<b class="num">' + lv.total + '</b> <span>навыков</span></span></div>' +
+    '<div class="dk-lts">' + tl(1) + tl(2) + tl(3) + '</div>' + (sub ? '<div class="dk-lvs">' + sub + '</div>' : '') + '</div>';
+}
+
+/* ---------- экран «Мои допуски» ---------- */
+async function dk_vMy() {
+  var m = $('main'); if (!m) return;
+  m.innerHTML = '<div class="card empty" style="min-height:120px"></div>';
+  var D; try { D = await dk_api('my_skills'); } catch (e) { m.innerHTML = '<div class="note t-bad">' + h(dk_err(e)) + '</div>'; return; }
+  if (S.view !== 'dkmy') return;
+  DK.my = D; DK.cache.my = { n: (D.skills || []).length, lv: D.level, at: Date.now() };
+  var L = D.skills || [];
+  if (!L.length) { m.innerHTML = '<div class="card"><div class="meta" style="white-space:normal">Для вашей должности навыков пока нет. Их добавляет владелец.</div></div>'; return; }
+  var sub = D.checker ? '<span>Навык засчитывает на практике</span>: <b>' + h(D.checker) + '</b>' : '<span>Навык засчитывает руководитель, когда вы покажете его на практике.</span>';
+  var lock = L.filter(function (s) { return s.level === 1 && s.status !== 'approved'; })[0];
+  m.innerHTML = '<div class="dk-wrap">' + dk_lvCard(D.level, sub) +
+    '<div class="card dk-list">' + L.map(function (s) {
+      var line = '';
+      if (s.status === 'pending') line = '<span>Тест</span> <b class="num">' + s.test_best + '/' + s.test_total + '</b>. <span>Осталось показать на практике</span>' + (D.checker ? ': ' + h(D.checker) : '');
+      else if (s.status === 'learning' && s.note) line = '<span>Комментарий</span>: ' + h(s.note);
+      else if (s.status === 'learning' && s.attempts) line = '<span>Лучший тест</span> <b class="num">' + s.test_best + '/' + s.test_total + '</b> · <span>нужно 8 из 10</span>';
+      else if (s.status === 'approved' && s.approved_by) line = '<span>Засчитал(а)</span> ' + h(s.approved_by) + (s.approved_at ? ' · <span class="num">' + h(dk_dt(s.approved_at)) + '</span>' : '');
+      var tail = s.status === 'none' && s.level > 1 ? '<span class="meta dk-lvl"><span>уровень</span> <span class="num">' + s.level + '</span></span>' : dk_chip(s.status);
+      return '<button type="button" class="dk-row' + (s.status === 'pending' ? ' hot' : '') + '" data-dk="' + h(s.code) + '"><span class="dk-r1">' + dk_dot(s.status) +
+        '<span class="dk-tt' + (s.status === 'none' ? ' mute' : '') + '">' + h(dk_title(s)) + '</span>' + tail + '</span>' + (line ? '<span class="dk-r2">' + line + '</span>' : '') + '</button>';
+    }).join('') + '</div>' +
+    (lock ? '<div class="note t-bad dk-lock">' + icon('lock', 18) + '<span><span>Пока нет допуска</span>: «' + h(dk_title(lock)) + '». <span>Такую работу делайте вместе со старшим.</span></span></div>' : '') +
+    '</div>';
+  m.querySelectorAll('[data-dk]').forEach(function (b) { b.onclick = function () { dk_open(b.getAttribute('data-dk')); }; });
+}
+function dk_open(code, mode) { S.sub.dkCode = code; DK.mode = mode || 'lesson'; DK.card = 0; DK.t = null; DK.res = null; DK.back.dkskill = 'dkmy'; go('dkskill'); }
+
+/* ---------- экран навыка: урок → тест → результат ---------- */
+async function dk_vSkill() {
+  var m = $('main'); if (!m) return;
+  var code = S.sub.dkCode; if (!code) return go('dkmy');
+  if (!DK.my || !(DK.my.skills || []).some(function (s) { return s.code === code; })) { try { DK.my = await dk_api('my_skills'); } catch (e) { m.innerHTML = '<div class="note t-bad">' + h(dk_err(e)) + '</div>'; return; } }
+  if (S.view !== 'dkskill') return;
+  var s = (DK.my.skills || []).filter(function (x) { return x.code === code; })[0];
+  if (!s) { m.innerHTML = '<div class="note t-warn">Навык не найден</div>'; return; }
+  if (DK.mode === 'test') return dk_testRender(m, s);
+  if (DK.mode === 'result') return dk_resRender(m, s);
+  dk_lessonRender(m, s);
+}
+function dk_steps(k) {
+  var T = ['Узнай', 'Проверь себя', 'Покажи на практике'];
+  return '<div class="dk-steps">' + T.map(function (t, i) { return '<div class="' + (i < k ? 'done' : i === k ? 'on' : '') + '"><i></i><span><span class="num">' + (i + 1) + '</span> · <span>' + t + '</span></span></div>'; }).join('') + '</div>';
+}
+function dk_lessonRender(m, s) {
+  var C = s.lesson || [], i = Math.max(0, Math.min(DK.card, C.length - 1)), c = C[i] || {}, last = i >= C.length - 1;
+  var stepK = s.status === 'pending' || s.status === 'approved' ? 2 : 0;
+  var head = '<div class="dk-sh"><div class="dk-cap2">' + dk_chip(s.status) + '</div><h2 class="dk-h">' + h(dk_title(s)) + '</h2></div>';
+  var info = '';
+  if (s.status === 'pending') info = '<div class="note t-warn"><span>Тест сдан</span> (<b class="num">' + s.test_best + '/' + s.test_total + '</b>). <span>Покажите навык на практике</span>' + (DK.my.checker ? ': <b>' + h(DK.my.checker) + '</b>' : '') + '</div>';
+  else if (s.status === 'approved') info = '<div class="note t-ok"><span>Вы допущены к этой работе.</span>' + (s.approved_by ? ' <span>Засчитал(а)</span>: ' + h(s.approved_by) : '') + '</div>';
+  else if (s.status === 'learning' && s.note) info = '<div class="note t-info"><span>Комментарий руководителя</span>: ' + h(s.note) + '</div>';
+  var card = C.length ? '<div class="card dk-lesson"><div class="meta"><span>Карточка</span> <span class="num">' + (i + 1) + '</span>/<span class="num">' + C.length + '</span></div>' +
+    '<div class="dk-ltx">' + h(dk_L(c.ru, c.uz)) + '</div>' +
+    (c.do_ru ? '<div class="dk-do">' + icon('okc', 18) + '<span>' + h(dk_L(c.do_ru, c.do_uz)) + '</span></div>' : '') +
+    (c.dont_ru ? '<div class="dk-dont">' + icon('xc', 18) + '<span>' + h(dk_L(c.dont_ru, c.dont_uz)) + '</span></div>' : '') + '</div>' : '';
+  var pr = last && s.practice_ru ? '<div class="card dk-pr"><h2><span>Что показать на практике</span></h2><div class="dk-ltx">' + h(dk_L(s.practice_ru, s.practice_uz)) + '</div></div>' : '';
+  var canTest = (s.questions || 0) >= 5;
+  var foot = '<div class="dk-foot">' + (i > 0 ? '<button type="button" class="btn ghost" id="dkPrev">Назад</button>' : '') +
+    (!last ? '<button type="button" class="btn dark dk-grow" id="dkNext">Понятно, дальше</button>'
+      : canTest ? '<button type="button" class="btn gold dk-grow" id="dkTest">' + (s.status === 'approved' || s.status === 'pending' ? 'Пройти тест ещё раз' : 'Пройти тест') + '</button>'
+        : '<div class="meta dk-grow" style="white-space:normal;align-self:center">Тест этого навыка ещё не готов</div>') + '</div>';
+  m.innerHTML = '<div class="dk-wrap">' + dk_steps(stepK) + head + info + card + pr + foot + '</div>';
+  if ($('dkPrev')) $('dkPrev').onclick = function () { DK.card = i - 1; dk_lessonRender(m, s); scrollTo(0, 0); };
+  if ($('dkNext')) $('dkNext').onclick = function () { DK.card = i + 1; dk_lessonRender(m, s); scrollTo(0, 0); };
+  if ($('dkTest')) $('dkTest').onclick = function () { dk_testStart(m, s, this); };
+  if (s.status === 'none' && !DK.busy) { DK.busy = true; dk_api('skill_start', { p_code: s.code }).then(function (r) { if (r && r.status) s.status = r.status; DK.cache.my = null; }, function () {}).then(function () { DK.busy = false; }); }
+}
+async function dk_testStart(m, s, btn) {
+  if (btn) btn.disabled = true;
+  try { DK.t = await dk_api('skill_test_get', { p_code: s.code }); } catch (e) { if (btn) btn.disabled = false; toast(dk_err(e), 4000); return; }
+  DK.mode = 'test'; DK.i = 0; DK.ans = DK.t.questions.map(function () { return null; }); dk_testRender(m, s); scrollTo(0, 0);
+}
+function dk_testRender(m, s) {
+  var T = DK.t; if (!T) { DK.mode = 'lesson'; return dk_lessonRender(m, s); }
+  var n = T.questions.length, i = DK.i, q = T.questions[i], O = (uiLang() === 'uz' && q.opts_uz && q.opts_uz.length === q.opts_ru.length) ? q.opts_uz : q.opts_ru, a = DK.ans[i];
+  m.innerHTML = '<div class="dk-wrap">' + dk_steps(1) +
+    '<div class="dk-qbar"><span><span>Вопрос</span> <b class="num">' + (i + 1) + '</b>/<b class="num">' + n + '</b></span><span class="meta"><span>Сдан, если верно</span> <b class="num">' + T.pass + '</b></span></div>' +
+    '<div class="dk-prog"><i style="width:' + Math.round(i * 100 / n) + '%"></i></div>' +
+    '<div class="card dk-q"><div class="dk-qt">' + h(dk_L(q.q_ru, q.q_uz)) + '</div>' +
+    O.map(function (o, k) { return '<button type="button" class="dk-opt' + (a === k ? ' on' : '') + '" data-o="' + k + '" aria-pressed="' + (a === k) + '"><span class="dk-ol">' + 'ABCD'.charAt(k) + '</span><span>' + h(o) + '</span></button>'; }).join('') + '</div>' +
+    '<div class="dk-foot">' + (i > 0 ? '<button type="button" class="btn ghost" id="dkQP">Назад</button>' : '<button type="button" class="btn ghost" id="dkQX">К уроку</button>') +
+    '<button type="button" class="btn ' + (i === n - 1 ? 'gold' : 'dark') + ' dk-grow" id="dkQN"' + (a == null ? ' disabled' : '') + '>' + (i === n - 1 ? 'Завершить тест' : 'Дальше') + '</button></div></div>';
+  m.querySelectorAll('[data-o]').forEach(function (b) { b.onclick = function () { DK.ans[i] = +b.getAttribute('data-o'); dk_testRender(m, s); }; });
+  if ($('dkQP')) $('dkQP').onclick = function () { DK.i = i - 1; dk_testRender(m, s); };
+  if ($('dkQX')) $('dkQX').onclick = function () { DK.mode = 'lesson'; DK.card = 0; dk_lessonRender(m, s); };
+  $('dkQN').onclick = async function () {
+    if (DK.ans[i] == null) return;
+    if (i < n - 1) { DK.i = i + 1; dk_testRender(m, s); scrollTo(0, 0); return; }
+    this.disabled = true;
+    try { DK.res = await dk_api('skill_test_submit', { p_code: s.code, p_answers: DK.ans }); }
+    catch (e) { this.disabled = false; toast(dk_err(e), 4000); return; }
+    s.status = DK.res.status; if (DK.res.correct * Math.max(s.test_total || 0, 1) >= (s.test_best || 0) * DK.res.total) { s.test_best = DK.res.correct; s.test_total = DK.res.total; }
+    s.attempts = (s.attempts || 0) + 1; DK.cache.my = null; DK.my.level = DK.res.level || DK.my.level;
+    DK.mode = 'result'; dk_resRender(m, s); scrollTo(0, 0);
+  };
+}
+function dk_resRender(m, s) {
+  var R = DK.res, T = DK.t; if (!R || !T) { DK.mode = 'lesson'; return dk_lessonRender(m, s); }
+  var Q = {}; T.questions.forEach(function (q) { Q[q.id] = q; });
+  var who = R.checker || (DK.my && DK.my.checker);
+  var top = R.passed
+    ? '<div class="note t-ok dk-res"><b class="dk-big num">' + R.correct + ' / ' + R.total + '</b><span>' + (R.status === 'pending' ? '<span>Тест сдан. Теперь покажите навык на практике</span>' + (who ? ': <b>' + h(who) + '</b>' : '') + '<br><span>Руководитель получил уведомление.</span>' : '<span>Тест сдан.</span>') + '</span></div>'
+    : '<div class="note t-warn dk-res"><b class="dk-big num">' + R.correct + ' / ' + R.total + '</b><span><span>Нужно 8 из 10. Повторите урок и попробуйте ещё раз.</span> <span>Ошибки вернутся в тесте дня.</span></span></div>';
+  var items = (R.items || []).slice().sort(function (a, b) { return (a.ok ? 1 : 0) - (b.ok ? 1 : 0); }).map(function (it) {
+    var q = Q[it.id] || {}, O = (uiLang() === 'uz' && q.opts_uz && q.opts_uz.length === (q.opts_ru || []).length) ? q.opts_uz : (q.opts_ru || []);
+    return '<div class="dk-ri ' + (it.ok ? 'ok' : 'bad') + '">' + icon(it.ok ? 'okc' : 'xc', 18) + '<div class="grow"><div class="dk-qt2">' + h(dk_L(q.q_ru, q.q_uz)) + '</div>' +
+      (it.ok ? '' : '<div class="meta"><span>Ваш ответ</span>: ' + h(it.answer == null ? '—' : O[it.answer]) + '</div>') +
+      '<div class="meta"><span>Верно</span>: <b>' + h(O[it.correct]) + '</b></div>' + (it.expl_ru ? '<div class="meta dk-ex">' + h(dk_L(it.expl_ru, it.expl_uz)) + '</div>' : '') + '</div></div>';
+  }).join('');
+  m.innerHTML = '<div class="dk-wrap">' + dk_steps(R.passed ? 2 : 1) + '<div class="dk-sh"><div class="dk-cap2">' + dk_chip(R.status) + '</div><h2 class="dk-h">' + h(dk_title(s)) + '</h2></div>' + top +
+    (R.passed && s.practice_ru ? '<div class="card dk-pr"><h2><span>Что показать на практике</span></h2><div class="dk-ltx">' + h(dk_L(s.practice_ru, s.practice_uz)) + '</div></div>' : '') +
+    '<div class="card"><h2><span>Ответы и пояснения</span></h2>' + items + '</div>' +
+    '<div class="dk-foot">' + (R.passed ? '<button type="button" class="btn dark dk-grow" id="dkBackL">К моим допускам</button>'
+      : '<button type="button" class="btn ghost" id="dkLes">Повторить урок</button><button type="button" class="btn gold dk-grow" id="dkAgain">Пройти ещё раз</button>') + '</div></div>';
+  if ($('dkBackL')) $('dkBackL').onclick = function () { go('dkmy'); };
+  if ($('dkLes')) $('dkLes').onclick = function () { DK.mode = 'lesson'; DK.card = 0; dk_lessonRender(m, s); scrollTo(0, 0); };
+  if ($('dkAgain')) $('dkAgain').onclick = function () { dk_testStart(m, s, this); };
+}
+
+/* ---------- «Кто что умеет» (руководитель, владелец) ---------- */
+async function dk_vTeam() {
+  var m = $('main'); if (!m) return;
+  if (!m.querySelector('.dk-wrap')) m.innerHTML = '<div class="card empty" style="min-height:160px"></div>';
+  var D; try { D = await dk_api('team_skills'); } catch (e) { m.innerHTML = '<div class="note t-bad">' + h(dk_err(e)) + '</div>'; return; }
+  if (S.view !== 'dkteam') return;
+  DK.team = D; DK.cache.team = { n: (D.skills || []).length, p: (D.pending || []).length, at: Date.now() };
+  dk_teamRender(m, D);
+}
+function dk_cellMap(D) { var M = {}, byId = {}; (D.skills || []).forEach(function (s) { byId[s.id] = s; }); (D.cells || []).forEach(function (c) { var s = byId[c.skill_id]; if (s) M[c.member_id + '|' + s.code] = c; }); return M; }
+function dk_short(t) { t = String(t || '').replace(/\s*\(.*?\)\s*/g, ' ').replace(/[:,.].*$/, '').trim(); return t.length > 22 ? t.slice(0, 20).trim() + '…' : t; }
+function dk_teamRender(m, D) {
+  var M = dk_cellMap(D), P = D.people || [], SK = D.skills || [];
+  if (!SK.length || !P.length) { m.innerHTML = '<div class="dk-wrap"><div class="card"><div class="meta" style="white-space:normal">' + (P.length ? 'Для должностей вашей команды навыков пока нет.' : 'В вашей команде пока нет сотрудников с навыками.') + '</div></div></div>'; return; }
+  var depOf = function (p) { var e = emp(p.id); return e ? e.dept_id : p.dept_id; };
+  var deps = []; P.forEach(function (p) { var d = depOf(p); if (deps.indexOf(d) < 0) deps.push(d); });
+  var f = S.sub.dkDep && deps.indexOf(S.sub.dkDep) >= 0 ? S.sub.dkDep : 'all';
+  var pend = D.pending || [];
+  var pendH = '<div class="card dk-pend"><h2><span>Ждут вашей проверки</span>' + (pend.length ? '<span class="chip t-warn num">' + pend.length + '</span>' : '') + '</h2>' +
+    (pend.length ? pend.map(function (x) {
+      return '<div class="dk-pi"><div class="name" style="white-space:normal"><b>' + h(x.name) + '</b> · ' + h(dk_L(x.title_ru, x.title_uz)) + '</div>' +
+        '<div class="meta"><span>тест</span> <span class="num">' + x.test_best + '/' + x.test_total + '</span>' + (x.requested_at ? ' · <span>сдал(а)</span> <span class="num">' + h(dk_dt(x.requested_at)) + '</span>' : '') + '</div>' +
+        (x.practice_ru ? '<div class="meta dk-ex"><span>Проверить на месте</span>: ' + h(dk_L(x.practice_ru, x.practice_uz)) + '</div>' : '') +
+        '<div class="dk-acts"><button type="button" class="btn dk-yes" data-dky="' + h(x.member_id) + '|' + h(x.code) + '">Засчитать</button><button type="button" class="btn ghost" data-dkn="' + h(x.member_id) + '|' + h(x.code) + '">Ещё рано</button></div></div>';
+    }).join('') : '<div class="meta">Сейчас никто не ждёт проверки.</div>') + '</div>';
+  var chips = deps.length > 1 ? '<div class="dk-chips"><button type="button" class="pick' + (f === 'all' ? ' on' : '') + '" data-dkd="all">Все</button>' + deps.map(function (d) { return '<button type="button" class="pick' + (f === d ? ' on' : '') + '" data-dkd="' + h(d) + '">' + h(deptName(d) || '—') + '</button>'; }).join('') + '</div>' : '';
+  /* блоки по должностям */
+  var pos = []; P.forEach(function (p) { if ((f === 'all' || depOf(p) === f) && pos.indexOf(p.position_id) < 0) pos.push(p.position_id); });
+  var newD = addDays(dk_day(), -30), weak = [];
+  var blocks = pos.map(function (pid) {
+    var ss = SK.filter(function (s) { return s.position_id === pid; }), pp = P.filter(function (p) { return p.position_id === pid && (f === 'all' || depOf(p) === f); });
+    if (!ss.length || !pp.length) return '';
+    ss.forEach(function (s) { var n = pp.filter(function (p) { var c = M[p.id + '|' + s.code]; return c && c.status === 'approved'; }).length; if (pp.length > 1 && n * 2 < pp.length) weak.push({ s: s, n: n, of: pp.length, lv: s.level }); });
+    var cols = 'grid-template-columns:var(--dk-nw) repeat(' + ss.length + ',minmax(var(--dk-cw),1fr))', mw = 'min-width:calc(var(--dk-nw) + ' + ss.length + ' * (var(--dk-cw) + 5px))';
+    var dep = pp[0] ? deptName(depOf(pp[0])) : '';
+    return '<div class="card dk-mx"><h2><span>' + h(posName(pid) || '—') + '</span><small>' + h(dep || '') + '</small></h2><div class="dk-sc"><div class="dk-g" style="' + mw + '">' +
+      '<div class="dk-gr dk-gh" style="' + cols + '"><span></span>' + ss.map(function (s) { return '<span title="' + h(dk_title(s)) + '">' + h(dk_short(dk_title(s))) + '</span>'; }).join('') + '</div>' +
+      pp.map(function (p) {
+        var e = emp(p.id), nw = e && e.hire_date && e.hire_date >= newD;
+        return '<div class="dk-gr" style="' + cols + '"><span class="dk-nm"><b>' + h(p.first_name || p.name) + '</b>' + (nw ? ' <i class="dk-new">новый</i>' : '') + '<small><span>ур.</span> <span class="num">' + ((p.level || {}).level || 1) + '</span></small></span>' +
+          ss.map(function (s) { var c = M[p.id + '|' + s.code], st = c ? c.status : 'none'; return '<button type="button" class="dk-c ' + DK_ST[st][2] + '" data-dkc="' + h(p.id) + '|' + h(s.code) + '" aria-label="' + h(dk_fio(e) || p.name) + ': ' + h(dk_title(s)) + ' — ' + h(dk_t(DK_ST[st][0])) + '"></button>'; }).join('') + '</div>';
+      }).join('') + '</div></div></div>';
+  }).join('');
+  var leg = '<div class="dk-leg">' + [['dk-a', 'допущен'], ['dk-p', 'ждёт проверки'], ['dk-l', 'учится'], ['dk-n', 'не начато']].map(function (x) { return '<span><i class="' + x[0] + '"></i><span>' + x[1] + '</span></span>'; }).join('') + '</div>';
+  weak.sort(function (a, b) { return a.lv - b.lv || a.n / a.of - b.n / b.of; });
+  var alert = weak.length ? '<div class="note t-bad dk-alert">' + weak.slice(0, 2).map(function (w) { return '<div><b>' + h(dk_title(w.s)) + '</b> · <span>допущены</span> <b class="num">' + w.n + '</b>/<b class="num">' + w.of + '</b></div>'; }).join('') + '<div class="dk-ah">Проверьте график: в каждой смене нужен хотя бы один допущенный.</div></div>' : '';
+  m.innerHTML = '<div class="dk-wrap">' + pendH + chips + blocks + (blocks ? '<div class="card" style="padding:10px 14px">' + leg + '</div>' : '') + alert + '</div>';
+  m.querySelectorAll('[data-dkd]').forEach(function (b) { b.onclick = function () { S.sub.dkDep = b.getAttribute('data-dkd'); dk_teamRender(m, D); }; });
+  m.querySelectorAll('[data-dky]').forEach(function (b) { b.onclick = function () { var p = b.getAttribute('data-dky').split('|'); dk_decide(p[0], p[1], true, null, b); }; });
+  m.querySelectorAll('[data-dkn]').forEach(function (b) { b.onclick = function () { var p = b.getAttribute('data-dkn').split('|'); dk_noSheet(p[0], p[1]); }; });
+  m.querySelectorAll('[data-dkc]').forEach(function (b) { b.onclick = function () { var p = b.getAttribute('data-dkc').split('|'); dk_cellSheet(p[0], p[1]); }; });
+}
+async function dk_decide(mid, code, yes, note, btn) {
+  if (btn) btn.disabled = true;
+  try { await dk_api('skill_decide', { p_member: mid, p_code: code, p_yes: !!yes, p_note: note || null }); }
+  catch (e) { if (btn) btn.disabled = false; toast(dk_err(e), 4000); return false; }
+  closeLayer(); toast(yes ? dk_t('Засчитано — сотрудник допущен') : dk_t('Отмечено «ещё рано» — сотрудник получил комментарий'));
+  DK.cache.team = null; if (S.view === 'dkteam') await dk_vTeam(); return true;
+}
+function dk_noSheet(mid, code) {
+  var e = emp(mid), s = (DK.team && DK.team.skills || []).filter(function (x) { return x.code === code; })[0] || {};
+  var R = ['Показал(а) не всё — нужно ещё потренироваться', 'Делает медленно, нужна практика со старшим', 'Ошибка в безопасности — повторить урок'];
+  sheet(sheetHead('<span>Ещё рано</span>', h(dk_fio(e)) + ' · ' + h(dk_title(s))) +
+    '<div class="meta">Что подтянуть — сотрудник увидит этот комментарий.</div>' +
+    '<div class="w3-pk">' + R.map(function (r, i) { return '<button type="button" class="pick" data-dkr="' + i + '">' + h(r) + '</button>'; }).join('') + '</div>' +
+    '<textarea class="in" id="dkNote" rows="3" maxlength="300" style="width:100%;resize:vertical"></textarea>' +
+    '<button type="button" class="btn dark full" id="dkNoGo">Сохранить «ещё рано»</button><button type="button" class="btn ghost full" id="dkNoX">Отмена</button>');
+  $('dkNote').setAttribute('placeholder', dk_t('Например: покажите ещё раз на вечерней смене'));
+  document.querySelectorAll('[data-dkr]').forEach(function (b) { b.onclick = function () { $('dkNote').value = dk_t(R[+b.getAttribute('data-dkr')]); }; });
+  $('dkNoX').onclick = closeLayer;
+  $('dkNoGo').onclick = function () { dk_decide(mid, code, false, $('dkNote').value.trim(), this); };
+}
+function dk_cellSheet(mid, code) {
+  var D = DK.team || {}, M = dk_cellMap(D), c = M[mid + '|' + code] || { status: 'none' }, e = emp(mid), p = (D.people || []).filter(function (x) { return x.id === mid; })[0] || {};
+  var s = (D.skills || []).filter(function (x) { return x.code === code; })[0] || {}, st = c.status;
+  var kv = function (k, v) { return '<div class="dk-kv"><span class="meta">' + k + '</span><span>' + v + '</span></div>'; };
+  var body = kv('<span>Статус</span>', dk_chip(st, true)) +
+    (c.test_total ? kv('<span>Лучший тест</span>', '<b class="num">' + c.test_best + '/' + c.test_total + '</b>' + (c.attempts ? ' · <span>попыток</span> <span class="num">' + c.attempts + '</span>' : '')) : '') +
+    (st === 'approved' && c.approved_by ? kv('<span>Засчитал(а)</span>', h(c.approved_by) + (c.approved_at ? ' · <span class="num">' + h(dk_dt(c.approved_at)) + '</span>' : '')) : '') +
+    (st === 'pending' && c.requested_at ? kv('<span>Тест сдан</span>', '<span class="num">' + h(dk_dt(c.requested_at)) + '</span>') : '') +
+    (c.note ? kv('<span>Комментарий</span>', h(c.note)) : '') +
+    kv('<span>Уровень сотрудника</span>', '<span class="num">' + ((p.level || {}).level || 1) + '</span> · <span>' + dk_lvName((p.level || {}).level || 1) + '</span>') +
+    (s.practice_ru ? '<div class="note t-info"><b><span>Проверить на месте</span>:</b> ' + h(dk_L(s.practice_ru, s.practice_uz)) + '</div>' : '');
+  var acts = st === 'pending' ? '<div class="dk-acts"><button type="button" class="btn dk-yes" id="dkCY">Засчитать</button><button type="button" class="btn ghost" id="dkCN">Ещё рано</button></div>'
+    : st === 'approved' ? '<button type="button" class="btn ghostbad full" id="dkCR">Снять допуск</button>'
+      : '<div class="meta" style="white-space:normal">' + (st === 'learning' ? 'Сотрудник учится: засчитать можно, когда он сдаст тест (8 из 10).' : 'Сотрудник ещё не начинал этот навык.') + '</div>';
+  sheet(sheetHead(h(dk_fio(e) || p.name), h(dk_title(s))) + body + acts + '<button type="button" class="btn ghost full" id="dkCX">Закрыть</button>');
+  $('dkCX').onclick = closeLayer;
+  if ($('dkCY')) $('dkCY').onclick = function () { dk_decide(mid, code, true, null, this); };
+  if ($('dkCN')) $('dkCN').onclick = function () { dk_noSheet(mid, code); };
+  if ($('dkCR')) $('dkCR').onclick = function () { dk_noSheet(mid, code); };
+}
+
+/* ---------- регистрация экранов, доступ, «Назад» ---------- */
+W3T.dkmy = 'Мои допуски'; W3V.dkmy = dk_vMy;
+W3T.dkskill = 'Допуск к работе'; W3V.dkskill = dk_vSkill;
+W3T.dkteam = 'Кто что умеет'; W3V.dkteam = dk_vTeam;
+if (typeof CM_VIEWS !== 'undefined') ['dkmy', 'dkskill', 'dkteam'].forEach(function (v) { if (CM_VIEWS.indexOf(v) < 0) CM_VIEWS.push(v); });
+if (typeof CM_REF !== 'undefined') ['skill', 'skill_check'].forEach(function (v) { if (CM_REF.indexOf(v) < 0) CM_REF.push(v); });
+function dk_go(v, back) { DK.back[v] = back || S.view; go(v); }
+(function () {
+  var cv0 = canView;
+  canView = function (v) { if (v === 'dkmy' || v === 'dkskill') return dk_maybe(); if (v === 'dkteam') return dk_maybe() && dk_lead(); return cv0.apply(this, arguments); };
+  var r0 = render;
+  render = function () {
+    var r = r0.apply(this, arguments);
+    if (S.view === 'dkmy' || S.view === 'dkskill' || S.view === 'dkteam') {
+      var bk = S.view === 'dkskill' ? 'dkmy' : DK.back[S.view] || (S.view === 'dkmy' ? 'profile' : (myTeam().length ? 'team' : 'home'));
+      var b = document.querySelector('.top .iconbtn[aria-label="Назад"], .top .iconbtn[data-go="more"], .top .iconbtn[data-go="home"]');
+      if (b && b.getAttribute('data-go') !== 'notif') { b.setAttribute('data-go', bk); b.onclick = function () { go(bk); }; }
+    }
+    return r;
+  };
+  var o0 = openRef;
+  openRef = function (rt, rid, nid, title) {
+    if (rt === 'skill' || rt === 'skill_check') {
+      if (nid) try { markRead(+nid); } catch (e) {}
+      closeLayer();
+      if (rt === 'skill_check' && canView('dkteam')) return dk_go('dkteam', 'home');
+      DK.my = null; return dk_go('dkmy', 'home');
+    }
+    return o0.apply(this, arguments);
+  };
+  var sa0 = sectionsAll;
+  sectionsAll = function () { var o = sa0.apply(this, arguments); try { if (dk_maybe() && dk_lead() && Array.isArray(o) && !o.some(function (s) { return s[0] === 'dkteam'; }) && (DK.cache.team ? DK.cache.team.n > 0 : true)) o.push(['dkteam', 'Кто что умеет', 'Допуски сотрудников: кто что умеет, кто ждёт проверки', 'users']); } catch (e) {} return o; };
+})();
+
+/* ---------- входы: профиль, команда, главная ---------- */
+function dk_rowBtn(id, ic, t, st) { return '<button type="button" class="pl-row" id="' + id + '" style="padding-left:0;padding-right:0"><span class="pl-ic pl-d">' + icon(ic, 18) + '</span><span class="pl-t"><span class="pl-tt">' + t + '</span><span class="pl-st" id="' + id + 'S">' + (st || '') + '</span></span><span class="pl-ch">' + icon('chev', 16) + '</span></button>'; }
+async function dk_myCache(force) {
+  if (!force && DK.cache.my && Date.now() - DK.cache.my.at < 60000) return DK.cache.my;
+  try { var D = await dk_api('my_skills'); DK.my = D; DK.cache.my = { n: (D.skills || []).length, lv: D.level, at: Date.now(), L: D.skills || [] }; } catch (e) { DK.cache.my = { n: 0, at: Date.now() }; }
+  return DK.cache.my;
+}
+async function dk_teamCache(force) {
+  if (!force && DK.cache.team && Date.now() - DK.cache.team.at < 60000) return DK.cache.team;
+  try { var D = await dk_api('team_skills'); DK.team = D; DK.cache.team = { n: (D.skills || []).length, p: (D.pending || []).length, at: Date.now() }; } catch (e) { DK.cache.team = { n: 0, p: 0, at: Date.now() }; }
+  return DK.cache.team;
+}
+function dk_lvTxt(lv) { return '<span>Уровень</span> <span class="num">' + lv.level + '</span> · <span>' + dk_lvName(lv.level) + '</span> · <span class="num">' + lv.approved + '/' + lv.total + '</span>'; }
+/* профиль и команда: строка добавляется после всех обёрток (96-nav рисует свою карточку «Команды» позже) */
+async function dk_profEntry() {
+  var m = $('main'); if (!m || S.view !== 'profile' || !dk_maybe() || isDirector() || $('dkProf')) return;
+  var c = document.createElement('div'); c.className = 'card'; c.id = 'dkProfC'; c.style.padding = '6px 12px'; c.hidden = true;
+  c.innerHTML = dk_rowBtn('dkProf', 'medal', '<span>Мои допуски</span>', '<span>Навыки, уроки и тесты по вашей должности</span>');
+  m.insertBefore(c, m.children[1] || null);
+  $('dkProf').onclick = function () { dk_go('dkmy', 'profile'); };
+  var X = await dk_myCache();
+  if ($('dkProfC') && X.n > 0) { $('dkProfC').hidden = false; if (X.lv && $('dkProfS')) $('dkProfS').innerHTML = dk_lvTxt(X.lv); }
+}
+async function dk_teamEntry() {
+  var m = $('main'); if (!m || S.view !== 'team' || !dk_maybe() || !dk_lead() || $('dkTeamR')) return;
+  var X = await dk_teamCache(); m = $('main'); if (!m || S.view !== 'team' || $('dkTeamR') || !X.n) return;
+  var host = $('nav_teamX'), row = dk_rowBtn('dkTeamR', 'medal', '<span>Кто что умеет</span>', X.p ? '<span>Ждут вашей проверки</span>: <b class="num">' + X.p + '</b>' : '<span>Допуски команды и проверки навыков</span>');
+  if (host) host.insertAdjacentHTML('beforeend', row);
+  else { var c = document.createElement('div'); c.className = 'card'; c.id = 'dkTeamC'; c.style.padding = '6px 12px'; c.innerHTML = row; m.insertBefore(c, m.firstChild); }
+  $('dkTeamR').onclick = function () { dk_go('dkteam', 'team'); };
+}
+(function () {
+  var vp0 = vProfile;
+  vProfile = async function () { var r = await vp0.apply(this, arguments); setTimeout(function () { dk_profEntry().catch(function (e) { console.warn(e); }); }, 0); return r; };
+  var vt0 = vTeam;
+  vTeam = async function () { var r = await vt0.apply(this, arguments); setTimeout(function () { dk_teamEntry().catch(function (e) { console.warn(e); }); }, 0); return r; };
+})();
+/* главная: «Мои допуски» (учусь / ждёт проверки) и «Ждут вашей проверки» у руководителя — data-cp 5.5 и 6.2 */
+W3.home.push(function () { if (dk_maybe()) dk_homeCards(); });
+async function dk_homeCards() {
+  var el = w3HomeSlot('dkHome'); if (!el) return; el.setAttribute('data-cp', '5.5'); el.hidden = true;
+  var el2 = dk_lead() ? w3HomeSlot('dkHomeT') : null; if (el2) { el2.setAttribute('data-cp', '6.2'); el2.hidden = true; }
+  if (!isDirector()) {
+    var X = await dk_myCache(); el = $('dkHome');
+    var L = (X.L || []).filter(function (s) { return s.status === 'pending' || s.status === 'learning'; }).sort(function (a, b) { return (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1); });
+    if (el && L.length && X.lv) {
+      el.hidden = false;
+      el.innerHTML = '<div class="card dk-home"><h2><span>Мои допуски</span><small>' + dk_lvTxt(X.lv) + '</small></h2>' +
+        L.slice(0, 2).map(function (s) { return '<button type="button" class="dk-row" data-dkh="' + h(s.code) + '"><span class="dk-r1">' + dk_dot(s.status) + '<span class="dk-tt">' + h(dk_title(s)) + '</span>' + dk_chip(s.status) + '</span></button>'; }).join('') +
+        '<button type="button" class="btn ghost full sm" id="dkHomeGo" style="margin-top:8px;min-height:44px"><span>Все навыки</span> ' + icon('chev', 16) + '</button></div>';
+      el.querySelectorAll('[data-dkh]').forEach(function (b) { b.onclick = function () { DK.back.dkmy = 'home'; dk_open(b.getAttribute('data-dkh')); }; });
+      $('dkHomeGo').onclick = function () { dk_go('dkmy', 'home'); };
+    }
+  }
+  if (el2) {
+    var T = await dk_teamCache(); el2 = $('dkHomeT');
+    if (el2 && T.p > 0) {
+      el2.hidden = false;
+      el2.innerHTML = '<div class="card dk-home"><h2><span>Ждут вашей проверки</span><span class="chip t-warn num">' + T.p + '</span></h2><div class="meta" style="white-space:normal">Сотрудники сдали тест навыка — посмотрите на практике и засчитайте.</div>' +
+        '<button type="button" class="btn ghost full sm" id="dkHomeTGo" style="margin-top:8px;min-height:44px"><span>Кто что умеет</span> ' + icon('chev', 16) + '</button></div>';
+      $('dkHomeTGo').onclick = function () { dk_go('dkteam', 'home'); };
+    }
+  }
+}
+/* учебная химчистка: контент подгружается заранее, чтобы профиль и главная сразу знали про навыки */
+(function () { if (!dk_sv()) setTimeout(function () { if (DK_TYPES.indexOf(dk_type()) >= 0) dk_load().then(function () { dk_seed(); }); }, 0); })();
+
+/* ---------- стили: только переменные приложения и цвета состояний 92j ---------- */
+(function () {
+  var st = document.createElement('style'); st.id = 'dkCss'; st.textContent =
+    '.dk-wrap{display:flex;flex-direction:column;gap:12px}.dk-wrap>.card{margin:0}' +
+    '.dk-lv{gap:12px}.dk-lvh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}.dk-cap{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);font-weight:700}' +
+    '.dk-lvc{font-size:13px;color:#AEB7C0}.dk-lvc b{color:#fff;font-weight:700}' +
+    '.dk-lts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.dk-lt{border-radius:12px;background:rgba(255,255,255,.06);padding:10px 8px;display:flex;flex-direction:column;gap:2px;min-width:0;border:1.5px solid transparent}' +
+    '.dk-lt b{font-size:12px;color:#AEB7C0;font-weight:700;overflow-wrap:anywhere}.dk-lt small{font-size:11.5px;color:#8C949C}' +
+    '.dk-lt.done{background:var(--okbg)}.dk-lt.done b{color:var(--ok)}.dk-lt.now{background:rgba(210,174,102,.16);border-color:var(--gold)}.dk-lt.now b{color:var(--gold)}.dk-lt.now small{color:#F3EEE4}' +
+    '.dk-lvs{font-size:13px;color:#AEB7C0;line-height:1.4}.dk-lvs b{color:#fff}' +
+    '.dk-list{padding:4px 14px}.dk-row{display:flex;flex-direction:column;gap:6px;width:100%;background:none;border:0;border-top:1px solid var(--line2);padding:12px 0;text-align:left;color:inherit;font:inherit;cursor:pointer;min-height:48px}' +
+    '.dk-list .dk-row:first-child,.dk-home h2+.dk-row{border-top:0}.dk-r1{display:flex;align-items:center;gap:12px;min-width:0}.dk-tt{flex:1;min-width:0;font-size:15px;line-height:1.35}.dk-tt.mute{color:var(--muted)}.dk-row.hot .dk-tt{font-weight:700}' +
+    '.dk-r2{margin-left:22px;font-size:13px;color:var(--muted);line-height:1.4}.dk-chip{flex:none}.dk-lvl{flex:none;white-space:nowrap}' +
+    '.dk-dot{width:10px;height:10px;border-radius:50%;flex:none}.dk-a{background:var(--dj-fok,var(--ok))}.dk-p{background:var(--dj-fwarn,var(--warn))}.dk-l{background:var(--dj-finfo,var(--info))}.dk-n{background:var(--mute2,var(--line));box-shadow:inset 0 0 0 1px var(--line)}' +
+    '.dk-lock{display:flex;gap:10px;align-items:flex-start}.dk-lock svg{flex:none;color:var(--bad);margin-top:1px}' +
+    '.dk-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.dk-steps>div{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--muted);min-width:0}.dk-steps i{display:block;height:6px;border-radius:3px;background:var(--line)}' +
+    '.dk-steps .on i{background:var(--gold)}.dk-steps .on{color:var(--goldink,var(--gold));font-weight:700}.dk-steps .done i{background:var(--dj-fok,var(--ok))}' +
+    '.dk-sh{display:flex;flex-direction:column;gap:6px}.dk-h{margin:0;font-size:21px;line-height:1.2;font-weight:700}' +
+    '.dk-lesson{display:flex;flex-direction:column;gap:12px}.dk-ltx{font-size:15px;line-height:1.5;white-space:pre-line}' +
+    '.dk-do,.dk-dont{display:flex;gap:10px;align-items:flex-start;border-radius:12px;padding:10px 12px;font-size:14px;line-height:1.45}.dk-do svg,.dk-dont svg{flex:none;margin-top:1px}' +
+    '.dk-do{background:var(--okbg);color:var(--ink)}.dk-do svg{color:var(--ok)}.dk-dont{background:var(--badbg);color:var(--ink)}.dk-dont svg{color:var(--bad)}' +
+    '.dk-foot{display:flex;gap:10px;align-items:stretch}.dk-foot .btn{min-height:52px}.dk-grow{flex:1;min-width:0}' +
+    '.dk-qbar{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-weight:600;font-size:14px}.dk-prog{height:6px;border-radius:3px;background:var(--line);overflow:hidden}.dk-prog i{display:block;height:100%;background:var(--gold);transition:width .25s}' +
+    '.dk-q{display:flex;flex-direction:column;gap:10px}.dk-qt{font-size:17px;font-weight:700;line-height:1.4}' +
+    '.dk-opt{display:flex;gap:10px;align-items:flex-start;width:100%;min-height:52px;text-align:left;border:1.5px solid var(--line);background:var(--card);border-radius:12px;padding:12px;font:inherit;font-size:15px;line-height:1.4;color:var(--ink);cursor:pointer}' +
+    '.dk-opt.on{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}.dk-ol{flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--line2);color:var(--muted)}.dk-opt.on .dk-ol{background:var(--gold);color:#fff}' +
+    '.dk-res{display:flex;gap:14px;align-items:center}.dk-big{font-size:26px;white-space:nowrap}' +
+    '.dk-ri{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line2)}.dk-ri:first-of-type{border-top:0}.dk-ri>svg{flex:none;margin-top:2px}.dk-ri.ok>svg{color:var(--ok)}.dk-ri.bad>svg{color:var(--bad)}.dk-ri .grow{min-width:0;flex:1}' +
+    '.dk-qt2{font-weight:600;font-size:14px;line-height:1.4;margin-bottom:2px}.dk-ex{white-space:normal;margin-top:2px}.dk-ri .meta,.dk-pi .meta{white-space:normal}' +
+    '.dk-pend{display:flex;flex-direction:column;gap:0}.dk-pi{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--line2);padding:10px 0}.dk-pi:first-of-type{border-top:0;padding-top:0}' +
+    '.dk-acts{display:flex;gap:8px}.dk-acts .btn{flex:1;min-height:44px}.btn.dk-yes{background:var(--dj-fok,var(--ok));color:#fff;box-shadow:none}' +
+    '.dk-chips{display:flex;flex-wrap:wrap;gap:6px}.dk-chips .pick{min-height:40px}' +
+    '.dk-mx{--dk-nw:92px;--dk-cw:30px;padding:14px 12px}.dk-mx h2 small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.dk-sc{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px;padding:0 4px}' +
+    '.dk-g{display:flex;flex-direction:column;gap:6px}.dk-gr{display:grid;gap:5px;align-items:center}.dk-gh{align-items:end;font-size:10.5px;color:var(--muted);font-weight:600;line-height:1.15}' +
+    '.dk-gh span{writing-mode:vertical-rl;transform:rotate(180deg);justify-self:center;max-height:92px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;font-size:11px}' +
+    '.dk-nm{display:flex;flex-direction:column;min-width:0;font-size:13.5px;line-height:1.2}.dk-nm b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dk-nm small{font-size:11px;color:var(--muted)}' +
+    '.dk-new{font-style:normal;font-size:10.5px;color:var(--bad);font-weight:700}' +
+    '.dk-c{height:32px;min-width:0;border-radius:8px;border:0;padding:0;cursor:pointer}.dk-c.dk-n{background:var(--mute2,var(--line2));box-shadow:inset 0 0 0 1px var(--line)}' +
+    '.dk-leg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted)}.dk-leg>span{display:flex;align-items:center;gap:6px}.dk-leg i{width:12px;height:12px;border-radius:3px;display:inline-block}' +
+    '.dk-alert{display:flex;flex-direction:column;gap:4px}.dk-ah{font-size:13px}' +
+    '.dk-kv{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--line2)}.dk-kv:first-of-type{border-top:0}.dk-kv>span:last-child{text-align:right;min-width:0;overflow-wrap:anywhere}' +
+    '.dk-home h2 small{font-weight:500}.dk-home .dk-row{padding:10px 0}' +
+    '@media (max-width:360px){.dk-mx{--dk-nw:78px;--dk-cw:26px}.dk-h{font-size:19px}.dk-lt{padding:8px 6px}.dk-lt b{font-size:11.5px}.dk-big{font-size:22px}}';
+  document.head.appendChild(st);
+})();
+
+/* для автотестов */
+window.__dk = { save: function () { dk_save(); }, api: function (n, a) { return dk_api(n, a); }, rpc: function (n, a) { return sb.rpc(n, a); }, go: function (v) { go(v); }, open: function (c) { dk_open(c); }, DK: DK, demo: DK_DEMO, qz: DK_QZ, load: dk_load };
 
 
 /* ===== ВОЛНА 4 · 93-u45.js ===== */
