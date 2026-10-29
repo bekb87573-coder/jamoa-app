@@ -36530,6 +36530,24 @@ function sv_t(s) { try { return trUi(s); } catch (e) { return s; } }
   /* вход мог завершиться раньше, чем загрузился этот фрагмент: тогда заполняем сейчас и один раз перезагружаем экран */
   if (SV.ready) SV.seed().then(function (ok) { if (ok) location.reload(); }).catch(function (e) { try { console.warn('[sv] seed', e); } catch (x) {} });
 
+  /* ---------- 0б. заставка с движением при запуске (в серверном режиме загрузка идёт мимо S.loading — рисуем свой слой поверх) ---------- */
+  (function () {
+    try {
+      if (window.__svSplash) return; window.__svSplash = 1;
+      var motion = true; try { motion = matchMedia('(prefers-reduced-motion: no-preference)').matches; } catch (e) {}
+      var ov = document.createElement('div');
+      ov.id = 'svSplash'; ov.className = 'splash';
+      ov.style.cssText = 'position:fixed;inset:0;z-index:2147483600;display:flex;align-items:center;justify-content:center;background:var(--bg);transition:opacity .35s ease';
+      var tag = ''; try { tag = splashTag(); } catch (e) {}
+      try { ov.innerHTML = sxLockup(tag, motion, true); } catch (e) { ov.innerHTML = ''; }
+      if (!ov.innerHTML) return;
+      var put = function () { if (document.body && !document.getElementById('svSplash')) document.body.appendChild(ov); };
+      if (document.body) put(); else document.addEventListener('DOMContentLoaded', put);
+      var gone = false, hide = function () { if (gone) return; gone = true; ov.style.opacity = '0'; setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 380); };
+      setTimeout(hide, motion ? 2400 : 500); ov.addEventListener('click', hide);
+    } catch (e) {}
+  })();
+
   /* ---------- 1. вход ---------- */
   var rl0 = renderLogin;
   renderLogin = function () {
