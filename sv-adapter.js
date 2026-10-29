@@ -1747,3 +1747,25 @@
   }
 })(typeof window !== 'undefined' ? window : globalThis);
 /* === end 92z === */
+/* === 92zt tg === */
+/* Часть dzt (92zt-tg, 0030_support_tg.sql): контакт поддержки Jamoa — ник Telegram (только ссылка https://t.me/<ник>, без бота) и телефон.
+   Блок не трогает код выше: как 92z — оборачивает SVAdapter.make / supabase.createClient и дополняет SV.rpcMap.
+   support_contact_get — все (вошедшие и anon); support_contact_set — только основатель (кабинет 92p вызывает его через SV.real). */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dzt) return; A.__dzt = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dzt) return cl; SV.__dzt = true;
+    var real = SV.real, R = SV.rpcMap; if (!R) return cl;
+    R.support_contact_get = async function () { return real.rpc('support_contact_get', {}); };
+    R.support_contact_set = async function (a) { a = a || {}; return real.rpc('support_contact_set', { p_tg: a.p_tg == null ? null : a.p_tg, p_phone: a.p_phone == null ? null : a.p_phone }); };
+    return cl;
+  }
+  A.dztExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92zt === */

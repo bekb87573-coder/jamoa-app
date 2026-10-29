@@ -77,6 +77,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-skills.js"></script>
 <script src="uz-w4-support.js"></script>
 <script src="uz-w4-tasks2.js"></script>
+<script src="uz-w4-tg.js"></script>
 <script src="uz-w4-types.js"></script>
 <script src="uz-w4-u0.js"></script>
 <script src="uz-w4-u45.js"></script>
@@ -49958,6 +49959,134 @@ async function dz_fOvFill() {
     '.dz-phv{display:flex;align-items:center;gap:10px;margin-top:8px}.dz-phv img{width:72px;height:72px;object-fit:cover;border-radius:10px}' +
     '.dz-ck{display:flex;gap:10px;align-items:flex-start;margin-top:10px;font-size:14px;line-height:1.4;cursor:pointer}.dz-ck input{width:20px;height:20px;flex:none;margin-top:1px;accent-color:var(--gold)}';
   document.head.appendChild(st);
+})();
+
+
+/* ===== ВОЛНА 4 · 92zt-tg.js ===== */
+/* ===== 92zt — контакт поддержки Jamoa: Telegram (только ссылка) и телефон (префикс dzt_). Журнал w4/log/dzt.md =====
+   Решение владельца 29.10: связь с поддержкой через Telegram — пока только ССЫЛКА https://t.me/<ник>. Без бота, без токенов,
+   сервер ничего не отправляет. Ник и телефон задаёт основатель в кабинете → «Обращения» → «Настройки поддержки».
+   Сервер: 0030_support_tg.sql (support_contact_get — все, support_contact_set — только основатель); переходник — блок «92zt tg».
+   Демо: учебное хранилище этого браузера (localStorage jamoa-dzt-contact-v1), по умолчанию пусто; задать можно в демо-кабинете основателя.
+   1. «Помощь и предложения» (92z) — под тремя видами обращений: «Написать в Telegram» / «Позвонить», если заданы.
+   2. «Справка» — под «Не нашли ответ? Написать команде Jamoa» те же кнопки.
+   3. Ничего не задано — кнопок нет. */
+var DZT = { c: null, at: 0 };
+var DZT_K = 'jamoa-dzt-contact-v1';
+
+function dzt_t(s, o) {
+  var X = window.DZT_UZ || {}, r;
+  try { r = (dz_uz() && X[s] != null) ? X[s] : dz_t(s); } catch (e) { r = s; }
+  if (o) Object.keys(o).forEach(function (k) { r = String(r).split('{' + k + '}').join(o[k]); });
+  return r;
+}
+function dzt_e(s, o) { return h(dzt_t(s, o)); }
+
+/* ---------- нормализация (как на сервере, 0030) ---------- */
+function dzt_nTg(s) {
+  s = String(s == null ? '' : s).trim().replace(/^(https?:\/\/)?(www\.)?(t\.me|telegram\.me|telegram\.dog)\//i, '').replace(/^@/, '').replace(/[/?#].*$/, '');
+  if (!s) return { v: '' };
+  if (!/^[A-Za-z0-9_]{5,32}$/.test(s)) return { err: 'Ник Telegram: 5–32 знака — латинские буквы, цифры и «_». Например: @jamoa_support' };
+  return { v: s };
+}
+function dzt_nPh(s) {
+  s = String(s == null ? '' : s).trim().replace(/[\s().-]/g, '');
+  if (!s) return { v: '' };
+  if (/^\d{9}$/.test(s)) s = '+998' + s; else if (/^998\d{9}$/.test(s)) s = '+' + s; else if (/^8\d{9}$/.test(s)) s = '+998' + s.slice(1);
+  if (!/^\+998\d{9}$/.test(s)) return { err: 'Телефон поддержки — в виде +998XXXXXXXXX (например, +998901234567)' };
+  return { v: s };
+}
+function dzt_out(o) { o = o || {}; var tg = o.telegram || '', ph = o.phone || ''; return { telegram: tg, telegram_url: tg ? 'https://t.me/' + tg : '', phone: ph }; }
+function dzt_fmtPh(p) { var m = /^\+998(\d{2})(\d{3})(\d{2})(\d{2})$/.exec(p || ''); return m ? '+998 ' + m[1] + ' ' + m[2] + ' ' + m[3] + ' ' + m[4] : (p || ''); }
+
+/* ---------- демо: учебное хранилище (общее для учебных входов и демо-кабинета основателя) ---------- */
+function dzt_ld() { try { var o = JSON.parse(localStorage.getItem(DZT_K) || 'null'); if (o && typeof o === 'object') return o; } catch (e) {} return {}; }
+var DZT_DEMO = {
+  support_contact_get: async function () { return { data: dzt_out(dzt_ld()), error: null }; },
+  support_contact_set: async function (a) {
+    if (!dz_fd()) return { data: null, error: { message: dzt_t('Только для основателя Jamoa'), details: 'no_rights', code: 'no_rights' } };
+    var t = dzt_nTg(a.p_tg), p = dzt_nPh(a.p_phone), e = t.err || p.err;
+    if (e) return { data: null, error: { message: dzt_t(e), details: 'bad_input', code: 'bad_input' } };
+    try { localStorage.setItem(DZT_K, JSON.stringify({ telegram: t.v, phone: p.v, updated_at: new Date().toISOString() })); }
+    catch (x) { return { data: null, error: { message: dzt_t('Не удалось сохранить в этом браузере'), details: 'server', code: 'server' } }; }
+    return { data: dzt_out({ telegram: t.v, phone: p.v }), error: null };
+  }
+};
+async function dzt_rpc(n, a) {
+  try {
+    if (dz_srvF()) { var SVx = dz_SV(); return await SVx.real.rpc(n, a || {}); }
+    if (dz_sv()) { var r = await sb.rpc(n, a || {}); return r || { data: null, error: { message: 'Нет ответа', details: 'server' } }; }
+    return await DZT_DEMO[n](a || {});
+  } catch (e) { return { data: null, error: e }; }
+}
+/* контакт: кэш на минуту (на экранах пользователя), ошибка → «не задано» (кнопок нет) */
+async function dzt_get(force) {
+  if (!force && DZT.c && Date.now() - DZT.at < 60e3) return DZT.c;
+  var r = await dzt_rpc('support_contact_get');
+  DZT.c = r && !r.error && r.data ? dzt_out(r.data) : (DZT.c || dzt_out({})); DZT.at = Date.now();
+  return DZT.c;
+}
+
+/* ---------- кнопки для пользователей ---------- */
+function dzt_btns(c) {
+  if (!c || (!c.telegram && !c.phone)) return '';
+  var st = 'min-height:44px;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px;text-decoration:none';
+  return '<div class="meta" style="white-space:normal;margin-top:8px">' + dzt_e('Или свяжитесь с поддержкой Jamoa напрямую') + '</div>' +
+    (c.telegram ? '<a class="btn ghost full" data-dzt="tg" href="' + h('https://t.me/' + c.telegram) + '" target="_blank" rel="noopener" style="' + st + '">' + icon('send', 18) + '<span>' + dzt_e('Написать в Telegram') + '</span></a>' : '') +
+    (c.phone ? '<a class="btn ghost full" data-dzt="ph" href="' + h('tel:' + c.phone) + '" style="' + st + '">' + icon('phone', 18) + '<span>' + dzt_e('Позвонить') + ' · <span style="white-space:nowrap">' + h(dzt_fmtPh(c.phone)) + '</span></span></a>' : '');
+}
+/* «Помощь и предложения»: в карточке «Написать команде Jamoa» */
+async function dzt_user() {
+  var m = $('main'); if (!m || S.view !== 'dzsup') return;
+  var card = m.querySelector('.card.ob-pc'); if (!card) return;
+  var box = $('dztU'); if (!box) { card.insertAdjacentHTML('beforeend', '<div id="dztU"></div>'); box = $('dztU'); }
+  var c = await dzt_get(); box = $('dztU'); if (!box) return;
+  box.innerHTML = dzt_btns(c);
+}
+/* «Справка»: под «Не нашли ответ?» */
+async function dzt_help() {
+  var L = $('layer'); if (!L) return;
+  var a = $('dzHelp') || $('obHelpTour'); if (!a || $('dztH')) return;
+  a.insertAdjacentHTML($('dzHelp') ? 'afterend' : 'beforebegin', '<div id="dztH" style="margin-bottom:8px"></div>');
+  var c = await dzt_get(); var box = $('dztH'); if (!box) return;
+  box.innerHTML = dzt_btns(c);
+}
+(function () {
+  try { if (typeof vDzSup === 'function') { var v0 = vDzSup; vDzSup = async function () { var r = await v0.apply(this, arguments); await dzt_user(); return r; }; } } catch (e) {}
+  try { if (typeof obHelp === 'function') { var o0 = obHelp; obHelp = function () { var r = o0.apply(this, arguments); if (S.me) dzt_help(); return r; }; } } catch (e) {}
+  if (/[?&]w4dbg/.test(location.search)) window.__dzt = { get: dzt_get, rpc: dzt_rpc, K: DZT_K, nTg: dzt_nTg, nPh: dzt_nPh, reset: function () { DZT.c = null; DZT.at = 0; } };
+})();
+
+/* =====================================================================================
+   Кабинет основателя → «Обращения»: «Настройки поддержки» (сервер 92p и демо 98 — оба рисуют dz_fBox)
+   ===================================================================================== */
+async function dzt_fFill() {
+  var box = $('dztF'); if (!box) return;
+  var r = await dzt_rpc('support_contact_get'); box = $('dztF'); if (!box) return;
+  if (r.error) { box.innerHTML = '<div class="card"><h2>' + dzt_e('Настройки поддержки') + '</h2><div class="meta">' + h(dz_err(r.error)) + '</div></div>'; return; }
+  var c = dzt_out(r.data || {}); DZT.c = c; DZT.at = Date.now();
+  var empty = !c.telegram && !c.phone;
+  box.innerHTML = '<div class="card"><h2>' + dzt_e('Настройки поддержки') + '</h2>' +
+    '<div class="meta" style="white-space:normal;margin:-4px 0 6px">' + dzt_e('Кнопки «Написать в Telegram» и «Позвонить» появятся у всех пользователей в «Помощь и предложения» и в «Справке». Это только ссылка: Jamoa ничего не отправляет в Telegram.') + '</div>' +
+    '<label class="f">' + dzt_e('Telegram поддержки') + '<input class="in" id="dztTg" maxlength="80" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@jamoa_support" value="' + h(c.telegram ? '@' + c.telegram : '') + '"></label>' +
+    '<div class="meta" style="white-space:normal;margin-top:-4px">' + dzt_e('Ник без пробелов: латинские буквы, цифры и «_», 5–32 знака. Можно вставить ссылку t.me/…') + '</div>' +
+    '<label class="f" style="margin-top:8px">' + dzt_e('Телефон поддержки') + '<input class="in" id="dztPh" type="tel" inputmode="tel" maxlength="24" autocomplete="off" placeholder="+998901234567" value="' + h(c.phone || '') + '"></label>' +
+    '<div class="note" id="dztSt" style="margin-top:8px;white-space:normal">' + (empty ? dzt_e('Пока пусто — кнопки у пользователей не показываются') :
+      dzt_e('Сейчас у пользователей:') + ' ' + (c.telegram ? '<a href="' + h(c.telegram_url) + '" target="_blank" rel="noopener">t.me/' + h(c.telegram) + '</a>' : '') + (c.telegram && c.phone ? ' · ' : '') + (c.phone ? h(dzt_fmtPh(c.phone)) : '')) + '</div>' +
+    '<button type="button" class="btn gold full" id="dztSave" style="margin-top:10px;min-height:44px">' + icon('tick', 18) + '<span>' + dzt_e('Сохранить') + '</span></button></div>';
+  $('dztSave').onclick = async function () {
+    var t = dzt_nTg($('dztTg').value), p = dzt_nPh($('dztPh').value), e = t.err || p.err;
+    if (e) return toast(dzt_t(e), 4000);
+    var b = this; b.disabled = true;
+    var rr = await dzt_rpc('support_contact_set', { p_tg: t.v || null, p_phone: p.v || null });
+    b.disabled = false;
+    if (rr.error) return toast(dz_err(rr.error), 4000);
+    toast(dzt_t(!t.v && !p.v ? 'Сохранено. Кнопки у пользователей скрыты' : 'Сохранено. Пользователи увидят кнопки связи'), 3000);
+    dzt_fFill();
+  };
+}
+(function () {
+  try { if (typeof dz_fBox === 'function') { var b0 = dz_fBox; dz_fBox = function () { setTimeout(dzt_fFill, 0); return b0.apply(this, arguments) + '<div id="dztF"></div>'; }; } } catch (e) {}
 })();
 
 
