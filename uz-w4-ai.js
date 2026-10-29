@@ -44,6 +44,19 @@
     'Как поменяться сменой с коллегой?': 'Hamkasb bilan smenani qanday almashaman?',
     'Не получается отметиться': 'Belgilana olmayapman',
     'Где мой расчётный лист?': 'Hisob varaqam qayerda?',
+    /* v28 — экран-чат, значок в шапке, строка на главной */
+    'Ответит за пару секунд': 'Bir-ikki soniyada javob beradi',
+    'Чем помочь, {n}?': '{n}, nimada yordam beray?',
+    'Чем помочь?': 'Nimada yordam beray?',
+    'Спросите, как что-то сделать в Jamoa: где кнопка, почему не получается. Отвечу коротко и по шагам.': 'Jamoa’da biror narsani qanday qilishni soʻrang: tugma qayerda, nega chiqmayapti. Qisqa va bosqichma-bosqich javob beraman.',
+    'Спросите о Jamoa…': 'Jamoa haqida soʻrang…',
+    'Отправить': 'Yuborish',
+    'ИИ-помощник Jamoa может ошибаться': 'Jamoa SI-yordamchisi xato qilishi mumkin',
+    'Ещё действия': 'Boshqa amallar',
+    'Помощник печатает': 'Yordamchi yozmoqda',
+    'Как опубликовать график?': 'Jadvalni qanday eʼlon qilaman?',
+    'Почему не получается отметиться?': 'Nega belgilana olmayapman?',
+    'Как передать смену?': 'Smenani qanday topshiraman?',
     /* кабинет основателя */
     'ИИ-помощник': 'SI-yordamchi',
     'Вопросы пользователей помощнику в «Помощь и предложения». Модель {m}; лимиты: {h} в час и {d} в день на человека, {a} в день на всех.': 'Foydalanuvchilarning «Yordam va takliflar»dagi yordamchiga savollari. Model {m}; cheklovlar: bir kishiga soatiga {h} va kuniga {d}, hammaga kuniga {a}.',
@@ -87,6 +100,11 @@
     'Спросить помощника': D['Спросить помощника'],
     'Передано команде': D['Передано команде'],
     'Предложил передать': 'Topshirishni taklif qildi',
+    'Новый диалог': D['Новый диалог'],
+    'Ещё действия': D['Ещё действия'],
+    'Отправить': D['Отправить'],
+    'Ваш вопрос': D['Ваш вопрос'],
+    'Ответит за пару секунд': D['Ответит за пару секунд'],
     'Не ответил': 'Javob bermadi'
   });
 })();
