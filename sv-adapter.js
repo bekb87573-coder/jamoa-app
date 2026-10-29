@@ -1132,3 +1132,422 @@
   }
 })(typeof window !== 'undefined' ? window : globalThis);
 /* === end 92o === */
+
+/* === 92q shift === */
+/* Часть dq (92q-shift2, 0021_shift.sql): фото открытия и закрытия смены, «Опаздываю», подтверждение смены, передача смены.
+   Блок не трогает код выше: как 92o — оборачивает SVAdapter.make и supabase.createClient и дополняет объект SV:
+   exec (свои таблицы раньше общего кода: shift_photos, late_warns, dq_handovers, schedule.confirmed, уведомления latewarn/handover)
+   и rpcMap (rpc 0021 напрямую). Ошибки сервера отдаются экрану как { error } — не «молча». */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dq) return; A.__dq = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dq) return cl; SV.__dq = true;
+    var real = SV.real, C = { ph: {}, sig: {} };
+    function V() { return SV.venueId; }
+    function E(m, c) { return { message: m, details: c || 'sv', code: c || 'sv' }; }
+    function ok(d) { return { data: d === undefined ? null : d, error: null }; }
+    function dl(id) { return id == null ? null : SV.dep.toLoc[id] || ('d' + id); }
+    function tday() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tashkent' }).format(new Date()); }
+    function addDays(d, n) { var x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }
+    async function rpc(n, a) { return real.rpc(n, a || {}); }
+    function fpath(bucket, p) { if (!p) return null; return SV.pmap[bucket + '|' + p] || SV.spath(bucket, p); }
+    function noWrite(t) { return { data: null, error: E('Запись «' + t + '» идёт через сервер', 'bad_input') }; }
+    function out(qq, rows) { return { data: qq.one ? rows[0] || null : rows, error: null }; }
+    /* подписанные ссылки на миниатюры (кэш 50 мин) */
+    async function signAll(paths) {
+      var need = paths.filter(function (p) { return p && !(C.sig[p] && C.sig[p].t > Date.now()); });
+      if (need.length) {
+        try {
+          var B = real.storage.from(SV.bucket), r = B.createSignedUrls ? await B.createSignedUrls(need, 3600) : { data: [] };
+          (r.data || []).forEach(function (x, i) { if (x && x.signedUrl) C.sig[need[i]] = { u: x.signedUrl, t: Date.now() + 3e6 }; });
+        } catch (e) {}
+      }
+      var o = {}; paths.forEach(function (p) { if (C.sig[p]) o[p] = C.sig[p].u; }); return o;
+    }
+
+    /* ----- фото смены: таблица сервера shift_photos (RLS: я, моя команда, владелец) ----- */
+    function phRow(x, th) { return { id: x.id, employee_id: x.member_id, day: x.day, kind: x.kind, point: x.point, path: x.path, at: x.taken_at, thumb: th || null }; }
+    async function phSelect(qq) {
+      if (!V()) return qq.pick([]);
+      var b = real.from('shift_photos').select('*').eq('venue_id', V()), d = qq.val('day'), m = qq.val('employee_id'), k = qq.val('kind');
+      b = d !== undefined ? b.eq('day', d) : b.gte('day', addDays(tday(), -40));
+      if (m !== undefined) b = b.eq('member_id', m); if (k !== undefined) b = b.eq('kind', k);
+      var r = await b.order('taken_at').limit(1000); if (r.error) throw r.error;
+      var L = r.data || [], sg = await signAll(L.map(function (x) { return x.path; }));
+      return qq.pick(L.map(function (x) { return phRow(x, sg[x.path]); }));
+    }
+    /* ----- «Опаздываю»: late_warns ----- */
+    function lwRow(x) { return { id: x.id, employee_id: x.member_id, day: x.day, minutes: x.minutes, reason: x.reason, shift_start: x.shift_start ? String(x.shift_start).slice(0, 5) : null, at: x.created_at }; }
+    /* ----- передача смены: rpc handovers / handover_create / handover_ack ----- */
+    function hoRow(x) {
+      return { id: x.id, from_id: x.from_member, to_id: x.to_member, dept_id: dl(x.dept_id), day: x.day, cash: x.cash == null ? null : +x.cash, cash_note: x.cash_note,
+        open_items: x.open_items, notes: x.notes, tasks: x.tasks || [], photos: x.photos || [], created_at: x.created_at, acked_by: x.acked_by, acked_at: x.acked_at,
+        ack_note: x.ack_note, esc_at: x.esc_at, mine: !!x.mine, for_me: !!x.for_me };
+    }
+    var TBL = {
+      shift_photos: async function (qq) {
+        if (qq.op === 'select') return phSelect(qq);
+        if (qq.op === 'insert' || qq.op === 'upsert') {
+          var rows = [];
+          for (var i = 0; i < qq.payload.length; i++) {
+            var p = qq.payload[i];
+            if (SV.me && p.employee_id && p.employee_id !== SV.me.id) return { data: null, error: E('Фото смены сдаёт сам сотрудник', 'no_rights') };
+            var r = await rpc('shift_photo_add', { p_kind: p.kind, p_point: p.point, p_path: fpath('task-photos', p.path), p_day: p.day || null });
+            if (r.error) return { data: null, error: r.error };
+            rows.push(phRow({ id: r.data.id, member_id: r.data.member_id, day: r.data.day, kind: r.data.kind, point: r.data.point, path: r.data.path, taken_at: r.data.taken_at }, p.thumb));
+          }
+          return out(qq, rows);
+        }
+        if (qq.op === 'delete') {
+          var id = qq.val('id'); if (id === undefined) return noWrite('shift_photos');
+          var x = await rpc('shift_photo_remove', { p_id: +id }); if (x.error) return { data: null, error: x.error };
+          return ok(null);
+        }
+        return noWrite('shift_photos');
+      },
+      late_warns: async function (qq) {
+        if (qq.op === 'select') {
+          if (!V()) return qq.pick([]);
+          var d = qq.val('day'), b = real.from('late_warns').select('*').eq('venue_id', V());
+          b = d !== undefined ? b.eq('day', d) : b.gte('day', addDays(tday(), -62));
+          var m = qq.val('employee_id'); if (m !== undefined) b = b.eq('member_id', m);
+          var r = await b.order('day', { ascending: false }).limit(2000); if (r.error) throw r.error;
+          return qq.pick((r.data || []).map(lwRow));
+        }
+        if (qq.op === 'insert' || qq.op === 'upsert') {
+          var rows = [];
+          for (var i = 0; i < qq.payload.length; i++) {
+            var p = qq.payload[i];
+            var x = await rpc('late_warn', { p_minutes: +p.minutes, p_reason: p.reason || null, p_shift_start: p.shift_start ? String(p.shift_start).slice(0, 5) : null, p_day: p.day || null });
+            if (x.error) return { data: null, error: x.error };
+            rows.push(Object.assign({}, p, lwRow({ id: x.data.id, member_id: x.data.member_id, day: x.data.day, minutes: x.data.minutes, reason: x.data.reason, shift_start: x.data.shift_start, created_at: x.data.at })));
+          }
+          SV.stale('notif'); return out(qq, rows);
+        }
+        return noWrite('late_warns');
+      },
+      dq_handovers: async function (qq) {
+        if (qq.op === 'select') {
+          if (!V()) return qq.pick([]);
+          var r = await rpc('handovers', { p_days: 31 }); if (r.error) throw r.error;
+          return qq.pick((r.data || []).map(hoRow));
+        }
+        if (qq.op === 'insert') {
+          var rows = [];
+          for (var i = 0; i < qq.payload.length; i++) {
+            var p = qq.payload[i];
+            var x = await rpc('handover_create', { p_to: p.to_id || null, p_cash: p.cash == null || p.cash === '' ? null : +p.cash, p_cash_note: p.cash_note || null,
+              p_open_items: p.open_items || null, p_notes: p.notes || null, p_photos: (p.photos || []).map(function (f) { return fpath('task-photos', f); }),
+              p_tasks: (p.tasks || []).filter(function (t) { return /^\d+$/.test(String(t.id)); }).map(function (t) { return { id: +t.id, act: t.act }; }) });
+            if (x.error) return { data: null, error: x.error };
+            rows.push(Object.assign({}, p, { id: x.data.id, notified: x.data.notified, created_at: new Date().toISOString(), mine: true }));
+          }
+          SV.stale('notif'); return out(qq, rows);
+        }
+        if (qq.op === 'update' && qq.payload && qq.payload.acked_at !== undefined) {
+          var id = qq.val('id'); if (id === undefined) return noWrite('dq_handovers');
+          var y = await rpc('handover_ack', { p_id: +id, p_note: qq.payload.ack_note || null }); if (y.error) return { data: null, error: y.error };
+          SV.stale('notif', 'tasks');
+          return out(qq, [Object.assign({ id: +id, acked_by: SV.me && SV.me.id, acked_at: new Date().toISOString() }, { already: !!(y.data && y.data.already), passed: y.data && y.data.passed })]);
+        }
+        return noWrite('dq_handovers');
+      },
+      /* подтверждение смены: schedule.update({ confirmed }) у своей смены → schedule_confirm; остальное — общим кодом */
+      schedule: async function (qq, ex0) {
+        var p = qq.payload;
+        if (qq.op !== 'update' || !p || p.confirmed === undefined || !Object.keys(p).every(function (k) { return k === 'confirmed' || k === 'confirmed_at'; })) return ex0(qq);
+        var m = qq.val('employee_id'), d = qq.val('day');
+        if (d === undefined && qq.val('id') !== undefined) { await SV.load('sched'); var s = (SV.T.schedule || []).filter(function (x) { return String(x.id) === String(qq.val('id')); })[0]; if (s) { m = s.employee_id; d = s.day; } }
+        if (!d || (m !== undefined && SV.me && m !== SV.me.id)) return { data: null, error: E('Подтвердить смену может только сам сотрудник', 'no_rights') };
+        var r = await rpc('schedule_confirm', { p_day: d, p_answer: p.confirmed === 'yes' || p.confirmed === 'late' ? p.confirmed : 'no' });
+        if (r.error) return { data: null, error: r.error };
+        await SV.load('sched', true);
+        return out(qq, (SV.T.schedule || []).filter(function (x) { return x.employee_id === (SV.me && SV.me.id) && x.day === d; }));
+      },
+      /* уведомления «Опоздает» и «Передача смены» сервер шлёт сам (late_warn, handover_*) — копия с телефона не нужна */
+      notifications: async function (qq, ex0) {
+        if (qq.op === 'insert' && qq.payload.length && qq.payload.every(function (n) { return n && (n.ref_type === 'latewarn' || n.ref_type === 'handover'); })) {
+          return out(qq, qq.payload.map(function (n, i) { return Object.assign({ id: -(Date.now() + i), sv_skip: true }, n); }));
+        }
+        return ex0(qq);
+      }
+    };
+    SV.dqTables = TBL;
+    var ex0 = SV.exec;
+    SV.exec = async function (qq) {
+      var h = TBL[qq.t]; if (!h) return ex0.call(SV, qq);
+      try { return await h(qq, function (q) { return ex0.call(SV, q); }); } catch (e) { return { data: null, error: e && e.message ? e : E(String(e)) }; }
+    };
+    /* ----- rpc 0021 напрямую ----- */
+    var R = SV.rpcMap;
+    function pass(n, st) { return async function (a) { var r = await rpc(n, a); if (!r.error && st) SV.stale.apply(null, st); return r; }; }
+    R.shift_photo_add = pass('shift_photo_add'); R.shift_photo_remove = pass('shift_photo_remove');
+    R.late_warn = pass('late_warn', ['notif']); R.schedule_confirm = pass('schedule_confirm', ['sched']);
+    R.handover_create = pass('handover_create', ['notif']); R.handover_ack = pass('handover_ack', ['notif', 'tasks']);
+    R.handovers = async function (a) { var r = await rpc('handovers', { p_days: (a && a.p_days) || 31 }); if (r.error) return r; return ok((r.data || []).map(hoRow)); };
+    return cl;
+  }
+  A.dqExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92q === */
+/* === 92r requests === */
+/* Часть dr (92r-requests, 0022_requests.sql): заявки на ремонт, бюро находок, заявки на закупку, список оборудования.
+   Блок не трогает код выше: как 92o/92q — оборачивает SVAdapter.make и supabase.createClient и дополняет SV.rpcMap.
+   Приложение зовёт те же имена, что и сервер (repair_* / equip_* / found_* / buy_* / requests_home); здесь — только пути фото
+   (путь демо «<я>/dr-…» → настоящий <заведение>/<я>/task-photos-dr-…), службы сервера → коды приложения и «колокольчик» после действия.
+   Ошибки сервера отдаются экрану как { error }. */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dr) return; A.__dr = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dr) return cl; SV.__dr = true;
+    var real = SV.real;
+    function V() { return SV.venueId; }
+    function dl(id) { return id == null ? null : SV.dep.toLoc[id] || ('d' + id); }
+    function fpath(p) { if (!p) return null; p = String(p); if (V() && p.indexOf(V() + '/') === 0) return p; return SV.pmap['task-photos|' + p] || SV.spath('task-photos', p); }
+    function rows(r) { if (r.error || !Array.isArray(r.data)) return r; return { data: r.data.map(function (x) { return x && x.dept_id != null ? Object.assign({}, x, { dept_id: dl(x.dept_id) }) : x; }), error: null }; }
+    function call(n, photo) {
+      return async function (a) {
+        a = Object.assign({}, a || {});
+        if (photo && a[photo]) a[photo] = fpath(a[photo]);
+        var r = await real.rpc(n, a);
+        if (!r.error && !/_list$|^requests_home$/.test(n)) SV.stale('notif');
+        return /_list$/.test(n) && n !== 'equip_list' ? rows(r) : r;
+      };
+    }
+    var R = SV.rpcMap;
+    ['repair_list', 'repair_assign', 'repair_take', 'repair_cancel', 'equip_list', 'equip_save', 'found_list', 'found_give',
+     'buy_list', 'buy_create', 'buy_decide', 'buy_received', 'buy_cancel', 'requests_home'].forEach(function (n) { R[n] = call(n); });
+    R.repair_create = call('repair_create', 'p_photo_path');
+    R.repair_done = call('repair_done', 'p_photo_path');
+    R.found_create = call('found_create', 'p_photo_path');
+    R.buy_bought = call('buy_bought', 'p_receipt_path');
+    return cl;
+  }
+  A.drExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92r === */
+/* === 92s misc === */
+/* Часть ds (92s-misc, 0023_misc.sql): мелочи «демо → сервер». Блок не трогает код выше: как 92o/92q — оборачивает SVAdapter.make
+   и supabase.createClient и дополняет SV: exec (свои таблицы раньше общего кода), rpcMap, functions.invoke (проба «я на месте»).
+   Таблицы демо: template_skips («Не ставить»), allowed_networks (Wi-Fi), clock_attempts (неудачные попытки), audit_log («История изменений»),
+   task_grades (оценки), messages scope=mgr (чат руководителей), hotel_settings (логотип из бакета → подписанная ссылка).
+   rpc: task_item_add, wifi_*, task_grade, task_status 'back' («Переделать»), set_auto_clock / my_auto_clock, payslip_save / payslip_import,
+   prefs_save (логотип-картинка → файл <заведение>/brand/…, в настройках только путь). Ошибки сервера отдаются экрану как { error }. */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__ds) return; A.__ds = true;
+  var GR = { 5: 'good', 4: 'better', 3: 'better', 2: 'redo', 1: 'redo' };
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__ds) return cl; SV.__ds = true;
+    var real = SV.real, C = { redo: {}, sig: {}, titles: {} };
+    function V() { return SV.venueId; }
+    function E(m, c) { return { message: m, details: c || 'sv', code: c || 'sv' }; }
+    function ok(d) { return { data: d === undefined ? null : d, error: null }; }
+    function tday() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tashkent' }).format(new Date()); }
+    function addDays(d, n) { var x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); }
+    async function rpc(n, a) { return real.rpc(n, a || {}); }
+    function fpath(bucket, p) { if (!p) return null; return SV.pmap[bucket + '|' + p] || SV.spath(bucket, p); }
+    function out(qq, rows) { return { data: qq.one ? rows[0] || null : rows, error: null }; }
+    function noWrite(t) { return { data: null, error: E('Запись «' + t + '» идёт через сервер', 'bad_input') }; }
+    async function sign(path, sec) {
+      var c = C.sig[path]; if (c && c.t > Date.now()) return c.u;
+      try { var r = await real.storage.from(SV.bucket).createSignedUrl(path, sec || 604800); if (r && r.data && r.data.signedUrl) { C.sig[path] = { u: r.data.signedUrl, t: Date.now() + (sec || 604800) * 900 }; return r.data.signedUrl; } } catch (e) {}
+      return null;
+    }
+
+    /* ----- задачи: заголовки для оценок ----- */
+    async function titles(ids) {
+      var need = ids.filter(function (id) { return C.titles[id] === undefined; });
+      (SV.T.tasks || []).forEach(function (t) { C.titles[t.id] = t.title; });
+      need = need.filter(function (id) { return C.titles[id] === undefined; });
+      if (need.length) { var r = await real.from('tasks').select('id,title,day').in('id', need); (r.data || []).forEach(function (t) { C.titles[t.id] = t.title; }); }
+    }
+    function grRow(g) { return { id: g.id, task_id: g.task_id, employee_id: g.member_id, grade: GR[g.grade] || 'good', score: g.grade, reason: g.reason, by: g.graded_by, at: g.at, day: String(g.at || '').slice(0, 10), title: C.titles[g.task_id] || '' }; }
+
+    var TBL = {
+      /* «Каждый день» → «Не ставить»: пропуск ежедневной задачи одному человеку (0023 template_skip) */
+      template_skips: async function (qq) {
+        if (qq.op === 'select') {
+          if (!V()) return qq.pick([]);
+          var b = real.from('template_skips').select('*').eq('venue_id', V()), m = qq.val('employee_id'); if (m !== undefined) b = b.eq('member_id', m);
+          var r = await b.limit(2000); if (r.error) throw r.error;
+          return qq.pick((r.data || []).map(function (x) { return { id: x.id, employee_id: x.member_id, template_id: x.template_id, by: x.created_by, created_at: x.created_at }; }));
+        }
+        var L = qq.op === 'delete' ? [{ employee_id: qq.val('employee_id'), template_id: qq.val('template_id'), off: true }] : (qq.payload || []);
+        for (var i = 0; i < L.length; i++) {
+          var x = L[i]; if (x.employee_id == null || x.template_id == null) return { data: null, error: E('Нужны сотрудник и задача', 'bad_input') };
+          var w = await rpc('template_skip', { p_template: +x.template_id, p_member: x.employee_id, p_on: !x.off }); if (w.error) return { data: null, error: w.error };
+        }
+        SV.stale('tasks');
+        return out(qq, L.map(function (x) { return { employee_id: x.employee_id, template_id: +x.template_id }; }));
+      },
+      /* «Настройки отметки»: сети Wi-Fi заведения (rpc wifi_list — с адресом этого телефона) */
+      allowed_networks: async function (qq) {
+        if (qq.op !== 'select') return noWrite('allowed_networks');
+        if (!V() || !SV.me || (SV.me.role !== 'owner' && SV.me.role !== 'manager')) return qq.pick([]);
+        var r = await rpc('wifi_list'); if (r.error) throw r.error; SV.dsWifi = r.data || null;
+        return qq.pick(((r.data && r.data.nets) || []).map(function (n) { return { id: n.id, label: n.label, ssid: n.label, net: n.net, ip: String(n.net || '').replace(/\/(32|128)$/, ''), created_at: n.created_at }; }));
+      },
+      /* неудачные (и удачные) попытки отметки: RLS people — владелец всех, руководитель команду */
+      clock_attempts: async function (qq) {
+        if (qq.op !== 'select') return noWrite('clock_attempts');
+        if (!V()) return qq.pick([]);
+        var b = real.from('clock_attempts').select('*').eq('venue_id', V()).gte('at', new Date(Date.now() - 40 * 864e5).toISOString()), o = qq.val('ok'), m = qq.val('employee_id');
+        if (o !== undefined) b = b.eq('ok', o); if (m !== undefined) b = b.eq('member_id', m);
+        var r = await b.order('at', { ascending: false }).limit(Math.min(500, qq.lim || 200)); if (r.error) throw r.error;
+        return qq.pick((r.data || []).map(function (x) { return { id: x.id, employee_id: x.member_id, at: x.at, action: x.action, ok: x.ok, reason: x.detail === 'wifi' ? 'wifi' : x.reason, sv_reason: x.reason, dist_m: x.dist_m, ip: x.ip, source: x.source }; }));
+      },
+      /* «История изменений» в карточке: audit_log (читает только владелец) */
+      audit_log: async function (qq) {
+        if (qq.op !== 'select') return noWrite('audit_log');
+        if (!V() || !SV.me || SV.me.role !== 'owner') return qq.pick([]);
+        var b = real.from('audit_log').select('*').eq('venue_id', V()), tg = qq.val('target_id'); if (tg !== undefined) b = b.eq('target_id', tg);
+        var r = await b.order('at', { ascending: false }).limit(Math.min(200, qq.lim || 50)); if (r.error) throw r.error;
+        return qq.pick(r.data || []);
+      },
+      /* оценки задач: «Хорошо» 5 · «Можно лучше» 4 · «Переделать» 2 */
+      task_grades: async function (qq) {
+        if (qq.op === 'insert') {
+          var outR = [];
+          for (var i = 0; i < qq.payload.length; i++) {
+            var g = qq.payload[i], w = await rpc('task_grade', { p_task: +g.task_id, p_grade: g.grade || 'good', p_reason: g.reason || null });
+            if (w.error) return { data: null, error: w.error };
+            if (g.grade === 'redo') C.redo[g.task_id] = g.reason || null;
+            C.titles[g.task_id] = g.title || C.titles[g.task_id];
+            outR.push(Object.assign({}, g, { id: w.data, at: g.at || new Date().toISOString() }));
+            if (SV.dsGrades) SV.dsGrades.unshift({ id: w.data, task_id: +g.task_id, employee_id: g.employee_id, grade: g.grade || 'good', reason: g.reason || null, by: SV.me && SV.me.id, at: new Date().toISOString(), day: tday(), title: g.title || C.titles[g.task_id] || '' });
+          }
+          C.gAt = 0; SV.stale('tasks');
+          return out(qq, outR);
+        }
+        if (qq.op !== 'select') return noWrite('task_grades');
+        if (!V()) return qq.pick([]);
+        var b = real.from('task_grades').select('*').eq('venue_id', V()).gte('at', new Date(Date.now() - 62 * 864e5).toISOString()), m = qq.val('employee_id'), t = qq.val('task_id');
+        if (m !== undefined) b = b.eq('member_id', m); if (t !== undefined) b = b.eq('task_id', +t);
+        var r = await b.order('at', { ascending: false }).limit(1000); if (r.error) throw r.error;
+        await titles((r.data || []).map(function (x) { return x.task_id; }));
+        var L = (r.data || []).map(grRow);
+        if (m === undefined && t === undefined) { SV.dsGrades = L; C.gAt = Date.now(); }
+        return qq.pick(L);
+      },
+      /* чат руководителей (scope = mgr); переписка в задаче и прочее — дальше (92o и общий код) */
+      messages: async function (qq, ex0) {
+        if (qq.op === 'select') {
+          if (qq.val('scope') !== 'mgr') return ex0(qq);
+          if (!SV.me || (SV.me.role !== 'owner' && SV.me.role !== 'manager')) return qq.pick([]);
+          var r = await rpc('mgr_chat_list', { p_limit: Math.min(300, qq.lim || 100) }); if (r.error) throw r.error;
+          return qq.pick((r.data || []).map(function (m) { return Object.assign({ scope: 'mgr', ref_id: null }, m); }));
+        }
+        if (qq.op !== 'insert' || !qq.payload.every(function (m) { return m.scope === 'mgr'; })) return ex0(qq);
+        var o = [];
+        for (var i = 0; i < qq.payload.length; i++) {
+          var m = qq.payload[i];
+          var x = await rpc('mgr_chat_send', { p_text: m.text || null, p_file_path: fpath('media', m.file_path), p_file_type: m.file_type || null, p_file_name: m.file_name || null, p_voice_sec: m.voice_sec != null ? Math.round(m.voice_sec) : null });
+          if (x.error) return { data: null, error: x.error };
+          o.push(Object.assign({}, m, { id: x.data, created_at: new Date().toISOString() }));
+        }
+        return out(qq, o);
+      },
+      /* логотип из бакета: в настройках путь brand_logo_path, приложению — подписанная ссылка (7 дней) */
+      hotel_settings: async function (qq, ex0) {
+        var r = await ex0(qq); if (qq.op !== 'select' || !r || r.error || !r.data) return r;
+        var L = Array.isArray(r.data) ? r.data : [r.data];
+        for (var i = 0; i < L.length; i++) { var p = L[i] && L[i].prefs; if (p && p.brand_logo_path && !p.brand_logo) { var u = await sign(p.brand_logo_path); if (u) p.brand_logo = u; } }
+        return r;
+      }
+    };
+    SV.dsTables = TBL;
+    var ex0 = SV.exec;
+    SV.exec = async function (qq) {
+      var h = TBL[qq.t]; if (!h) return ex0.call(SV, qq);
+      try { return await h(qq, function (q) { return ex0.call(SV, q); }); } catch (e) { return { data: null, error: e && e.message ? e : E(String(e)) }; }
+    };
+
+    /* ----- rpc ----- */
+    var R = SV.rpcMap;
+    function pass(n, st) { return async function (a) { var r = await rpc(n, a); if (!r.error && st) SV.stale.apply(null, st); return r; }; }
+    R.task_item_add = pass('task_item_add', ['tasks']);
+    R.task_grade = pass('task_grade', ['tasks']);
+    R.template_skip = pass('template_skip', ['tasks']);
+    R.wifi_list = async function () { var r = await rpc('wifi_list'); if (!r.error) SV.dsWifi = r.data || null; return r; };
+    R.wifi_add = pass('wifi_add'); R.wifi_remove = pass('wifi_remove', ['base']); R.wifi_set = pass('wifi_set', ['base']);
+    R.set_auto_clock = pass('set_auto_clock'); R.my_auto_clock = pass('my_auto_clock');
+    R.mgr_chat_list = pass('mgr_chat_list'); R.mgr_chat_send = pass('mgr_chat_send', ['notif']);
+    /* «Переделать» (45-mgr: task_status 'back'): на проверке — вернуть с причиной; принятая — снова в работу */
+    var ts0 = R.task_status;
+    R.task_status = async function (a) {
+      if (!a || a.p_status !== 'back') return ts0(a);
+      await SV.load('tasks', true); var t = (SV.T.tasks || []).filter(function (x) { return String(x.id) === String(a.p_id); })[0];
+      if (!t) return { data: null, error: E('Задача не найдена', 'not_found') };
+      var why = a.p_reason || a.p_comment || C.redo[t.id] || 'Переделать', cur = t.sv_status || t.status, r = null;
+      if (cur === 'review') r = await rpc('task_review', { p_id: t.id, p_accept: false, p_grade: null, p_comment: why });
+      else if (cur === 'done') r = await rpc('task_reopen', { p_id: t.id, p_reason: why });
+      if (r && r.error) return r;
+      delete C.redo[t.id]; await SV.load('tasks', true);
+      return ok((SV.T.tasks || []).filter(function (x) { return x.id === t.id; })[0] || null);
+    };
+    /* расчётный лист: экран (92s) присылает уже серверный вид — p_head/p_lines или p_rows [{member_id, head, lines}] */
+    R.payslip_save = async function (a) {
+      if (!a || (a.p_lines === undefined && !a.p_reset)) return { data: null, error: E('Обновите приложение — правка листа изменилась', 'bad_input') };
+      var r = await rpc('payslip_save', { p_payslip: +a.p_payslip, p_head: a.p_head || null, p_lines: a.p_lines || null, p_reset: !!a.p_reset }); if (!r.error) SV.stale('pay'); return r;
+    };
+    R.payslip_import = async function (a) {
+      var rows = (a && a.p_rows) || [];
+      if (rows.some(function (x) { return !x.member_id || !Array.isArray(x.lines); })) return { data: null, error: E('Обновите приложение — вставка из таблицы изменилась', 'bad_input') };
+      var r = await rpc('payslip_import', { p_ym: a.p_ym, p_rows: rows }); if (!r.error) SV.stale('pay'); return r;
+    };
+    /* «Оформление»: логотип-картинка — файлом в бакет (<заведение>/brand/…), в настройках только путь; SVG до 80 КБ — как есть */
+    var ps0 = R.prefs_save;
+    R.prefs_save = async function (a) {
+      var p = Object.assign({}, (a && a.p) || {});
+      if (p.brand_logo !== undefined) {
+        var s = String(p.brand_logo || '');
+        if (!s) p.brand_logo_path = null;
+        else if (/^data:image\/svg\+xml/i.test(s)) { if (s.length > 80000) return { data: null, error: E('SVG больше 80 КБ — сохраните логотип как PNG', 'bad_input') }; p.brand_logo_path = null; }
+        else if (/^data:image\/(png|jpe?g|webp)/i.test(s)) {
+          if (!V()) return { data: null, error: E('Нет входа', 'no_auth') };
+          try {
+            var bl = await (await fetch(s)).blob(), ext = /png/.test(bl.type) ? 'png' : /webp/.test(bl.type) ? 'webp' : 'jpg', path = V() + '/brand/logo-' + Date.now() + '.' + ext;
+            var u = await real.storage.from(SV.bucket).upload(path, bl, { contentType: bl.type || 'image/png', upsert: false });
+            if (u.error) return { data: null, error: u.error };
+            p.brand_logo = ''; p.brand_logo_path = path;
+          } catch (e) { return { data: null, error: E('Логотип не загрузился: ' + (e.message || e), 'server') }; }
+        } else if (/^https?:/.test(s)) delete p.brand_logo;              /* подписанная ссылка уже сохранённого файла — путь не меняется */
+      }
+      var r = await ps0(Object.assign({}, a, { p: p }));
+      if (r && !r.error && r.data && r.data.brand_logo_path && !r.data.brand_logo) { var su = await sign(r.data.brand_logo_path); if (su) r.data.brand_logo = su; }
+      return r;
+    };
+
+    /* ----- «Подсказка о приходе»: проба «я на месте» — только да/нет (0023 clock_probe) ----- */
+    var inv0 = cl.functions.invoke;
+    cl.functions.invoke = async function (n, o) {
+      var b = (o && o.body) || {}; if (typeof b === 'string') { try { b = JSON.parse(b); } catch (e) { b = {}; } }
+      if (n === 'clock' && b.action === 'probe' && b.lat != null) {
+        var r = await rpc('clock_probe', { p_lat: +b.lat, p_lng: +b.lng });
+        return { data: { ok: true, in_hotel: !!(r.data && r.data.in_zone) }, error: null };
+      }
+      return inv0.apply(this, arguments);
+    };
+    return cl;
+  }
+  A.dsExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92s === */

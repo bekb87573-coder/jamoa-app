@@ -59,18 +59,22 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-integ.js"></script>
 <script src="uz-w4-mgr.js"></script>
 <script src="uz-w4-mgr2.js"></script>
+<script src="uz-w4-misc.js"></script>
 <script src="uz-w4-nav.js"></script>
 <script src="uz-w4-owner.js"></script>
 <script src="uz-w4-paint.js"></script>
 <script src="uz-w4-parity.js"></script>
 <script src="uz-w4-polish.js"></script>
+<script src="uz-w4-requests.js"></script>
 <script src="uz-w4-server.js"></script>
 <script src="uz-w4-shift.js"></script>
+<script src="uz-w4-shift2.js"></script>
 <script src="uz-w4-skills.js"></script>
 <script src="uz-w4-tasks2.js"></script>
 <script src="uz-w4-types.js"></script>
 <script src="uz-w4-u0.js"></script>
 <script src="uz-w4-u45.js"></script>
+<script src="uz-w4-ux.js"></script>
 <script src="i18n.js"></script>
 <style>
 :root{--ink:#17202A;--muted:#5D6874;--faint:#8C96A1;--line:#E1E6EB;--line2:#EEF1F4;--bg:#F2F4F6;--card:#FFFFFF;--gold:#A57F35;--goldbg:#F3EBDA;--goldink:#7A5B1E;
@@ -46033,6 +46037,1690 @@ if (FP_SV && !FP_ON) {
     try { fp_real().auth.onAuthStateChange(function (ev) { if (ev === 'SIGNED_OUT' || ev === 'SIGNED_IN') FP.me = null; }); } catch (e) {}
   })();
 }
+
+
+/* ===== ВОЛНА 4 · 92q-shift2.js ===== */
+/* ===== 92q — смена на настоящем сервере (префикс dq_). Журнал w4/log/dq.md, сервер — 0021_shift.sql, переходник — блок «92q» в sv-adapter.js =====
+   1. Фото открытия и закрытия смены — экраны базы (phSheet, phView, чип «фото 2/2» в «Пульт → Приход и уход»); на сервере — shift_photos
+      (фото в бакете jamoa-photos, папка <заведение>/<сотрудник>/), владелец и руководитель видят там же, где в демо.
+   2. «Опаздываю» — экран базы (d2LateSheet); на сервере late_warn: руководитель получает уведомление и видит в «Сейчас в заведении».
+      В ядре уведомления «Опоздает на смену» и «Передача смены» раньше не показывались (их не было в CM_REF) — теперь показываются.
+   3. «Буду» / «Не смогу» на главной и «Буду» в напоминании — schedule.confirmed; на сервере — schedule_confirm.
+   4. «Передача смены» — снова в ядре, для ВСЕХ типов заведений, один экран: кому передаю, наличные в кассе (сумма, без интеграций),
+      незакрытые дела, мои открытые задачи («передаю» / «сделаю завтра»), заметки, до 6 фото. Получатель видит карточку на главной
+      и уведомление, нажимает «Принять смену» — передающий получает «Смену приняли». Не принята за 30 минут — руководителю.
+      Владелец видит всю историю, руководитель — свою команду. Таблица демо dq_handovers; сервер — handover_create / handover_ack / handovers.
+      Jamoa не печатает чеки и не ведёт заказы клиентов — только передача между сотрудниками. */
+var DQ = { f: 'all', busy: false };
+function dq_t(s) { try { return trUi(s); } catch (e) { return s; } }
+function dq_e(s) { return h(dq_t(s)); }
+function dq_s(s) { return '<span>' + h(s) + '</span>'; }
+function dq_sv() { return typeof sv_on === 'function' && sv_on(); }
+function dq_on() { return typeof cm_on !== 'function' || cm_on(); }
+function dq_name(id) { var e = id ? emp(id) : null; return e ? fullName(e) : '—'; }
+function dq_short(id) { var e = id ? emp(id) : null; return e ? (e.first_name || '') + (e.last_name ? ' ' + e.last_name.charAt(0) + '.' : '') : '—'; }
+function dq_cash(v) { var s = String(v == null ? '' : v).replace(/[\s  ]/g, ''); return s === '' ? null : /^\d+$/.test(s) && +s <= 1e11 ? +s : NaN; }
+
+/* ---------- ядро: экран «Передача смены», ссылки уведомлений «latewarn» и «handover» ---------- */
+(function () {
+  if (typeof CM_VIEWS !== 'undefined' && CM_VIEWS.indexOf('handover') < 0) CM_VIEWS.push('handover');
+  if (typeof CM_REF !== 'undefined') ['latewarn', 'handover'].forEach(function (k) { if (CM_REF.indexOf(k) < 0) CM_REF.push(k); });
+  if (window.__DB && !Array.isArray(window.__DB.dq_handovers)) window.__DB.dq_handovers = [];
+  /* демо: передачи переживают смену должности (как таблицы W3P_T; восстановление базы прошло раньше этой части — повторяем для своей таблицы) */
+  if (window.__DB && typeof W3P_T !== 'undefined' && W3P_T.indexOf('dq_handovers') < 0) {
+    W3P_T.push('dq_handovers');
+    try { var o = JSON.parse(localStorage.getItem(W3P_K) || 'null'); if (o && o.sig === w3Sig() && o.day === today() && o.t && Array.isArray(o.t.dq_handovers)) { var T = window.__DB.dq_handovers; T.length = 0; Array.prototype.push.apply(T, o.t.dq_handovers); } } catch (e) {}
+  }
+  var st = document.createElement('style');
+  st.textContent = '.dq-ph{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}.dq-ph>div{aspect-ratio:1;border-radius:10px;background:var(--line2);overflow:hidden;position:relative}' +
+    '.dq-ph img{width:100%;height:100%;object-fit:cover;display:block}.dq-ph button{position:absolute;top:4px;right:4px;min-width:32px;min-height:32px;border-radius:16px;border:0;background:rgba(0,0,0,.55);color:#fff;display:grid;place-items:center;cursor:pointer}' +
+    '.dq-kv{display:flex;flex-direction:column;gap:2px;margin-top:8px;font-size:14px;line-height:1.45}.dq-kv b{font-weight:700}.dq-kv div{white-space:pre-wrap;overflow-wrap:anywhere}' +
+    '.dq-tk{display:flex;align-items:flex-start;gap:6px;font-size:13.5px;line-height:1.4;margin-top:4px}.dq-tk svg{flex:none;margin-top:2px}' +
+    '.dq-row{display:flex;flex-direction:column;gap:6px;padding:8px 0;border-top:1px solid var(--line2)}.dq-row:first-of-type{border-top:0}.dq-row .name{white-space:normal}' +
+    '.dq-row .seg{margin:0;align-self:flex-start;max-width:100%}.dq-row .seg button{white-space:nowrap}' +
+    '#dqO,#dqN{min-height:84px;resize:vertical}.dq-st{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}';
+  document.head.appendChild(st);
+})();
+
+/* кто видит передачу и кто может принять (демо; сервер присылает mine / for_me) */
+function dq_canSee(x) {
+  var me = S.me; if (!me) return false; if (isDirector()) return true;
+  if (x.from_id === me.id || x.to_id === me.id || x.acked_by === me.id) return true;
+  if (!x.to_id && x.dept_id && x.dept_id === me.dept_id) return true;
+  return myTeam().some(function (e) { return e.id === x.from_id; });
+}
+function dq_forMe(x) {
+  if (x.for_me !== undefined) return !!x.for_me;
+  var me = S.me; if (!me || x.acked_at || x.from_id === me.id) return false;
+  if (x.to_id) return x.to_id === me.id || isDirector() || myTeam().some(function (e) { return e.id === x.from_id; });
+  return x.dept_id === me.dept_id || isDirector() || myTeam().some(function (e) { return e.id === x.from_id; });
+}
+/* передача лично мне или моей службе (не «за сотрудника» руководителем) — карточкой «Смену передают вам» */
+function dq_personal(x) { var me = S.me; return !!me && (x.to_id === me.id || (!x.to_id && !!x.dept_id && x.dept_id === me.dept_id)); }
+async function dq_load() {
+  var r = await qSafe(sb.from('dq_handovers').select('*').order('created_at', { ascending: false }).limit(200));
+  var L = (r && r.data) || [], d0 = new Date(Date.now() - 31 * 864e5).toISOString();
+  if (!dq_sv()) L = L.filter(function (x) { return x.created_at >= d0 && dq_canSee(x); });
+  return L;
+}
+/* можно ли пользоваться передачей: в заведении 2+ сотрудника (владелец без должности смены не передаёт, но видит историю) */
+function dq_ok() { return !!S.me && dq_on() && (S.emps || []).filter(function (e) { return e.active !== false && e.role !== 'director'; }).length >= 2; }
+
+/* ---------- карточка передачи ---------- */
+function dq_card(x, act) {
+  var T = x.tasks || [], ph = x.photos || [];
+  var st = x.acked_at ? '<span class="chip t-ok"><span>принята</span> <b class="num">' + hm(x.acked_at) + '</b></span> ' + dq_s(dq_short(x.acked_by))
+    : '<span class="chip t-warn"><span>ждёт приёма</span></span>' + (x.esc_at ? ' <span class="chip t-bad"><span>руководителю сообщено</span></span>' : '');
+  return '<div class="card' + (act ? ' w3-yel' : '') + '" data-dqc="' + h(x.id) + '"><h2><span>' + (act ? 'Смену передают вам' : 'Передача смены') + '</span> <small class="num">' + dm(x.day || today()) + ' ' + hm(x.created_at) + '</small></h2>' +
+    '<div class="meta" style="white-space:normal"><span>От</span>: <b>' + h(dq_name(x.from_id)) + '</b> · <span>кому</span>: <b>' + (x.to_id ? h(dq_name(x.to_id)) : dq_e('следующей смене службы')) + '</b></div>' +
+    '<div class="dq-kv">' + (x.cash != null ? '<div><b>' + dq_e('Наличные в кассе') + ':</b> <b class="num">' + money(x.cash) + '</b> ' + dq_s('сум') + (x.cash_note ? ' · ' + h(x.cash_note) : '') + '</div>' : '') +
+    (x.open_items ? '<div><b>' + dq_e('Незакрытые дела') + ':</b>\n' + h(x.open_items) + '</div>' : '') +
+    (x.notes ? '<div><b>' + dq_e('Заметки') + ':</b>\n' + h(x.notes) + '</div>' : '') + '</div>' +
+    (T.length ? '<div class="pft" style="margin-top:8px">' + dq_e('Задачи') + '</div>' + T.map(function (t) { return '<div class="dq-tk">' + icon(t.act === 'pass' ? 'swap' : 'cal', 14) + '<span><span>' + h(t.title) + '</span> · <span>' + (t.act === 'pass' ? 'передаю' : 'сделаю завтра') + '</span></span></div>'; }).join('') : '') +
+    (ph.length ? '<div class="dq-ph">' + ph.map(function (p, i) { return '<div id="dqP' + h(x.id) + '_' + i + '"></div>'; }).join('') + '</div>' : '') +
+    (x.ack_note ? '<div class="meta" style="white-space:normal;margin-top:6px"><span>Комментарий принявшего</span>: ' + h(x.ack_note) + '</div>' : '') +
+    (act ? '<button type="button" class="btn gold full" data-dqack="' + h(x.id) + '" style="margin-top:10px;min-height:48px">' + icon('tick', 18) + '<span>Принять смену</span></button>' : '<div class="dq-st">' + st + '</div>') + '</div>';
+}
+function dq_photos(L) { L.forEach(function (x) { (x.photos || []).forEach(function (p, i) { var id = 'dqP' + x.id + '_' + i; if ($(id) && !$(id).firstChild) showPhoto(p, id); }); }); }
+async function dq_ack(id, after) {
+  var L = await dq_load(), x = L.filter(function (r) { return String(r.id) === String(id); })[0];
+  if (!x) { toast(dq_t('Передача смены не найдена')); return after && after(); }
+  if (x.acked_at) { toast(dq_t('Смену уже принял кто-то другой')); return after && after(); }
+  var u = await sb.from('dq_handovers').update({ acked_by: S.me.id, acked_at: new Date().toISOString() }).eq('id', x.id).is('acked_at', null).select();
+  if (u.error) { toast(err(u.error)); return after && after(); }
+  var passN = (x.tasks || []).filter(function (t) { return t.act === 'pass'; }).length;
+  if (!dq_sv()) { /* демо: то же, что делает сервер в handover_ack */
+    for (var i = 0; i < (x.tasks || []).length; i++) { var t = x.tasks[i]; if (t.act === 'pass') await sb.from('tasks').update({ assignee_id: S.me.id, day: today() }).eq('id', t.id); else await sb.from('tasks').update({ day: addDays(today(), 1) }).eq('id', t.id); }
+    await w3Notify(x.from_id, 'Смену приняли', fullName(S.me), 'handover', x.id, false);
+    (S.notif || []).forEach(function (n) { if (n.ref_type === 'handover' && String(n.ref_id) === String(x.id) && !n.read_at) { n.read_at = new Date().toISOString(); sb.from('notifications').update({ read_at: n.read_at }).eq('id', n.id).then(function () {}, function () {}); } });
+  } else { var dd = (u.data || [])[0]; if (dd && dd.already) { toast(dq_t('Смену уже принял кто-то другой')); return after && after(); } }
+  toast(passN ? dq_t('Смена принята — задачи теперь у вас') : dq_t('Смена принята'));
+  if (after) after();
+}
+function dq_bindAck(box, after) { box.querySelectorAll('[data-dqack]').forEach(function (b) { b.onclick = async function () { if (DQ.busy) return; DQ.busy = true; b.disabled = true; try { await dq_ack(b.getAttribute('data-dqack'), after); } finally { DQ.busy = false; } }; }); }
+
+/* ---------- экран «Передача смены» ---------- */
+async function dq_vHo() {
+  var m = $('main'), me = S.me; if (!m || !me) return;
+  m.innerHTML = '<div class="card empty">' + dq_e('Загрузка…') + '</div>';
+  var td = today(), tm = addDays(td, 1), dir = isDirector();
+  var mates = (S.emps || []).filter(function (e) { return e.active !== false && e.id !== me.id && e.role !== 'director'; });
+  var q = await Promise.all([dq_load(), dir ? null : qSafe(sb.from('tasks').select('*').eq('assignee_id', me.id).eq('day', td)),
+    mates.length && !dir ? qSafe(sb.from('schedule').select('*').in('employee_id', mates.map(function (e) { return e.id; })).gte('day', td).lte('day', tm)) : null]);
+  if (S.view !== 'handover' || !$('main')) return;
+  var all = q[0], inc = all.filter(function (x) { return dq_forMe(x) && dq_personal(x); }), mine = all.filter(function (x) { return x.from_id === me.id; });
+  var open = ((q[1] && q[1].data) || []).filter(function (t) { return ['done', 'cancel', 'review'].indexOf(t.status) < 0 && t.assignee_id === me.id; });
+  var sch = ((q[2] && q[2].data) || []).filter(function (r) { return typeof isW !== 'function' || isW(r.kind); });
+  var myEnd = null; try { myEnd = (myShiftToday(me, td) || {}).end || null; } catch (e) {}
+  /* кому по умолчанию: коллега службы, чья смена начинается после моей сегодня, иначе первая завтра */
+  var nxt = null, best = 1e9;
+  sch.forEach(function (r) { var e = emp(r.employee_id); if (!e || e.dept_id !== me.dept_id) return; var s0 = null; try { var s = myShiftToday(e, r.day, r); s0 = s && s.start ? w3Min(s.start) : null; } catch (x) {} if (s0 == null) return;
+    var k = r.day === td ? (myEnd && s0 >= w3Min(myEnd) - 120 ? s0 : null) : 1440 + s0; if (k != null && k < best) { best = k; nxt = e; } });
+  var DST = DQ.form && DQ.form.me === me.id ? DQ.form : (DQ.form = { me: me.id, to: nxt ? nxt.id : '', cash: '', cn: '', o: '', n: '', tasks: {}, ph: [] });
+  open.forEach(function (t) { if (!DST.tasks[t.id]) DST.tasks[t.id] = 'pass'; });
+  var team = dir ? all : all.filter(function (x) { return x.from_id !== me.id && inc.indexOf(x) < 0; });
+  function hist() {
+    var f = DQ.f, L = team.filter(function (x) { return f === 'all' || !x.acked_at; }), wait = team.filter(function (x) { return !x.acked_at; }).length;
+    if (!team.length) return dir ? '<div class="card empty">' + dq_e('Передач смены пока не было') + '</div>' : '';
+    return '<div class="pft" style="margin:12px 2px 6px">' + dq_e(dir ? 'История передач' : 'Передачи команды') + '</div>' +
+      '<div class="chips">' + [['all', 'Все', team.length], ['wait', 'Ждут приёма', wait]].map(function (c) { return '<button type="button" class="pick' + (f === c[0] ? ' on' : '') + '" data-dqf="' + c[0] + '"><span>' + c[1] + '</span> <b class="num">' + c[2] + '</b></button>'; }).join('') + '</div>' +
+      (L.length ? L.slice(0, 60).map(function (x) { return dq_card(x, false); }).join('') : '<div class="card empty">' + dq_e('Нет') + '</div>');
+  }
+  function form() {
+    if (dir) return '';
+    var opts = mates.slice().sort(function (a, b) { return (a.dept_id === me.dept_id ? 0 : 1) - (b.dept_id === me.dept_id ? 0 : 1) || fullName(a).localeCompare(fullName(b), 'ru'); });
+    return '<div class="card"><h2>' + dq_e('Передать смену') + '</h2>' +
+      '<label class="f"><span>' + dq_e('Кому передаю') + '</span><select class="in" id="dqTo" style="min-height:48px"><option value="">' + dq_e('Следующей смене службы') + '</option>' +
+        opts.map(function (e) { return '<option value="' + h(e.id) + '"' + (DST.to === e.id ? ' selected' : '') + '>' + h(fullName(e)) + (nxt && nxt.id === e.id ? ' · ' + h(dq_t('следующая смена')) : '') + '</option>'; }).join('') + '</select></label>' +
+      '<div class="grid2"><label class="f"><span>' + dq_e('Наличные в кассе, сум') + '</span><input class="in" id="dqC" inputmode="numeric" autocomplete="off" value="' + h(DST.cash) + '"></label>' +
+        '<label class="f"><span>' + dq_e('Комментарий к сумме') + '</span><input class="in" id="dqCn" autocomplete="off" value="' + h(DST.cn) + '"></label></div>' +
+      '<div class="meta" style="white-space:normal;margin:-2px 0 8px">' + dq_e('Если вы отвечали за кассу: пересчитайте наличные и впишите сумму. Без кассы — оставьте пустым.') + '</div>' +
+      '<label class="f"><span>' + dq_e('Незакрытые дела') + '</span><textarea class="in" id="dqO" rows="3" placeholder="' + h(dq_t('Что не успели и что нужно доделать')) + '">' + h(DST.o) + '</textarea></label>' +
+      '<div class="pft" style="margin-top:4px">' + dq_e('Мои открытые задачи') + '</div>' + (open.length ? open.map(function (t) { var a = DST.tasks[t.id];
+        return '<div class="dq-row"><div class="name">' + h(t.title) + (t.due_time ? ' <span class="meta num">' + h(String(t.due_time).slice(0, 5)) + '</span>' : '') + '</div><div class="seg"><button type="button" class="' + (a === 'pass' ? 'on' : '') + '" data-dqt="' + h(t.id) + '" data-v="pass">' + dq_e('передаю') + '</button><button type="button" class="' + (a === 'tmr' ? 'on' : '') + '" data-dqt="' + h(t.id) + '" data-v="tmr">' + dq_e('сделаю завтра') + '</button><button type="button" class="' + (a === 'keep' ? 'on' : '') + '" data-dqt="' + h(t.id) + '" data-v="keep">' + dq_e('не передаю') + '</button></div></div>'; }).join('') : '<div class="meta">' + dq_e('Открытых задач нет') + '</div>') +
+      '<label class="f" style="margin-top:8px"><span>' + dq_e('Заметки для следующей смены') + '</span><textarea class="in" id="dqN" rows="3">' + h(DST.n) + '</textarea></label>' +
+      '<div class="pft" style="margin-top:4px"><span>' + dq_e('Фото') + '</span> <span class="meta" style="margin:0">(<span>' + dq_e('до 6') + '</span>)</span></div>' +
+      (DST.ph.length ? '<div class="dq-ph">' + DST.ph.map(function (p, i) { return '<div><img src="' + h(p.url) + '" alt=""><button type="button" data-dqrm="' + i + '" aria-label="' + h(dq_t('Убрать фото')) + '">' + icon('trash', 14) + '</button></div>'; }).join('') + '</div>' : '') +
+      (DST.ph.length < 6 ? '<button type="button" class="btn ghost full sm" id="dqPh" style="margin-top:8px">' + icon('cam', 16) + '<span>' + dq_e('Добавить фото') + '</span></button>' : '') +
+      '<button type="button" class="btn gold full" id="dqGo" style="margin-top:12px;min-height:48px">' + dq_e('Передать смену') + '</button></div>';
+  }
+  function draw() {
+    m.innerHTML = inc.map(function (x) { return dq_card(x, true); }).join('') + form() +
+      (mine.length ? '<div class="pft" style="margin:12px 2px 6px">' + dq_e('Мои передачи') + '</div>' + mine.slice(0, 5).map(function (x) { return dq_card(x, false); }).join('') : '') + hist();
+    dq_photos(inc.concat(mine.slice(0, 5), team.slice(0, 60)));
+    dq_bindAck(m, function () { dq_vHo(); });
+    m.querySelectorAll('[data-dqf]').forEach(function (b) { b.onclick = function () { DQ.f = b.getAttribute('data-dqf'); draw(); }; });
+    if (dir) return;
+    try { moneyInput('dqC'); } catch (e) {}
+    var keep = function () { DST.to = $('dqTo').value; DST.cash = $('dqC').value; DST.cn = $('dqCn').value; DST.o = $('dqO').value; DST.n = $('dqN').value; };
+    ['dqTo', 'dqC', 'dqCn', 'dqO', 'dqN'].forEach(function (id) { var el = $(id); if (el) { el.addEventListener('input', keep); el.addEventListener('change', keep); } });
+    m.querySelectorAll('[data-dqt]').forEach(function (b) { b.onclick = function () { keep(); DST.tasks[b.getAttribute('data-dqt')] = b.getAttribute('data-v'); draw(); }; });
+    m.querySelectorAll('[data-dqrm]').forEach(function (b) { b.onclick = function () { keep(); DST.ph.splice(+b.getAttribute('data-dqrm'), 1); draw(); }; });
+    if ($('dqPh')) $('dqPh').onclick = async function () {
+      keep(); var f = await pickImage(); if (!f) return; var bt = this; bt.disabled = true;
+      try { var bl = await shrink(f), p = await upPhoto(bl, 'handover'); if (p) DST.ph.push({ path: p, url: URL.createObjectURL(bl) }); } catch (e) { toast(err(e)); }
+      if (S.view === 'handover') draw();
+    };
+    $('dqGo').onclick = async function () {
+      keep(); var cash = dq_cash(DST.cash);
+      if (cash !== cash) { $('dqC').style.borderColor = 'var(--bad)'; return toast(dq_t('Проверьте сумму')); }
+      var tk = open.filter(function (t) { return DST.tasks[t.id] === 'pass' || DST.tasks[t.id] === 'tmr'; }).map(function (t) { return { id: t.id, title: t.title, act: DST.tasks[t.id] }; });
+      var o = DST.o.trim(), n = DST.n.trim();
+      if (!o && !n && !DST.ph.length && !tk.length && cash == null) return toast(dq_t('Напишите, что передаёте'));
+      var bt = this; bt.disabled = true;
+      var row = { from_id: me.id, to_id: DST.to || null, dept_id: me.dept_id || null, day: td, cash: cash, cash_note: DST.cn.trim() || null, open_items: o || null, notes: n || null,
+        tasks: tk, photos: DST.ph.map(function (p) { return p.path; }), created_at: new Date().toISOString(), acked_by: null, acked_at: null, esc_at: null };
+      var r = await sb.from('dq_handovers').insert(row).select().single();
+      if (r.error) { bt.disabled = false; return toast(err(r.error)); }
+      if (!dq_sv()) { /* демо: то же, что делает сервер в handover_create */
+        var who = row.to_id ? [row.to_id] : sch.filter(function (x) { var e = emp(x.employee_id); return e && e.dept_id === me.dept_id; }).map(function (x) { return x.employee_id; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).slice(0, 10);
+        if (!who.length) { var b = w3Boss(me); if (b) who = [b.id]; }
+        var body = fullName(me) + (cash != null ? ' · ' + dq_t('касса') + ' ' + money(cash) + ' ' + dq_t('сум') : '') + (tk.length ? ' · ' + dq_t('задач') + ': ' + tk.length : '');
+        for (var i = 0; i < who.length; i++) await w3Notify(who[i], 'Вам передают смену', body, 'handover', r.data.id, false);
+      }
+      DQ.form = null; toast(dq_t('Смена передана — получатель увидит её на главной')); dq_vHo();
+    };
+  }
+  draw();
+}
+(function () {
+  var v0 = vHandover;
+  vHandover = function () { if (dq_on()) return dq_vHo(); return v0.apply(this, arguments); };
+  /* «Разделы»: «Передача смены» у всех служб (не только ресепшен и службы отеля) */
+  /* уведомления о передаче — группа «График и заявки» (раньше падали в «Прочее», выключенное по умолчанию, и не приходили) */
+  if (typeof jc_kindOf === 'function') { var k0 = jc_kindOf; jc_kindOf = function (rt) { if (rt === 'handover') return 'sched'; return k0.apply(this, arguments); }; }
+  function sec() { return ['handover', 'Передача смены', isDirector() ? 'История передач: касса, дела, фото, кто принял' : 'Кому передаю: касса, дела, заметки, фото', 'out']; }
+  var t0 = toolSections;
+  toolSections = function () {
+    var o = t0.apply(this, arguments); if (!dq_on() || !Array.isArray(o) || !dq_ok()) return o;
+    o = o.filter(function (s) { return s[0] !== 'handover'; }); o.unshift(sec()); return o;
+  };
+  /* не только отель: «только для отеля» (SX_HOTEL_ONLY / modules_off) и тип заведения больше не прячут передачу в ядре */
+  ['sections', 'sectionsAll'].forEach(function (nm) {
+    var f0 = nm === 'sections' ? sections : sectionsAll;
+    var w = function () { var o = f0.apply(this, arguments); if (!dq_on() || !Array.isArray(o) || !dq_ok() || o.some(function (s) { return s[0] === 'handover'; })) return o; return o.concat([sec()]); };
+    if (nm === 'sections') sections = w; else sectionsAll = w;
+  });
+})();
+
+/* ---------- главная: «Смену передают вам» (получателю) и «Передать смену» в конце своей смены ---------- */
+W3.home.push(function () { dq_home(); });
+async function dq_home() {
+  var me = S.me; if (!me || !dq_on() || !dq_ok()) return;
+  var L = await dq_load(), td = today(), d1 = new Date(Date.now() - 864e5).toISOString();
+  var el = w3HomeSlot('dqHome'); if (!el || S.view !== 'home') return;
+  var inc = L.filter(function (x) { return dq_forMe(x) && x.created_at >= d1 && dq_personal(x); });
+  var html = inc.slice(0, 1).map(function (x) { return dq_card(x, true); }).join('');
+  if (!inc.length && !isDirector() && S.att && S.att.day === td && S.att.clock_in && !S.att.clock_out) {
+    var sh = null; try { sh = myShiftToday(me, td); } catch (e) {}
+    var left = sh && sh.end ? w3Min(sh.end) - w3NowMin() : null, done = L.some(function (x) { return x.from_id === me.id && String(x.created_at).slice(0, 10) >= addDays(td, -1) && Date.now() - Date.parse(x.created_at) < 16 * 36e5; });
+    if (left != null && left <= 60 && left > -240 && !done) html = '<div class="card" style="display:flex;align-items:center;gap:12px">' + icon('out', 22) + '<div class="grow" style="min-width:0"><div class="name">' + dq_e('Смена заканчивается') + '</div><div class="meta" style="white-space:normal">' + dq_e('Передайте смену: касса, незакрытые дела, фото') + '</div></div><button type="button" class="btn gold sm" id="dqHomeGo">' + dq_e('Передать') + '</button></div>';
+  }
+  el.innerHTML = html; el.setAttribute('data-cp', inc.length ? '1.8' : '2.2');   /* порядок главной 92f: сразу после отметки */
+  dq_photos(inc.slice(0, 1)); dq_bindAck(el, function () { render(); });
+  if ($('dqHomeGo')) $('dqHomeGo').onclick = function () { go('handover'); };
+}
+
+/* ---------- демо: не принята за 30 минут — руководителю (на сервере — handovers/escalate) ---------- */
+async function dq_escalate() {
+  if (!S.me || dq_sv() || !window.__DB) return;
+  var L = (window.__DB.dq_handovers || []).filter(function (x) { return !x.acked_at && !x.esc_at && Date.now() - Date.parse(x.created_at) > 30 * 6e4 && Date.now() - Date.parse(x.created_at) < 3 * 864e5; });
+  for (var i = 0; i < L.length; i++) { var x = L[i], f = emp(x.from_id), b = w3Boss(f); x.esc_at = new Date().toISOString(); if (b && b.id !== x.to_id) await w3Notify(b.id, 'Передачу смены не приняли', (f ? fullName(f) : '') + ' · ' + hm(x.created_at), 'handover', x.id, false); }
+  if (L.length && typeof w3Save === 'function') w3Save();
+}
+(function () { var t = setInterval(function () { if (!S.me || S.loading) return; clearInterval(t); dq_escalate(); setInterval(dq_escalate, 60000); }, 700); })();
+
+/* отладка (как у других частей: только с ?w4dbg в адресе) */
+if (/[?&]w4dbg/.test(location.search)) window.__dq = { S: S, sb: sb, go: function (v) { return go(v); }, load: dq_load, home: dq_home, phSheet: function (k) { return phSheet(k); }, phView: function (id, d) { return phView(id, d); }, late: function () { return d2LateSheet(myShiftToday(S.me, today())); }, d2: function () { return d2Fill(); }, render: function () { return render(); }, jcn: function (to, t, b, rt, id) { return typeof jc_notify === 'function' ? jc_notify(to, null, t, b, { type: rt, id: id }) : null; } };
+
+
+/* ===== ВОЛНА 4 · 92r-requests.js ===== */
+/* ===== 92r — заявки ядра для всех типов заведений (префикс dr_). Журнал w4/log/dr.md, сервер — 0022_requests.sql, переходник — блок «92r» в sv-adapter.js =====
+   1. «Заявки на ремонт» (drfix): что сломалось — где (свободный текст) + оборудование из списка владельца, описание, фото, «Срочно» →
+      руководитель назначает исполнителя (уведомление) → «В работе» → «Готово» с фото после ремонта. Срочную не взяли за N минут
+      (prefs.repair_urgent_min, по умолчанию 15) — срочное уведомление руководителю и владельцу (на сервере — cron jamoa-requests).
+   2. «Потерянные вещи» (drlost): что нашли, где / у какого заказа или клиента, сумма для денег, фото → «На хранении» → «Выдано» (кому) или
+      «Сдано владельцу». Для химчистки — вещи из карманов (деньги, ключи, документы).
+   3. «Заявки на закупку» (drbuy): что, сколько, зачем, примерная сумма → владелец одобряет / отклоняет → «Куплено» (факт и фото чека) → «Получено».
+      Без склада, остатков и поставщиков.
+   Права: сотрудник — создаёт и видит свои; руководитель — своей службы и команды; владелец — все.
+   Один набор вызовов sb.rpc('repair_*' | 'equip_*' | 'found_*' | 'buy_*' | 'requests_home'): в демо их выполняет эта часть по учебным таблицам
+   __DB.dr_fix / dr_lost / dr_buy / dr_equip (сохраняются между входами, как волна 3); на сервере — переходник → rpc 0022.
+   Старые гостиничные экраны («Заявки инженерам», «Потерянные вещи» отеля, закупки со складом) не трогаю — они остаются выключены в ядре. */
+var DR = { blob: {}, busy: false, open: null, late: 0 };
+var DR_V = ['drfix', 'drlost', 'drbuy'];
+var DR_REF = { repair: 'drfix', found: 'drlost', buy: 'drbuy' };
+var DR_TBL = ['dr_fix', 'dr_lost', 'dr_buy', 'dr_equip'];
+function dr_sv() { return typeof sv_on === 'function' && sv_on(); }
+function dr_t(s) { try { return trUi(s); } catch (e) { return s; } }
+function dr_e(s) { return h(dr_t(s)); }
+function dr_type() { var vp = typeof venueP === 'function' ? venueP() : null; return (vp && vp.type) || (typeof orgType === 'function' ? orgType() : 'other'); }
+function dr_lx() { return dr_type() === 'laundry'; }
+function dr_lead() { return !!S.me && (isDirector() || S.me.role === 'manager'); }
+function dr_own() { return !!S.me && isDirector(); }
+function dr_sum(n) { return n == null || n === '' ? '' : money(n) + ' ' + dr_t('сум'); }
+function dr_num(s) { var x = String(s == null ? '' : s).replace(/[\s ]/g, '').replace(',', '.'); if (!x) return null; var n = +x; return isFinite(n) && n >= 0 ? Math.round(n) : NaN; }
+function dr_nm(id) { var e = id ? emp(id) : null; return e ? (e.first_name + (e.last_name ? ' ' + e.last_name.charAt(0) + '.' : '')) : ''; }
+function dr_when(ts) { if (!ts) return ''; var d = tsDate(ts); return (d === today() ? '' : dm(d) + ' ') + hm(ts); }
+function dr_err(r) { return err(r && r.error ? r.error : r); }
+async function dr_rpc(n, a) { var r = await sb.rpc(n, a || {}); return r || { data: null, error: { message: 'Нет ответа' } }; }
+
+/* ---------- 0. ядро: три новых экрана и ссылки уведомлений (обёртки над списками 91, файл 91 не трогаю) ---------- */
+(function () {
+  try { DR_V.forEach(function (v) { if (CM_VIEWS.indexOf(v) < 0) CM_VIEWS.push(v); }); } catch (e) {}
+  try { Object.keys(DR_REF).forEach(function (k) { if (CM_REF.indexOf(k) < 0) CM_REF.push(k); }); } catch (e) {}
+  if (/[?&]w4dbg/.test(location.search)) window.__dr = { S: S, sb: sb, go: function (v) { return go(v); }, DR: DR, open: function (k, id) { return dr_openRef(k, id); }, bosses: function (id) { return dr_bossesD(id); }, notify: function () { return w3Notify.apply(null, arguments); } };
+})();
+
+/* ---------- 1. демо: учебные таблицы, сохранение между входами, те же вызовы, что на сервере ---------- */
+(function () {
+  if (dr_sv()) return;
+  var DB = window.__DB; if (!DB) return;
+  try {
+    var o = JSON.parse(localStorage.getItem(W3P_K) || 'null');
+    if (o && o.sig === w3Sig() && o.day === today() && o.t) DR_TBL.forEach(function (k) { if (Array.isArray(o.t[k])) DB[k] = o.t[k]; });
+  } catch (e) {}
+  DR_TBL.forEach(function (k) { if (W3P_T.indexOf(k) < 0) W3P_T.push(k); });
+})();
+function dr_save() { try { if (typeof w3Save === 'function') w3Save(); } catch (e) {} }
+function dr_id(T) { var mx = 0; T.forEach(function (x) { if (x.id > mx) mx = x.id; }); return mx + 1; }
+function dr_iso(minAgo) { return new Date(Date.now() - (minAgo || 0) * 60000).toISOString(); }
+var DR_EQ = {
+  laundry: ['Машина химчистки', 'Стиральная машина 1', 'Стиральная машина 2', 'Сушильная машина', 'Гладильный пресс', 'Парогенератор и утюги', 'Пятновыводной стол', 'Упаковочный аппарат', 'Компрессор'],
+  food: ['Холодильник', 'Плита', 'Духовой шкаф', 'Посудомоечная машина', 'Кофемашина', 'Вытяжка', 'Кондиционер'],
+  bakery: ['Печь', 'Тестомес', 'Расстоечный шкаф', 'Холодильник', 'Кондиционер'],
+  salon: ['Кресло мастера', 'Мойка для волос', 'Фен', 'Стерилизатор', 'Кондиционер'],
+  fitness: ['Беговая дорожка', 'Велотренажёр', 'Силовой тренажёр', 'Душевая', 'Кондиционер'],
+  carwash: ['Аппарат высокого давления', 'Пылесос', 'Компрессор', 'Подъёмник', 'Освещение бокса'],
+  clinic: ['Стерилизатор', 'Кушетка', 'Кресло', 'Холодильник для лекарств', 'Кондиционер'],
+  lodg: ['Кондиционер', 'Бойлер', 'Стиральная машина', 'Освещение', 'Двери и замки'],
+  other: ['Кондиционер', 'Освещение', 'Сантехника', 'Электрика и розетки', 'Двери и замки', 'Компьютер и принтер']
+};
+function dr_eqKind() { var t = dr_type(); if (t === 'laundry') return 'laundry'; if (['rest', 'cafe', 'coffee', 'fast', 'toyxona', 'catering', 'chain'].indexOf(t) >= 0) return 'food'; if (['hotel', 'hostel', 'guest'].indexOf(t) >= 0) return 'lodg'; return DR_EQ[t] ? t : 'other'; }
+function dr_seed() {
+  var DB = window.__DB; if (!DB || !S.me || Array.isArray(DB.dr_equip)) return;
+  var T = dr_t, lx = dr_lx(), act = (S.emps || []).filter(function (e) { return e.active !== false; });
+  var dir = w3Dir(), mgr = act.filter(function (e) { return e.role === 'manager'; })[0] || dir, st = act.filter(function (e) { return e.role !== 'director' && e.role !== 'manager'; });
+  var a = st[0] || mgr || dir, b = st[1] || a, c = st[2] || b, d = st[3] || c;
+  if (!a || !dir) { DB.dr_equip = []; DB.dr_fix = DB.dr_fix || []; DB.dr_lost = DB.dr_lost || []; DB.dr_buy = DB.dr_buy || []; return; }
+  DB.dr_equip = DR_EQ[dr_eqKind()].map(function (n, i) { return { id: i + 1, name: n, place: null, active: true, sort: i + 1 }; });
+  var E = function (n) { var x = DB.dr_equip.filter(function (q) { return q.name === n; })[0]; return x ? x.id : null; };
+  var e1 = lx ? E('Стиральная машина 2') : DB.dr_equip[0].id, e2 = lx ? E('Гладильный пресс') : DB.dr_equip[1].id;
+  DB.dr_fix = [
+    { id: 3, place: lx ? T('Прачечная') : T('Зал'), equipment_id: e1, text: lx ? T('Не сливает воду, на экране ошибка E20. Вещи внутри.') : T('Не включается, работа стоит'), photo_path: null, urgent: true, status: 'new', created_by: b.id, dept_id: b.dept_id, assigned_to: null, created_at: dr_iso(22), escalated_at: dr_iso(5) },
+    { id: 2, place: lx ? T('Глажка') : null, equipment_id: e2, text: lx ? T('Пресс плохо греет, вещи остаются влажными') : T('Шумит и стучит при работе'), urgent: false, status: 'work', created_by: c.id, dept_id: c.dept_id, assigned_to: (mgr || a).id, assigned_by: dir.id, assigned_at: dr_iso(90), taken_at: dr_iso(80), created_at: dr_iso(130) },
+    { id: 1, place: lx ? T('Приёмка') : T('Вход'), equipment_id: null, text: T('Не горит лампа над стойкой'), urgent: false, status: 'done', created_by: a.id, dept_id: a.dept_id, assigned_to: (mgr || a).id, assigned_by: dir.id, assigned_at: dr_iso(1500), taken_at: dr_iso(1480), done_at: dr_iso(1440), done_by: (mgr || a).id, done_note: T('Заменил лампу'), created_at: dr_iso(1560) }
+  ];
+  DB.dr_lost = [
+    { id: 3, kind: 'money', what: lx ? T('Деньги в кармане пиджака') : T('Деньги у кассы'), place: lx ? T('Заказ 2417, пиджак, клиент Каримов') : T('Зал, у окна'), amount: 20000, found_by: c.id, dept_id: c.dept_id, found_at: dr_iso(45), status: 'stored', created_at: dr_iso(45) },
+    { id: 2, kind: 'keys', what: lx ? T('Ключи с брелоком в кармане брюк') : T('Ключи от машины'), place: lx ? T('Заказ 2402, брюки') : T('Вход, на диване'), amount: null, found_by: d.id, dept_id: d.dept_id, found_at: dr_iso(300), status: 'stored', created_at: dr_iso(300) },
+    { id: 1, kind: 'docs', what: lx ? T('Копия паспорта во внутреннем кармане пальто') : T('Пропуск сотрудника другой компании'), place: lx ? T('Заказ 2388, пальто') : T('Гардероб'), amount: null, found_by: a.id, dept_id: a.dept_id, found_at: dr_iso(2900), status: 'given', given_to: lx ? T('Клиент при выдаче заказа') : T('Хозяин пропуска'), given_at: dr_iso(1450), given_by: dir.id, created_at: dr_iso(2900) }
+  ];
+  DB.dr_buy = [
+    { id: 3, what: lx ? T('Пятновыводитель для жирных пятен') : T('Моющее средство для пола'), qty: lx ? T('2 л') : T('5 л'), why: lx ? T('Закончился, жирные пятна не выводятся') : T('Закончилось'), est_sum: 180000, status: 'new', created_by: a.id, dept_id: a.dept_id, created_at: dr_iso(60) },
+    { id: 2, what: lx ? T('Плечики (вешалки) пластиковые') : T('Перчатки резиновые'), qty: lx ? T('100 шт') : T('10 пар'), why: lx ? T('Для выдачи вещей клиентам') : T('Для уборки'), est_sum: 150000, status: 'approved', created_by: b.id, dept_id: b.dept_id, decided_by: dir.id, decided_at: dr_iso(200), created_at: dr_iso(400) },
+    { id: 1, what: lx ? T('Упаковочная плёнка (рулон)') : T('Лампочки LED'), qty: lx ? T('2 рулона') : T('6 шт'), why: '', est_sum: 240000, status: 'received', created_by: c.id, dept_id: c.dept_id, decided_by: dir.id, decided_at: dr_iso(3000), bought_by: c.id, bought_at: dr_iso(2000), fact_sum: 228000, received_by: c.id, received_at: dr_iso(1900), created_at: dr_iso(3100) }
+  ];
+}
+/* видимость в демо — как jamoa.dr_can на сервере */
+function dr_teamIds() { var o = {}; try { myTeam().forEach(function (e) { o[e.id] = 1; }); } catch (e) {} return o; }
+function dr_seeD(author, dept, other) {
+  if (!S.me) return false; if (isDirector()) return true;
+  if (author === S.me.id || (other && other === S.me.id)) return true;
+  if (S.me.role !== 'manager') return false;
+  var T = dr_teamIds(); return !!(T[author] || (other && T[other]) || (dept && (dept === S.me.dept_id || dept === S.me.lead_dept)));
+}
+function dr_bossesD(id) { var e = emp(id), o = []; var b = w3Boss(e); if (b && b.id !== id) o.push(b.id); var d = w3Dir(); if (d && d.id !== id && o.indexOf(d.id) < 0) o.push(d.id); return o; }
+/* уведомление в демо: виды как на сервере; группы настроек 92c — «Заявки сотрудников» (входящие руководителю) и «График и заявки» (ответы) */
+var DR_KINDS = { repair_new: 'req', repair_late: 'req', found_new: 'req', buy_new: 'req', found_owner: 'req', buy_bought: 'req',
+  repair_assign: 'tasks', repair_work: 'sched', repair_done: 'sched', repair_cancel: 'sched', found_give: 'sched', buy_decide: 'sched', buy_received: 'sched', buy_cancel: 'sched' };
+try { if (typeof JC_KINDS === 'object') Object.keys(DR_KINDS).forEach(function (k) { if (!JC_KINDS[k]) JC_KINDS[k] = DR_KINDS[k]; }); } catch (e) {}
+function dr_note(kind, to, title, body, rt, rid, urgent) {
+  if (!to) return; var ref = { type: rt, id: rid == null ? null : rid, urgent: !!urgent };
+  try { if (typeof jc_notify === 'function') return jc_notify(to, kind, title, body, ref); } catch (e) {}
+  return w3Notify(to, title, body, rt, rid, urgent);
+}
+function dr_ownersD() { var d = w3Dir(); return d ? [d.id] : []; }
+function dr_E(m) { var e = new Error(m); throw e; }
+function dr_eqName(id) { var x = (window.__DB.dr_equip || []).filter(function (q) { return q.id === id; })[0]; return x ? x.name : null; }
+function dr_whereD(r) { var w = [dr_eqName(r.equipment_id), r.place].filter(Boolean).join(' · '); return w || 'Без места'; }
+function dr_urgMin() { var n = +((typeof orgP === 'function' ? orgP('repair_urgent_min', 15) : 15)); return Math.max(5, Math.min(240, n || 15)); }
+function dr_lateD() {
+  var DB = window.__DB, lim = dr_urgMin(), now = Date.now();
+  (DB.dr_fix || []).forEach(function (r) {
+    if (!r.urgent || ['new', 'assigned'].indexOf(r.status) < 0 || r.escalated_at || now - Date.parse(r.created_at) < lim * 60000) return;
+    r.escalated_at = new Date().toISOString();
+    dr_bossesD(r.created_by).concat(dr_ownersD()).filter(function (x, i, a) { return a.indexOf(x) === i; }).forEach(function (b) {
+      dr_note('repair_late', b, 'Срочный ремонт не взят ' + lim + ' мин', dr_whereD(r) + ': ' + String(r.text).slice(0, 160), 'repair', r.id, true);
+    });
+  });
+}
+function dr_fixJ(r) { return Object.assign({}, r, { equipment: dr_eqName(r.equipment_id) }); }
+function dr_getD(T, id, who) { var r = (window.__DB[T] || []).filter(function (x) { return x.id === +id; })[0]; if (!r || !dr_seeD(who(r)[0], who(r)[1], who(r)[2])) dr_E(T === 'dr_lost' ? 'Находка не найдена' : 'Заявка не найдена'); return r; }
+var DR_WF = function (r) { return [r.created_by, r.dept_id, r.assigned_to]; }, DR_WL = function (r) { return [r.found_by, r.dept_id, null]; }, DR_WB = function (r) { return [r.created_by, r.dept_id, r.bought_by]; };
+var DR_KIND = { other: 'Вещь', money: 'Деньги', keys: 'Ключи', docs: 'Документы', phone: 'Телефон', jewel: 'Украшение', clothes: 'Одежда' };
+var DR_RPC = {
+  equip_list: function () { dr_seed(); var own = dr_own(); return (window.__DB.dr_equip || []).filter(function (e) { return e.active || own; }).slice().sort(function (a, b) { return (b.active - a.active) || (a.sort - b.sort); }); },
+  equip_save: function (a) {
+    if (!dr_own()) dr_E('Недостаточно прав'); var T = window.__DB.dr_equip, nm = String(a.p_name || '').trim().slice(0, 120); if (!nm) dr_E('Напишите название');
+    if (a.p_id == null) { var id = dr_id(T); T.push({ id: id, name: nm, place: (a.p_place || '').trim() || null, active: a.p_active !== false, sort: a.p_sort != null ? a.p_sort : id }); return id; }
+    var x = T.filter(function (q) { return q.id === +a.p_id; })[0]; if (!x) dr_E('Оборудование не найдено');
+    x.name = nm; x.place = (a.p_place || '').trim() || null; x.active = a.p_active !== false; if (a.p_sort != null) x.sort = a.p_sort; return x.id;
+  },
+  repair_list: function () { dr_seed(); dr_lateD(); var lim = Date.now() - 60 * 864e5; return (window.__DB.dr_fix || []).filter(function (r) { return dr_seeD(r.created_by, r.dept_id, r.assigned_to) && (['new', 'assigned', 'work'].indexOf(r.status) >= 0 || Date.parse(r.done_at || r.cancelled_at || r.created_at) > lim); }).sort(function (a, b) { return a.created_at < b.created_at ? 1 : -1; }).map(dr_fixJ); },
+  repair_create: function (a) {
+    dr_seed(); var tx = String(a.p_text || '').trim(); if (!tx) dr_E('Опишите, что сломалось');
+    var T = window.__DB.dr_fix, r = { id: dr_id(T), place: (a.p_place || '').trim().slice(0, 120) || null, equipment_id: a.p_equipment || null, text: tx.slice(0, 2000), photo_path: a.p_photo_path || null, urgent: !!a.p_urgent, status: 'new', created_by: S.me.id, dept_id: S.me.dept_id, created_at: new Date().toISOString() };
+    T.push(r);
+    dr_bossesD(S.me.id).forEach(function (b) { dr_note('repair_new', b, r.urgent ? 'Срочно: что-то сломалось' : 'Новая заявка на ремонт', dr_whereD(r) + ': ' + tx.slice(0, 200) + ' · ' + fullName(S.me), 'repair', r.id, r.urgent); });
+    return r.id;
+  },
+  repair_assign: function (a) {
+    if (!dr_lead()) dr_E('Недостаточно прав'); var r = dr_getD('dr_fix', a.p_id, DR_WF);
+    if (['new', 'assigned', 'work'].indexOf(r.status) < 0) dr_E('Заявка уже закрыта');
+    var m = emp(a.p_member); if (!m || m.active === false) dr_E('Сотрудник не найден');
+    if (!isDirector() && m.id !== S.me.id && !dr_teamIds()[m.id]) dr_E('Назначить можно только человека из вашей команды');
+    var self = m.id === S.me.id, now = new Date().toISOString();
+    Object.assign(r, { assigned_to: m.id, assigned_by: S.me.id, assigned_at: now, status: self ? 'work' : 'assigned', taken_at: self ? now : null });
+    if (!self) dr_note('repair_assign', m.id, r.urgent ? 'Срочный ремонт — вам' : 'Вам назначен ремонт', dr_whereD(r) + ': ' + String(r.text).slice(0, 200), 'repair', r.id, r.urgent);
+    if (r.created_by !== S.me.id && r.created_by !== m.id) dr_note('repair_assign', r.created_by, 'Ремонт: назначен исполнитель', dr_whereD(r) + ' · ' + fullName(m), 'repair', r.id);
+    return { ok: true, status: r.status };
+  },
+  repair_take: function (a) {
+    var r = dr_getD('dr_fix', a.p_id, DR_WF); if (['new', 'assigned', 'work'].indexOf(r.status) < 0) dr_E('Заявка уже закрыта');
+    if (r.assigned_to !== S.me.id && !dr_lead()) dr_E('Заявку берёт назначенный исполнитель');
+    if (r.status === 'work' && r.assigned_to === S.me.id) return { ok: true, already: true };
+    var now = new Date().toISOString(); if (r.assigned_to !== S.me.id) { r.assigned_by = S.me.id; r.assigned_at = now; }
+    r.status = 'work'; r.assigned_to = S.me.id; r.taken_at = now;
+    if (r.created_by !== S.me.id) dr_note('repair_work', r.created_by, 'Ремонт начат', dr_whereD(r) + ' · ' + fullName(S.me), 'repair', r.id);
+    return { ok: true };
+  },
+  repair_done: function (a) {
+    var r = dr_getD('dr_fix', a.p_id, DR_WF); if (r.status === 'done') return { ok: true, already: true }; if (r.status === 'cancelled') dr_E('Заявка отменена');
+    if (r.assigned_to !== S.me.id && !dr_lead()) dr_E('Закрывает исполнитель или руководитель');
+    var nt = String(a.p_note || '').trim().slice(0, 1000) || null; if (!nt && !a.p_photo_path) dr_E('Добавьте фото после ремонта или напишите, что сделано');
+    var now = new Date().toISOString();
+    Object.assign(r, { status: 'done', done_at: now, done_by: S.me.id, done_note: nt, done_photo: a.p_photo_path || null, assigned_to: r.assigned_to || S.me.id, taken_at: r.taken_at || now });
+    if (r.created_by !== S.me.id) dr_note('repair_done', r.created_by, 'Отремонтировано', dr_whereD(r) + (nt ? ': ' + nt.slice(0, 200) : ''), 'repair', r.id);
+    if (r.assigned_by && r.assigned_by !== S.me.id && r.assigned_by !== r.created_by) dr_note('repair_done', r.assigned_by, 'Отремонтировано', dr_whereD(r) + ' · ' + fullName(S.me), 'repair', r.id);
+    return { ok: true };
+  },
+  repair_cancel: function (a) {
+    var r = dr_getD('dr_fix', a.p_id, DR_WF); if (r.status === 'cancelled') return { ok: true, already: true }; if (r.status === 'done') dr_E('Заявка уже выполнена');
+    if (!dr_lead() && !(r.created_by === S.me.id && ['new', 'assigned'].indexOf(r.status) >= 0)) dr_E('Отменить может автор (пока не взяли в работу) или руководитель');
+    Object.assign(r, { status: 'cancelled', cancelled_at: new Date().toISOString(), cancelled_by: S.me.id, cancel_note: String(a.p_note || '').trim() || null });
+    if (r.assigned_to && r.assigned_to !== S.me.id) dr_note('repair_cancel', r.assigned_to, 'Заявка на ремонт отменена', dr_whereD(r), 'repair', r.id);
+    if (r.created_by !== S.me.id) dr_note('repair_cancel', r.created_by, 'Заявка на ремонт отменена', dr_whereD(r), 'repair', r.id);
+    return { ok: true };
+  },
+  found_list: function () { dr_seed(); return (window.__DB.dr_lost || []).filter(function (f) { return dr_seeD(f.found_by, f.dept_id, null); }).sort(function (a, b) { return a.found_at < b.found_at ? 1 : -1; }).map(function (f) { return Object.assign({}, f); }); },
+  found_create: function (a) {
+    dr_seed(); var w = String(a.p_what || '').trim(); if (!w) dr_E('Напишите, что нашли'); var k = a.p_kind || 'other'; if (!DR_KIND[k]) dr_E('Неверный вид вещи');
+    var am = k === 'money' && a.p_amount != null ? Math.round(+a.p_amount) : null; if (am != null && !(am >= 0)) dr_E('Неверная сумма');
+    var T = window.__DB.dr_lost, now = new Date().toISOString(), f = { id: dr_id(T), kind: k, what: w.slice(0, 500), place: (a.p_place || '').trim().slice(0, 200) || null, amount: am, photo_path: a.p_photo_path || null, found_by: S.me.id, dept_id: S.me.dept_id, found_at: now, status: 'stored', created_at: now };
+    T.push(f);
+    dr_bossesD(S.me.id).forEach(function (b) { dr_note('found_new', b, 'Найдена вещь: ' + DR_KIND[k], w.slice(0, 200) + (am != null ? ' · ' + money(am) + ' сум' : '') + (f.place ? ' · ' + f.place : '') + ' · ' + fullName(S.me), 'found', f.id); });
+    return f.id;
+  },
+  found_give: function (a) {
+    if (!dr_lead()) dr_E('Недостаточно прав'); var f = dr_getD('dr_lost', a.p_id, DR_WL), st = a.p_status || 'given', to = String(a.p_to || '').trim().slice(0, 200);
+    if (['given', 'owner'].indexOf(st) < 0) dr_E('Неверный статус'); if (f.status !== 'stored') dr_E('Вещь уже выдана'); if (st === 'given' && !to) dr_E('Напишите, кому выдали');
+    var d = w3Dir(); Object.assign(f, { status: st, given_to: st === 'owner' ? (to || (d ? d.first_name + ' ' + d.last_name : '')) : to, given_note: String(a.p_note || '').trim() || null, given_at: new Date().toISOString(), given_by: S.me.id });
+    if (f.found_by !== S.me.id) dr_note('found_give', f.found_by, st === 'owner' ? 'Находка сдана владельцу' : 'Находка выдана', String(f.what).slice(0, 200) + (to ? ' · ' + to : ''), 'found', f.id);
+    if (st === 'owner') dr_ownersD().forEach(function (o) { if (o !== S.me.id) dr_note('found_owner', o, 'Вам сдана находка', String(f.what).slice(0, 200) + (f.amount != null ? ' · ' + money(f.amount) + ' сум' : '') + ' · ' + fullName(S.me), 'found', f.id); });
+    return { ok: true };
+  },
+  buy_list: function () { dr_seed(); var lim = Date.now() - 90 * 864e5; return (window.__DB.dr_buy || []).filter(function (b) { return dr_seeD(b.created_by, b.dept_id, b.bought_by) && (['new', 'approved', 'bought'].indexOf(b.status) >= 0 || Date.parse(b.received_at || b.decided_at || b.created_at) > lim); }).sort(function (a, b) { return a.created_at < b.created_at ? 1 : -1; }).map(function (b) { return Object.assign({}, b); }); },
+  buy_create: function (a) {
+    dr_seed(); var w = String(a.p_what || '').trim(); if (!w) dr_E('Напишите, что купить'); if (a.p_est_sum != null && !(+a.p_est_sum >= 0)) dr_E('Неверная сумма');
+    var T = window.__DB.dr_buy, b = { id: dr_id(T), what: w.slice(0, 500), qty: (a.p_qty || '').trim().slice(0, 60) || null, why: (a.p_why || '').trim().slice(0, 500) || null, est_sum: a.p_est_sum != null ? Math.round(+a.p_est_sum) : null, status: 'new', created_by: S.me.id, dept_id: S.me.dept_id, created_at: new Date().toISOString() };
+    T.push(b);
+    dr_ownersD().forEach(function (o) { if (o !== S.me.id) dr_note('buy_new', o, 'Заявка на закупку', w.slice(0, 200) + (b.qty ? ' · ' + b.qty : '') + (b.est_sum != null ? ' · ≈' + money(b.est_sum) + ' сум' : '') + ' · ' + fullName(S.me), 'buy', b.id); });
+    return b.id;
+  },
+  buy_decide: function (a) {
+    if (!dr_own()) dr_E('Недостаточно прав'); var b = dr_getD('dr_buy', a.p_id, DR_WB); if (b.status !== 'new') dr_E('По заявке уже решено');
+    var nt = String(a.p_note || '').trim().slice(0, 300) || null; Object.assign(b, { status: a.p_yes ? 'approved' : 'rejected', decided_by: S.me.id, decided_at: new Date().toISOString(), decide_note: nt });
+    if (b.created_by !== S.me.id) dr_note('buy_decide', b.created_by, a.p_yes ? 'Закупка одобрена' : 'Закупка отклонена', String(b.what).slice(0, 200) + (nt ? ' · ' + nt : ''), 'buy', b.id);
+    return { ok: true, status: b.status };
+  },
+  buy_bought: function (a) {
+    var b = dr_getD('dr_buy', a.p_id, DR_WB); if (b.status !== 'approved') dr_E(b.status === 'new' ? 'Сначала заявку одобряет владелец' : 'Заявка уже закрыта');
+    if (b.created_by !== S.me.id && !dr_lead()) dr_E('Отмечает автор заявки или руководитель');
+    if (a.p_fact_sum == null || !(+a.p_fact_sum >= 0)) dr_E('Напишите, сколько заплатили');
+    Object.assign(b, { status: 'bought', bought_by: S.me.id, bought_at: new Date().toISOString(), fact_sum: Math.round(+a.p_fact_sum), receipt_path: a.p_receipt_path || null });
+    dr_ownersD().forEach(function (o) { if (o !== S.me.id) dr_note('buy_bought', o, 'Куплено', String(b.what).slice(0, 160) + ' · ' + money(b.fact_sum) + ' сум' + (b.est_sum != null ? ' (план ' + money(b.est_sum) + ' сум)' : '') + (b.receipt_path ? '' : ' · без чека') + ' · ' + fullName(S.me), 'buy', b.id); });
+    return { ok: true };
+  },
+  buy_received: function (a) {
+    var b = dr_getD('dr_buy', a.p_id, DR_WB); if (b.status === 'received') return { ok: true, already: true }; if (b.status !== 'bought') dr_E('Сначала отметьте «Куплено»');
+    if (b.created_by !== S.me.id && !dr_lead()) dr_E('Отмечает автор заявки или руководитель');
+    Object.assign(b, { status: 'received', received_by: S.me.id, received_at: new Date().toISOString() });
+    if (b.bought_by && b.bought_by !== S.me.id) dr_note('buy_received', b.bought_by, 'Покупка получена', String(b.what).slice(0, 200) + ' · ' + fullName(S.me), 'buy', b.id);
+    return { ok: true };
+  },
+  buy_cancel: function (a) {
+    var b = dr_getD('dr_buy', a.p_id, DR_WB); if (b.status === 'cancelled') return { ok: true, already: true }; if (['new', 'approved'].indexOf(b.status) < 0) dr_E('Заявку уже нельзя отменить');
+    if (b.created_by !== S.me.id && !dr_own()) dr_E('Отменить может автор или владелец');
+    b.status = 'cancelled'; if (b.created_by !== S.me.id) dr_note('buy_cancel', b.created_by, 'Закупка отменена', String(b.what).slice(0, 200), 'buy', b.id);
+    return { ok: true };
+  },
+  requests_home: function () {
+    dr_seed(); dr_lateD(); var DB = window.__DB, me = S.me.id, lead = dr_lead(), own = dr_own(), open = ['new', 'assigned', 'work'];
+    var F = (DB.dr_fix || []).filter(function (r) { return dr_seeD(r.created_by, r.dept_id, r.assigned_to); });
+    return {
+      repair_todo: (DB.dr_fix || []).filter(function (r) { return r.assigned_to === me && ['assigned', 'work'].indexOf(r.status) >= 0; }).length,
+      repair_nobody: lead ? F.filter(function (r) { return r.status === 'new'; }).length : 0,
+      repair_urgent: F.filter(function (r) { return r.urgent && open.indexOf(r.status) >= 0; }).length,
+      buy_new: own ? (DB.dr_buy || []).filter(function (b) { return b.status === 'new'; }).length : 0,
+      buy_to_buy: (DB.dr_buy || []).filter(function (b) { return b.status === 'approved' && (b.created_by === me || (lead && dr_seeD(b.created_by, b.dept_id, b.bought_by))); }).length,
+      found_stored: lead ? (DB.dr_lost || []).filter(function (f) { return f.status === 'stored' && dr_seeD(f.found_by, f.dept_id, null); }).length : 0
+    };
+  }
+};
+(function () {
+  if (dr_sv() || !window.__DB || !sb || typeof sb.rpc !== 'function') return;
+  var r0 = sb.rpc;
+  sb.rpc = function (n, a) {
+    if (!DR_RPC[n]) return r0.apply(this, arguments);
+    return Promise.resolve().then(function () { if (!S.me) dr_E('Нужно войти'); return DR_RPC[n](a || {}); })
+      .then(function (d) { if (!/_list$|^requests_home$/.test(n)) dr_save(); return { data: d === undefined ? null : JSON.parse(JSON.stringify(d)), error: null }; },
+            function (e) { return { data: null, error: { message: (e && e.message) || String(e) } }; });
+  };
+})();
+
+/* ---------- 2. общее: стили, фото, статусы ---------- */
+(function () {
+  var st = document.createElement('style'); st.id = 'drCss';
+  st.textContent =
+    '.dr-row .dr-ic{width:40px;height:40px;flex:none;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--field);color:var(--muted);margin-top:2px}' +
+    '.dr-row .dr-ic.dr-u{color:var(--bad)}.dr-row .grow{min-width:0}.dr-row .name{white-space:normal;line-height:1.35}.dr-row .meta{white-space:normal}' +
+    '.dr-row>.chip{flex:none;max-width:42%;white-space:normal;text-align:center;line-height:1.25}' +
+    '.dr-acts{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 2px}.dr-acts .btn{flex:1 1 140px;min-height:48px}' +
+    '.dr-kinds{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 4px}.dr-kinds .pick{min-height:44px}' +
+    '.dr-ph{position:relative;margin:6px 0 2px}.dr-ph img{display:block;width:100%;max-height:260px;object-fit:cover;border-radius:12px}' +
+    '.dr-ph .dr-x{position:absolute;top:8px;right:8px;width:44px;height:44px;border-radius:50%;border:0;background:rgba(14,15,17,.72);color:#F4EFE6;display:flex;align-items:center;justify-content:center}' +
+    '.dr-hint{font-size:13px;color:var(--muted);line-height:1.45;white-space:normal}' +
+    '.dr-home .dr-hl{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:8px 0;border:0;border-top:1px solid var(--line2);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}' +
+    '.dr-home .dr-hl:first-of-type{border-top:0}.dr-home .dr-hl .grow{flex:1;min-width:0;white-space:normal}.dr-home .dr-hl b.num{font-size:17px}' +
+    '.dr-eq{display:flex;align-items:center;gap:8px;min-height:48px;padding:6px 0;border-top:1px solid var(--line2)}.dr-eq:first-of-type{border-top:0}.dr-eq .grow{min-width:0;white-space:normal}' +
+    '.dr-eq .btn{min-height:44px;min-width:44px;padding:0 10px}.dr-eq.off .grow{opacity:.55}' +
+    '.dr-masg .pick{min-width:0;overflow:hidden}.dr-masg .pick>span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.dr-sel{width:100%}.dr-cap{font-size:12.5px;font-weight:600;color:var(--muted);letter-spacing:.02em;margin-top:6px}';
+  document.head.appendChild(st);
+})();
+var DR_RST = { new: ['Новая', 't-warn'], assigned: ['Назначена', 't-info'], work: ['В работе', 't-info'], done: ['Готово', 't-ok'], cancelled: ['Отменена', 't-mute'] };
+var DR_LST = { stored: ['На хранении', 't-warn'], given: ['Выдано', 't-ok'], owner: ['Сдано владельцу', 't-ok'] };
+var DR_BST = { new: ['Ждёт решения', 't-warn'], approved: ['Одобрено — купить', 't-info'], rejected: ['Отклонено', 't-bad'], bought: ['Куплено', 't-ok'], received: ['Получено', 't-ok'], cancelled: ['Отменена', 't-mute'] };
+function dr_chip(m, s) { var x = m[s] || ['—', 't-mute']; return '<span class="chip ' + x[1] + '">' + dr_e(x[0]) + '</span>'; }
+function dr_photoBtn(id, label) { return '<button type="button" class="btn ghost full sm" id="' + id + '" style="min-height:48px">' + icon('cam', 18) + '<span>' + dr_e(label || 'Добавить фото') + '</span></button><div id="' + id + 's"></div>'; }
+/* выбрать и сжать фото; превью с крестиком (44 px) */
+function dr_pick(btnId, onSet) {
+  var b = $(btnId); if (!b) return;
+  b.onclick = async function () {
+    var f = await pickImage(); if (!f) return; var blob = await shrink(f); onSet(blob);
+    var box = $(btnId + 's'), u = ''; try { u = URL.createObjectURL(blob); } catch (e) {}
+    if (box) { box.innerHTML = '<div class="dr-ph"><img src="' + h(u) + '" alt=""><button type="button" class="dr-x" aria-label="' + dr_e('Убрать фото') + '">' + '✕' + '</button></div><div class="dr-hint">' + dr_e('Фото прикреплено') + '</div>'; box.querySelector('.dr-x').onclick = function (e) { e.stopPropagation(); onSet(null); box.innerHTML = ''; }; }
+  };
+}
+/* загрузка: путь демо «<я>/dr-…» — переходник кладёт в <заведение>/<я>/…; на сервер уходит его настоящий путь */
+async function dr_upload(blob, kind) {
+  if (!blob) return null;
+  var p = S.me.id + '/dr-' + kind + '-' + Date.now() + '.jpg';
+  var up = await sb.storage.from('task-photos').upload(p, blob, { contentType: 'image/jpeg', upsert: false });
+  if (up.error) throw up.error;
+  var real = (up.data && (up.data.svPath || up.data.fullPath)) || p;
+  try { DR.blob[real] = URL.createObjectURL(blob); DR.blob[p] = DR.blob[real]; } catch (e) {}
+  return real;
+}
+function dr_showPhoto(boxId, path) {
+  if (!path) return;
+  if (DR.blob[path]) { var b0 = $(boxId); if (b0) b0.innerHTML = '<div class="dr-ph"><img src="' + h(DR.blob[path]) + '" alt=""></div>'; return; }
+  sb.storage.from('task-photos').createSignedUrl(path, 3600).then(function (r) { var b = $(boxId); if (!b) return; b.innerHTML = r && r.data && r.data.signedUrl ? '<div class="dr-ph"><img src="' + h(r.data.signedUrl) + '" alt=""></div>' : '<div class="dr-hint">' + dr_e('Фото недоступно') + '</div>'; }, function () {});
+}
+function dr_busy(btn, on) { if (btn) btn.disabled = !!on; DR.busy = !!on; }
+function dr_head(main) { var m = $('main'); if (m && main) m.innerHTML = main; return m; }
+function dr_chips(cur, list) { return '<div class="chips">' + list.map(function (c) { return '<button type="button" class="pick ' + (cur === c[0] ? 'on' : '') + '" data-drf="' + c[0] + '" style="min-height:44px"><span>' + dr_e(c[1]) + '</span>' + (c[2] != null ? ' <b class="num">' + c[2] + '</b>' : '') + '</button>'; }).join('') + '</div>'; }
+function dr_stats(L) { return '<div class="stats">' + L.map(function (s) { return '<div class="stat"><div class="v num"' + (s[2] ? ' style="color:var(--' + s[2] + ')"' : '') + '>' + s[0] + '</div><div class="l">' + dr_e(s[1]) + '</div></div>'; }).join('') + '</div>'; }
+function dr_list(rows, empty) { return '<div class="card">' + (rows.length ? rows.join('') : '<div class="empty">' + dr_e(empty) + '</div>') + '</div>'; }
+/* после загрузки экрана — открыть заявку из уведомления */
+function dr_afterLoad(kind, all, open) { var o = DR.open; if (!o || o.k !== kind) return; DR.open = null; var x = all.filter(function (r) { return String(r.id) === String(o.id); })[0]; if (x) open(x); else toast(dr_t('Заявка недоступна или удалена')); }
+
+/* =====================================================================================
+   3. Заявки на ремонт
+   ===================================================================================== */
+function dr_fixWhere(x) { var w = [x.equipment ? dr_t(x.equipment) : null, x.place].filter(Boolean).join(' · '); return w || dr_t('Без места'); }
+function dr_fixMine(x) { return x.created_by === S.me.id || x.assigned_to === S.me.id; }
+function dr_fixWait(x) { return x.urgent && (x.status === 'new' || x.status === 'assigned') ? Math.round((Date.now() - Date.parse(x.created_at)) / 60000) : 0; }
+function dr_fixRow(x) {
+  var who = dr_nm(x.created_by), ex = x.assigned_to ? dr_nm(x.assigned_to) : '', w = dr_fixWait(x), late = w >= dr_urgMin();
+  var meta = '<span>' + h(dr_fixWhere(x)) + '</span> · <span>' + h(who) + '</span> · <span>' + h(ago(x.created_at)) + '</span>' +
+    (ex ? ' · <span>' + dr_e('исполнитель') + '</span>: <span>' + h(ex) + '</span>' : '') +
+    (late ? ' · <b style="color:var(--bad)">' + dr_e('не взята') + ' ' + h(fmtMin(w)) + '</b>' : '');
+  return '<button type="button" class="row dr-row" data-drr="' + x.id + '" style="align-items:flex-start"><span class="dr-ic' + (x.urgent && x.status !== 'done' && x.status !== 'cancelled' ? ' dr-u' : '') + '">' + icon('tool', 20) + '</span>' +
+    '<div class="grow"><div class="name">' + (x.urgent ? '<span class="chip t-bad" style="padding:1px 6px">' + dr_e('Срочно') + '</span> ' : '') + h(x.text) + '</div><div class="meta">' + meta + '</div></div>' + dr_chip(DR_RST, x.status) + '</button>';
+}
+async function vDrFix() {
+  var m = dr_head('<div class="card empty">' + dr_e('Загрузка заявок…') + '</div>');
+  var r = await dr_rpc('repair_list'); if (S.view !== 'drfix') return;
+  if (r.error) { m.innerHTML = '<div class="card note t-bad">' + h(dr_err(r)) + '</div>'; return; }
+  var all = r.data || [], lead = dr_lead(), own = dr_own(), open = function (x) { return ['new', 'assigned', 'work'].indexOf(x.status) >= 0; };
+  var f = S.sub.drFixF || (lead ? 'open' : 'mine'); if (f === 'nobody' && !lead) f = 'open';
+  var nobody = all.filter(function (x) { return x.status === 'new'; }).length, td = today();
+  var list = all.filter(function (x) { return f === 'open' ? open(x) : f === 'mine' ? dr_fixMine(x) : f === 'nobody' ? x.status === 'new' : !open(x); });
+  var rank = function (x) { return !open(x) ? 9 : dr_fixWait(x) >= dr_urgMin() ? 0 : x.urgent ? 1 : x.assigned_to === S.me.id ? 2 : x.status === 'new' ? 3 : 4; };
+  list.sort(function (a, b) { var ra = rank(a), rb = rank(b); if (ra !== rb) return ra - rb; return a.created_at < b.created_at ? 1 : -1; });
+  var chips = [['open', 'Открытые'], ['mine', 'Мои']].concat(lead ? [['nobody', 'Без исполнителя', nobody]] : []).concat([['done', 'Закрытые']]);
+  m.innerHTML = '<button type="button" class="btn gold full" id="drFixNew" style="min-height:52px">' + icon('tool', 18) + '<span>' + dr_e('Что сломалось — сообщить') + '</span></button>' +
+    (own ? '<button type="button" class="btn ghost full sm" id="drEq" style="min-height:44px;margin-top:8px">' + icon('edit', 16) + '<span>' + dr_e('Список оборудования') + '</span></button>' : '') +
+    dr_stats([[nobody, 'без исполнителя', 'bad'], [all.filter(function (x) { return x.status === 'assigned' || x.status === 'work'; }).length, 'в работе', 'info'], [all.filter(function (x) { return x.status === 'done' && x.done_at && tsDate(x.done_at) === td; }).length, 'готово сегодня', 'ok']]) +
+    dr_chips(f, chips) + dr_list(list.map(dr_fixRow), f === 'open' ? 'Открытых заявок нет' : 'Заявок нет');
+  $('drFixNew').onclick = function () { dr_fixNew(); };
+  if ($('drEq')) $('drEq').onclick = function () { dr_eqSheet(); };
+  m.querySelectorAll('[data-drf]').forEach(function (b) { b.onclick = function () { S.sub.drFixF = b.getAttribute('data-drf'); vDrFix(); }; });
+  m.querySelectorAll('[data-drr]').forEach(function (b) { b.onclick = function () { var id = b.getAttribute('data-drr'); dr_fixSheet(all.filter(function (x) { return String(x.id) === id; })[0]); }; });
+  dr_afterLoad('repair', all, dr_fixSheet);
+}
+function dr_fixQuick() {
+  return dr_lx() ? ['Не включается', 'Течёт вода', 'Не сливает воду', 'Не греет', 'Шумит, стучит', 'Ошибка на экране', 'Не закрывается дверца', 'Не горит свет']
+    : ['Не включается', 'Течёт вода', 'Не горит свет', 'Шумит, стучит', 'Сломан замок или дверь', 'Не работает кондиционер'];
+}
+async function dr_fixNew() {
+  var eq = await dr_rpc('equip_list'), L = ((eq && eq.data) || []).filter(function (e) { return e.active !== false; });
+  var html = sheetHead(dr_e('Что сломалось'), dr_e('Руководитель получит уведомление сразу')) +
+    (L.length ? '<label class="f">' + dr_e('Оборудование') + '<select class="in dr-sel" id="drQe"><option value="">' + dr_e('— не из списка —') + '</option>' + L.map(function (e) { return '<option value="' + e.id + '">' + h(dr_t(e.name)) + (e.place ? ' · ' + h(e.place) : '') + '</option>'; }).join('') + '</select></label>' : '') +
+    '<label class="f">' + dr_e('Где') + '<input class="in" id="drQp" maxlength="120" placeholder="' + dr_e(dr_lx() ? 'например: цех, у машины химчистки' : 'например: зал, склад, вход') + '"></label>' +
+    '<div class="chips">' + dr_fixQuick().map(function (t) { return '<button type="button" class="pick" data-drq="' + h(t) + '" style="min-height:44px">' + dr_e(t) + '</button>'; }).join('') + '</div>' +
+    '<label class="f">' + dr_e('Что случилось') + '<textarea class="in" id="drQt" rows="3" maxlength="2000" placeholder="' + dr_e('Опишите коротко') + '"></textarea></label>' +
+    '<label style="display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;min-height:44px"><input type="checkbox" id="drQu" style="width:22px;height:22px;accent-color:var(--bad)"> <span>' + dr_e('Срочно — работа стоит') + '</span></label>' +
+    dr_photoBtn('drQph') +
+    '<button type="button" class="btn gold full" id="drQs" style="min-height:52px">' + dr_e('Отправить') + '</button>';
+  sheet(html);
+  var photo = null; dr_pick('drQph', function (b) { photo = b; });
+  $('layer').querySelectorAll('[data-drq]').forEach(function (b) { b.onclick = function () { var t = $('drQt'), q = dr_t(b.getAttribute('data-drq')); t.value = t.value.trim() ? t.value.trim().replace(/[.\s]+$/, '') + '. ' + q : q; t.focus(); }; });
+  $('drQs').onclick = async function () {
+    var tx = $('drQt').value.trim(); if (!tx) { toast(dr_t('Опишите, что случилось')); $('drQt').focus(); return; }
+    var btn = this; dr_busy(btn, 1);
+    try {
+      var ph = await dr_upload(photo, 'fix');
+      var r = await dr_rpc('repair_create', { p_text: tx, p_place: $('drQp').value.trim() || null, p_equipment: $('drQe') && $('drQe').value ? +$('drQe').value : null, p_urgent: $('drQu').checked, p_photo_path: ph });
+      if (r.error) throw r.error;
+      toast(dr_t('Заявка отправлена руководителю')); closeLayer(); S.sub.drFixF = dr_lead() ? 'open' : 'mine'; if (S.view === 'drfix') vDrFix(); else go('drfix');
+    } catch (e) { toast(err(e)); } finally { dr_busy(btn, 0); }
+  };
+}
+function dr_assignees() {
+  var act = (S.emps || []).filter(function (e) { return e.active !== false; });
+  var L = isDirector() ? act.filter(function (e) { return e.id !== S.me.id; }) : myTeam().filter(function (e) { return e.active !== false; });
+  return [S.me].concat(L.sort(function (a, b) { return a.first_name < b.first_name ? -1 : 1; }));
+}
+function dr_fixSheet(x) {
+  if (!x) return;
+  var lead = dr_lead(), me = S.me.id, act = ['new', 'assigned', 'work'].indexOf(x.status) >= 0, isEx = x.assigned_to === me, w = dr_fixWait(x);
+  var meta = '<span>' + dr_e('Сообщил(а)') + ':</span> <span>' + h(dr_nm(x.created_by)) + '</span> · <span>' + h(dr_when(x.created_at)) + '</span>';
+  if (x.assigned_to) meta += '<br><span>' + dr_e('Исполнитель') + ':</span> <span>' + h(dr_nm(x.assigned_to)) + '</span>' + (x.taken_at ? ' · <span>' + dr_e('взял в') + '</span> <b>' + h(dr_when(x.taken_at)) + '</b>' : '');
+  if (x.status === 'done') meta += '<br><span>' + dr_e('Готово') + ':</span> <b>' + h(dr_when(x.done_at)) + '</b> · <span>' + h(dr_nm(x.done_by)) + '</span>';
+  if (x.status === 'cancelled') meta += '<br><span>' + dr_e('Отменена') + ':</span> <b>' + h(dr_when(x.cancelled_at)) + '</b>' + (x.cancel_note ? ' · ' + h(x.cancel_note) : '');
+  if (act && w >= dr_urgMin()) meta += '<br><b style="color:var(--bad)">' + dr_e('Срочная не взята') + ' ' + h(fmtMin(w)) + '</b>';
+  var html = sheetHead(h(dr_fixWhere(x)), dr_chip(DR_RST, x.status) + (x.urgent ? ' <span class="chip t-bad">' + dr_e('Срочно') + '</span>' : '')) +
+    '<div class="mbox">' + h(x.text) + '</div><div class="meta" style="font-size:13px;white-space:normal">' + meta + '</div>' +
+    (x.photo_path ? '<div class="dr-cap">' + dr_e('Фото поломки') + '</div><div id="drFp" class="dr-hint">' + dr_e('Загружаю фото…') + '</div>' : '') +
+    (x.done_note ? '<div class="note t-ok">' + h(x.done_note) + '</div>' : '') +
+    (x.done_photo ? '<div class="dr-cap">' + dr_e('Фото после ремонта') + '</div><div id="drFd" class="dr-hint">' + dr_e('Загружаю фото…') + '</div>' : '');
+  if (lead && act) {
+    var A = dr_assignees();
+    html += '<div class="dr-cap">' + dr_e(x.assigned_to ? 'Назначить другого исполнителя' : 'Назначить исполнителя') + '</div><div class="masg dr-masg">' + A.map(function (e) {
+      return '<button type="button" class="pick' + (x.assigned_to === e.id ? ' on' : '') + '" data-dra="' + h(e.id) + '"><span style="font-size:14.5px;font-weight:700">' + (e.id === me ? dr_e('Я сам') : h(e.first_name + ' ' + (e.last_name || '').charAt(0) + '.')) + '</span><span class="s">' + h(typeof posName === 'function' ? (posName(e.position_id) || '') : '') + '</span></button>';
+    }).join('') + '</div>';
+  }
+  if (act && isEx && x.status === 'assigned') html += '<button type="button" class="btn dark full" id="drFt" style="min-height:52px">' + dr_e('Беру в работу') + '</button>';
+  if (act && (isEx || lead)) html += '<div class="dr-cap">' + dr_e('Закрыть заявку') + '</div><label class="f">' + dr_e('Что сделано') + '<textarea class="in" id="drFn" rows="2" maxlength="1000" placeholder="' + dr_e('Например: заменил прокладку') + '"></textarea></label>' +
+    dr_photoBtn('drFdp', 'Фото после ремонта') + '<button type="button" class="btn green full" id="drFok" style="min-height:52px" disabled>' + dr_e('Готово') + '</button><div class="dr-hint" id="drFh" style="text-align:center">' + dr_e('Добавьте фото после ремонта или напишите, что сделано') + '</div>';
+  if (act && (lead || (x.created_by === me && x.status !== 'work'))) html += '<button type="button" class="btn ghostbad full sm" id="drFc" style="min-height:44px">' + dr_e('Отменить заявку') + '</button>';
+  html += '<button type="button" class="btn ghost full" id="drFx" style="min-height:48px">' + dr_e('Назад') + '</button>';
+  sheet(html); $('drFx').onclick = closeLayer;
+  dr_showPhoto('drFp', x.photo_path); dr_showPhoto('drFd', x.done_photo);
+  var reload = function () { closeLayer(); if (S.view === 'drfix') vDrFix(); else if (S.view === 'home') render(); };
+  async function call(btn, n, a, msg) { dr_busy(btn, 1); try { var r = await dr_rpc(n, a); if (r.error) throw r.error; toast(dr_t(msg)); reload(); } catch (e) { toast(err(e)); } finally { dr_busy(btn, 0); } }
+  $('layer').querySelectorAll('[data-dra]').forEach(function (b) { b.onclick = function () { var id = b.getAttribute('data-dra'); if (id === x.assigned_to && x.status !== 'new') return; call(b, 'repair_assign', { p_id: x.id, p_member: id }, id === me ? 'Заявка ваша — в работе' : 'Исполнитель назначен, ему пришло уведомление'); }; });
+  if ($('drFt')) $('drFt').onclick = function () { call(this, 'repair_take', { p_id: x.id }, 'Заявка в работе'); };
+  if ($('drFok')) {
+    var dp = null, nt = $('drFn'), ok = $('drFok'), chk = function () { var y = !!(nt.value.trim() || dp); ok.disabled = !y; $('drFh').style.display = y ? 'none' : ''; };
+    nt.oninput = chk; dr_pick('drFdp', function (b) { dp = b; chk(); });
+    ok.onclick = async function () { var btn = this; dr_busy(btn, 1); try { var ph = await dr_upload(dp, 'fixed'); var r = await dr_rpc('repair_done', { p_id: x.id, p_note: nt.value.trim() || null, p_photo_path: ph }); if (r.error) throw r.error; toast(dr_t('Заявка закрыта — автор получил уведомление')); reload(); } catch (e) { toast(err(e)); dr_busy(btn, 0); chk(); } };
+  }
+  if ($('drFc')) $('drFc').onclick = async function () { var btn = this; if (!(await askSure('Отменить заявку на ремонт?', { ok: 'Отменить заявку', cancel: 'Не отменять', danger: true }))) return; call(btn, 'repair_cancel', { p_id: x.id, p_note: null }, 'Заявка отменена'); };
+}
+/* список оборудования — ведёт владелец; там же «через сколько минут срочная считается не взятой» */
+async function dr_eqSheet() {
+  var r = await dr_rpc('equip_list'); if (r.error) return toast(dr_err(r));
+  var L = r.data || [], lim = dr_urgMin();
+  var html = sheetHead(dr_e('Список оборудования'), dr_e('Из него сотрудник выбирает, что сломалось')) +
+    '<div class="card" style="margin:0">' + (L.length ? L.map(function (e) {
+      return '<div class="dr-eq' + (e.active ? '' : ' off') + '"><div class="grow"><b>' + h(dr_t(e.name)) + '</b>' + (e.place ? '<div class="meta">' + h(e.place) + '</div>' : '') + (e.active ? '' : '<div class="meta">' + dr_e('Скрыто') + '</div>') + '</div>' +
+        '<button type="button" class="btn ghost sm" data-dre="' + e.id + '" aria-label="' + dr_e('Изменить') + '">' + icon('edit', 16) + '</button>' +
+        '<button type="button" class="btn ghost sm" data-drh="' + e.id + '">' + dr_e(e.active ? 'Скрыть' : 'Вернуть') + '</button></div>';
+    }).join('') : '<div class="empty">' + dr_e('Список пуст') + '</div>') + '</div>' +
+    '<label class="f">' + dr_e('Новое оборудование') + '<input class="in" id="drEn" maxlength="120" placeholder="' + dr_e(dr_lx() ? 'например: Стиральная машина 3' : 'например: Холодильник 2') + '"></label>' +
+    '<label class="f">' + dr_e('Где стоит (необязательно)') + '<input class="in" id="drEp" maxlength="120"></label>' +
+    '<button type="button" class="btn gold full" id="drEa" style="min-height:48px">' + dr_e('Добавить') + '</button>' +
+    '<label class="f">' + dr_e('Срочную заявку не взяли — сообщить руководителю через') + '<select class="in dr-sel" id="drEl">' + [10, 15, 20, 30, 60].map(function (n) { return '<option value="' + n + '"' + (n === lim ? ' selected' : '') + '>' + n + ' ' + dr_e('мин') + '</option>'; }).join('') + '</select></label>' +
+    '<button type="button" class="btn ghost full" id="drEx" style="min-height:48px">' + dr_e('Закрыть') + '</button>';
+  sheet(html); $('drEx').onclick = closeLayer;
+  async function save(btn, a, msg) { dr_busy(btn, 1); try { var x = await dr_rpc('equip_save', a); if (x.error) throw x.error; toast(dr_t(msg)); dr_eqSheet(); } catch (e) { toast(err(e)); } finally { dr_busy(btn, 0); } }
+  $('drEa').onclick = function () { var n = $('drEn').value.trim(); if (!n) { toast(dr_t('Напишите название')); return; } save(this, { p_id: null, p_name: n, p_place: $('drEp').value.trim() || null, p_active: true }, 'Добавлено'); };
+  $('layer').querySelectorAll('[data-drh]').forEach(function (b) { b.onclick = function () { var e = L.filter(function (q) { return String(q.id) === b.getAttribute('data-drh'); })[0]; if (e) save(b, { p_id: e.id, p_name: e.name, p_place: e.place, p_active: !e.active }, e.active ? 'Скрыто из списка' : 'Возвращено в список'); }; });
+  $('layer').querySelectorAll('[data-dre]').forEach(function (b) { b.onclick = function () {
+    var e = L.filter(function (q) { return String(q.id) === b.getAttribute('data-dre'); })[0]; if (!e) return;
+    var row = b.parentNode; row.innerHTML = '<div class="grow" style="display:flex;flex-direction:column;gap:6px"><input class="in" id="drEe" maxlength="120" value="' + h(e.name) + '"><input class="in" id="drEe2" maxlength="120" placeholder="' + dr_e('Где стоит') + '" value="' + h(e.place || '') + '"></div><button type="button" class="btn gold sm" id="drEs">' + dr_e('Сохранить') + '</button>';
+    $('drEs').onclick = function () { var n = $('drEe').value.trim(); if (!n) { toast(dr_t('Напишите название')); return; } save(this, { p_id: e.id, p_name: n, p_place: $('drEe2').value.trim() || null, p_active: e.active }, 'Сохранено'); };
+  }; });
+  $('drEl').onchange = async function () { var n = +this.value; try { await w3SavePref({ repair_urgent_min: n }); toast(dr_t('Сохранено')); } catch (e) { toast(err(e)); } };
+}
+
+/* =====================================================================================
+   4. Потерянные вещи (бюро находок)
+   ===================================================================================== */
+function dr_lostRow(x) {
+  var meta = (x.place ? '<span>' + h(x.place) + '</span> · ' : '') + '<span>' + dr_e('нашёл(ла)') + '</span> <span>' + h(dr_nm(x.found_by)) + '</span> · <span>' + h(dr_when(x.found_at)) + '</span>' +
+    (x.status !== 'stored' && x.given_to ? ' · <span>' + dr_e('кому') + ':</span> <span>' + h(x.given_to) + '</span>' : '');
+  return '<button type="button" class="row dr-row" data-drl="' + x.id + '" style="align-items:flex-start"><span class="dr-ic">' + icon(x.kind === 'keys' ? 'key' : x.kind === 'money' ? 'card' : 'lugg', 20) + '</span>' +
+    '<div class="grow"><div class="name"><span class="chip t-mute" style="padding:1px 6px">' + dr_e(DR_KIND[x.kind] || 'Вещь') + '</span> ' + h(x.what) + (x.amount != null ? ' · <b class="num">' + h(dr_sum(x.amount)) + '</b>' : '') + '</div><div class="meta">' + meta + '</div></div>' + dr_chip(DR_LST, x.status) + '</button>';
+}
+async function vDrLost() {
+  var m = dr_head('<div class="card empty">' + dr_e('Загрузка…') + '</div>');
+  var r = await dr_rpc('found_list'); if (S.view !== 'drlost') return;
+  if (r.error) { m.innerHTML = '<div class="card note t-bad">' + h(dr_err(r)) + '</div>'; return; }
+  var all = r.data || [], f = S.sub.drLostF || 'stored', since = Date.now() - 30 * 864e5;
+  var stored = all.filter(function (x) { return x.status === 'stored'; }), money0 = stored.filter(function (x) { return x.kind === 'money'; }).reduce(function (s, x) { return s + (+x.amount || 0); }, 0);
+  var list = all.filter(function (x) { return f === 'stored' ? x.status === 'stored' : x.status !== 'stored'; });
+  m.innerHTML = '<button type="button" class="btn gold full" id="drLNew" style="min-height:52px">' + icon('lugg', 18) + '<span>' + dr_e('Нашли вещь — записать') + '</span></button>' +
+    (dr_lx() ? '<div class="dr-hint" style="margin:8px 2px 0">' + dr_e('Проверяйте карманы при приёмке и перед чисткой: деньги, ключи, документы — сразу сюда, с номером заказа.') + '</div>' : '') +
+    dr_stats([[stored.length, 'на хранении', 'warn'], [money0 ? money(money0) : 0, 'денег на хранении, сум', ''], [all.filter(function (x) { return x.status !== 'stored' && x.given_at && Date.parse(x.given_at) > since; }).length, 'выдано за 30 дней', 'ok']]) +
+    dr_chips(f, [['stored', 'На хранении', stored.length], ['given', 'Выданные']]) + dr_list(list.map(dr_lostRow), f === 'stored' ? 'На хранении ничего нет' : 'Пока ничего не выдано');
+  $('drLNew').onclick = function () { dr_lostNew(); };
+  m.querySelectorAll('[data-drf]').forEach(function (b) { b.onclick = function () { S.sub.drLostF = b.getAttribute('data-drf'); vDrLost(); }; });
+  m.querySelectorAll('[data-drl]').forEach(function (b) { b.onclick = function () { var id = b.getAttribute('data-drl'); dr_lostSheet(all.filter(function (x) { return String(x.id) === id; })[0]); }; });
+  dr_afterLoad('found', all, dr_lostSheet);
+}
+function dr_lostNew() {
+  var kind = 'other', K = ['money', 'keys', 'docs', 'phone', 'jewel', 'clothes', 'other'];
+  var html = sheetHead(dr_e('Нашли вещь'), dr_e('Руководитель и владелец узнают сразу')) +
+    '<div class="dr-kinds">' + K.map(function (k) { return '<button type="button" class="pick' + (k === kind ? ' on' : '') + '" data-drk="' + k + '">' + dr_e(DR_KIND[k]) + '</button>'; }).join('') + '</div>' +
+    '<label class="f">' + dr_e('Что нашли') + '<textarea class="in" id="drLw" rows="2" maxlength="500" placeholder="' + dr_e(dr_lx() ? 'например: деньги в кармане пиджака' : 'например: телефон в чехле') + '"></textarea></label>' +
+    '<label class="f" id="drLaW" hidden>' + dr_e('Сумма, сум') + '<input class="in" id="drLa" inputmode="numeric" maxlength="15" placeholder="20 000"></label>' +
+    '<label class="f">' + dr_e(dr_lx() ? 'Где / у какого заказа или клиента' : 'Где нашли / чьё') + '<input class="in" id="drLp" maxlength="200" placeholder="' + dr_e(dr_lx() ? 'например: заказ 2417, пиджак, клиент Каримов' : 'например: зал, у окна') + '"></label>' +
+    dr_photoBtn('drLph') + '<button type="button" class="btn gold full" id="drLs" style="min-height:52px">' + dr_e('Записать') + '</button>';
+  sheet(html);
+  var photo = null; dr_pick('drLph', function (b) { photo = b; });
+  $('layer').querySelectorAll('[data-drk]').forEach(function (b) { b.onclick = function () { kind = b.getAttribute('data-drk'); $('layer').querySelectorAll('[data-drk]').forEach(function (c) { c.classList.toggle('on', c === b); }); $('drLaW').hidden = kind !== 'money'; }; });
+  $('drLs').onclick = async function () {
+    var w = $('drLw').value.trim(); if (!w) { toast(dr_t('Напишите, что нашли')); $('drLw').focus(); return; }
+    var am = kind === 'money' ? dr_num($('drLa').value) : null; if (am !== null && isNaN(am)) { toast(dr_t('Неверная сумма')); return; }
+    var btn = this; dr_busy(btn, 1);
+    try {
+      var ph = await dr_upload(photo, 'found');
+      var r = await dr_rpc('found_create', { p_what: w, p_kind: kind, p_place: $('drLp').value.trim() || null, p_amount: am, p_photo_path: ph });
+      if (r.error) throw r.error;
+      toast(dr_t('Записано — вещь на хранении')); closeLayer(); S.sub.drLostF = 'stored'; if (S.view === 'drlost') vDrLost(); else go('drlost');
+    } catch (e) { toast(err(e)); } finally { dr_busy(btn, 0); }
+  };
+}
+function dr_lostSheet(x) {
+  if (!x) return;
+  var lead = dr_lead();
+  var meta = '<span>' + dr_e('Нашёл(ла)') + ':</span> <span>' + h(dr_nm(x.found_by)) + '</span> · <span>' + h(dr_when(x.found_at)) + '</span>' + (x.place ? '<br><span>' + dr_e('Где / заказ') + ':</span> <span>' + h(x.place) + '</span>' : '') +
+    (x.status !== 'stored' ? '<br><span>' + dr_e(x.status === 'owner' ? 'Сдано владельцу' : 'Выдано') + ':</span> <b>' + h(dr_when(x.given_at)) + '</b>' + (x.given_to ? ' · <span>' + h(x.given_to) + '</span>' : '') + (x.given_by ? ' · <span>' + dr_e('отметил(а)') + '</span> <span>' + h(dr_nm(x.given_by)) + '</span>' : '') : '');
+  var html = sheetHead(dr_e(DR_KIND[x.kind] || 'Вещь') + (x.amount != null ? ' · ' + h(dr_sum(x.amount)) : ''), dr_chip(DR_LST, x.status)) +
+    '<div class="mbox">' + h(x.what) + '</div><div class="meta" style="font-size:13px;white-space:normal">' + meta + '</div>' + (x.given_note ? '<div class="note t-info">' + h(x.given_note) + '</div>' : '') +
+    (x.photo_path ? '<div id="drLpi" class="dr-hint">' + dr_e('Загружаю фото…') + '</div>' : '');
+  if (lead && x.status === 'stored') html += '<div class="dr-cap">' + dr_e('Выдать вещь') + '</div><label class="f">' + dr_e('Кому выдали') + '<input class="in" id="drGt" maxlength="200" placeholder="' + dr_e('Имя, телефон или документ') + '"></label>' +
+    '<label class="f">' + dr_e('Заметка (необязательно)') + '<input class="in" id="drGn" maxlength="500"></label>' +
+    '<div class="dr-acts"><button type="button" class="btn green" id="drGg">' + dr_e('Выдано') + '</button>' + (isDirector() ? '' : '<button type="button" class="btn ghost" id="drGo">' + dr_e('Сдано владельцу') + '</button>') + '</div>';
+  else if (x.status === 'stored') html += '<div class="dr-hint">' + dr_e('Вещь на хранении. Выдаёт руководитель или владелец.') + '</div>';
+  html += '<button type="button" class="btn ghost full" id="drLx" style="min-height:48px">' + dr_e('Назад') + '</button>';
+  sheet(html); $('drLx').onclick = closeLayer; dr_showPhoto('drLpi', x.photo_path);
+  async function give(btn, st) {
+    var to = $('drGt').value.trim(); if (st === 'given' && !to) { toast(dr_t('Напишите, кому выдали')); $('drGt').focus(); return; }
+    dr_busy(btn, 1);
+    try { var r = await dr_rpc('found_give', { p_id: x.id, p_status: st, p_to: to || null, p_note: $('drGn').value.trim() || null }); if (r.error) throw r.error; toast(dr_t(st === 'owner' ? 'Отмечено: сдано владельцу' : 'Отмечено: выдано')); closeLayer(); if (S.view === 'drlost') vDrLost(); }
+    catch (e) { toast(err(e)); } finally { dr_busy(btn, 0); }
+  }
+  if ($('drGg')) $('drGg').onclick = function () { give(this, 'given'); };
+  if ($('drGo')) $('drGo').onclick = function () { give(this, 'owner'); };
+}
+
+/* =====================================================================================
+   5. Заявки на закупку (простые: без склада и поставщиков)
+   ===================================================================================== */
+function dr_buyRow(x) {
+  var meta = (x.qty ? '<span>' + h(x.qty) + '</span> · ' : '') + (x.est_sum != null ? '<span>≈' + h(dr_sum(x.est_sum)) + '</span> · ' : '') + '<span>' + h(dr_nm(x.created_by)) + '</span> · <span>' + h(ago(x.created_at)) + '</span>' +
+    (x.fact_sum != null ? ' · <span>' + dr_e('факт') + '</span> <b class="num">' + h(dr_sum(x.fact_sum)) + '</b>' : '');
+  return '<button type="button" class="row dr-row" data-drb="' + x.id + '" style="align-items:flex-start"><span class="dr-ic">' + icon('bag', 20) + '</span><div class="grow"><div class="name">' + h(x.what) + '</div><div class="meta">' + meta + '</div></div>' + dr_chip(DR_BST, x.status) + '</button>';
+}
+async function vDrBuy() {
+  var m = dr_head('<div class="card empty">' + dr_e('Загрузка заявок…') + '</div>');
+  var r = await dr_rpc('buy_list'); if (S.view !== 'drbuy') return;
+  if (r.error) { m.innerHTML = '<div class="card note t-bad">' + h(dr_err(r)) + '</div>'; return; }
+  var all = r.data || [], open = function (x) { return ['new', 'approved', 'bought'].indexOf(x.status) >= 0; }, f = S.sub.drBuyF || 'open', ym = today().slice(0, 7);
+  var list = all.filter(function (x) { return f === 'open' ? open(x) : f === 'mine' ? x.created_by === S.me.id : !open(x); });
+  var rank = function (x) { return ({ new: 0, approved: 1, bought: 2 })[x.status] != null ? ({ new: 0, approved: 1, bought: 2 })[x.status] : 5; };
+  list.sort(function (a, b) { var ra = rank(a), rb = rank(b); if (ra !== rb) return ra - rb; return a.created_at < b.created_at ? 1 : -1; });
+  var spent = all.filter(function (x) { return (x.status === 'bought' || x.status === 'received') && x.bought_at && tsDate(x.bought_at).slice(0, 7) === ym; }).reduce(function (s, x) { return s + (+x.fact_sum || 0); }, 0);
+  m.innerHTML = '<button type="button" class="btn gold full" id="drBNew" style="min-height:52px">' + icon('bag', 18) + '<span>' + dr_e(dr_own() ? 'Нужно купить — записать' : 'Нужно купить — попросить') + '</span></button>' +
+    dr_stats([[all.filter(function (x) { return x.status === 'new'; }).length, 'ждут решения', 'warn'], [all.filter(function (x) { return x.status === 'approved'; }).length, 'купить', 'info'], [money(spent), 'потрачено за месяц, сум', 'ok']]) +
+    dr_chips(f, [['open', 'Открытые'], ['mine', 'Мои'], ['done', 'Закрытые']]) + dr_list(list.map(dr_buyRow), f === 'open' ? 'Открытых заявок нет' : 'Заявок нет');
+  $('drBNew').onclick = function () { dr_buyNew(); };
+  m.querySelectorAll('[data-drf]').forEach(function (b) { b.onclick = function () { S.sub.drBuyF = b.getAttribute('data-drf'); vDrBuy(); }; });
+  m.querySelectorAll('[data-drb]').forEach(function (b) { b.onclick = function () { var id = b.getAttribute('data-drb'); dr_buySheet(all.filter(function (x) { return String(x.id) === id; })[0]); }; });
+  dr_afterLoad('buy', all, dr_buySheet);
+}
+function dr_buyNew() {
+  var html = sheetHead(dr_e('Нужно купить'), dr_e(dr_own() ? 'Заявка сразу будет одобрена вами' : 'Владелец получит заявку и решит')) +
+    '<label class="f">' + dr_e('Что купить') + '<input class="in" id="drBw" maxlength="500" placeholder="' + dr_e(dr_lx() ? 'например: пятновыводитель для жирных пятен' : 'например: моющее средство для пола') + '"></label>' +
+    '<label class="f">' + dr_e('Сколько') + '<input class="in" id="drBq" maxlength="60" placeholder="' + dr_e('например: 2 л, 100 шт') + '"></label>' +
+    '<label class="f">' + dr_e('Зачем') + '<textarea class="in" id="drBy" rows="2" maxlength="500" placeholder="' + dr_e('например: закончился, работа стоит') + '"></textarea></label>' +
+    '<label class="f">' + dr_e('Примерная сумма, сум') + '<input class="in" id="drBs" inputmode="numeric" maxlength="15" placeholder="150 000"></label>' +
+    '<button type="button" class="btn gold full" id="drBgo" style="min-height:52px">' + dr_e(dr_own() ? 'Записать' : 'Отправить владельцу') + '</button>';
+  sheet(html);
+  $('drBgo').onclick = async function () {
+    var w = $('drBw').value.trim(); if (!w) { toast(dr_t('Напишите, что купить')); $('drBw').focus(); return; }
+    var s = dr_num($('drBs').value); if (s !== null && isNaN(s)) { toast(dr_t('Неверная сумма')); return; }
+    var btn = this; dr_busy(btn, 1);
+    try {
+      var r = await dr_rpc('buy_create', { p_what: w, p_qty: $('drBq').value.trim() || null, p_why: $('drBy').value.trim() || null, p_est_sum: s });
+      if (r.error) throw r.error;
+      if (dr_own() && r.data) { var d = await dr_rpc('buy_decide', { p_id: r.data, p_yes: true, p_note: null }); if (d.error) throw d.error; }
+      toast(dr_t(dr_own() ? 'Записано — можно покупать' : 'Заявка отправлена владельцу')); closeLayer(); S.sub.drBuyF = 'open'; if (S.view === 'drbuy') vDrBuy(); else go('drbuy');
+    } catch (e) { toast(err(e)); } finally { dr_busy(btn, 0); }
+  };
+}
+function dr_buySheet(x) {
+  if (!x) return;
+  var own = dr_own(), lead = dr_lead(), mine = x.created_by === S.me.id;
+  var meta = '<span>' + dr_e('Просит') + ':</span> <span>' + h(dr_nm(x.created_by)) + '</span> · <span>' + h(dr_when(x.created_at)) + '</span>' +
+    (x.decided_at ? '<br><span>' + dr_e(x.status === 'rejected' ? 'Отклонено' : 'Одобрено') + ':</span> <b>' + h(dr_when(x.decided_at)) + '</b>' + (x.decide_note ? ' · ' + h(x.decide_note) : '') : '') +
+    (x.bought_at ? '<br><span>' + dr_e('Куплено') + ':</span> <b>' + h(dr_when(x.bought_at)) + '</b> · <span>' + h(dr_nm(x.bought_by)) + '</span> · <b class="num">' + h(dr_sum(x.fact_sum)) + '</b>' +
+      (x.est_sum != null && x.fact_sum != null && +x.fact_sum !== +x.est_sum ? ' <span class="chip ' + (+x.fact_sum > +x.est_sum ? 't-warn' : 't-ok') + '">' + (+x.fact_sum > +x.est_sum ? '+' : '−') + h(money(Math.abs(x.fact_sum - x.est_sum))) + '</span>' : '') : '') +
+    (x.received_at ? '<br><span>' + dr_e('Получено') + ':</span> <b>' + h(dr_when(x.received_at)) + '</b> · <span>' + h(dr_nm(x.received_by)) + '</span>' : '');
+  var html = sheetHead(h(x.what), dr_chip(DR_BST, x.status)) +
+    '<div class="meta" style="font-size:14px;white-space:normal">' + (x.qty ? '<b>' + h(x.qty) + '</b> · ' : '') + (x.est_sum != null ? '<span>' + dr_e('примерно') + '</span> <b class="num">' + h(dr_sum(x.est_sum)) + '</b>' : dr_e('сумма не указана')) + '</div>' +
+    (x.why ? '<div class="mbox">' + h(x.why) + '</div>' : '') + '<div class="meta" style="font-size:13px;white-space:normal">' + meta + '</div>' +
+    (x.receipt_path ? '<div class="dr-cap">' + dr_e('Фото чека') + '</div><div id="drBr" class="dr-hint">' + dr_e('Загружаю фото…') + '</div>' : '');
+  if (own && x.status === 'new') html += '<label class="f">' + dr_e('Комментарий (необязательно)') + '<input class="in" id="drBn" maxlength="300"></label><div class="dr-acts"><button type="button" class="btn green" id="drBy1">' + dr_e('Одобрить') + '</button><button type="button" class="btn ghostbad" id="drBy0">' + dr_e('Отклонить') + '</button></div>';
+  if (x.status === 'approved' && (mine || lead)) html += '<div class="dr-cap">' + dr_e('Купили?') + '</div><label class="f">' + dr_e('Сколько заплатили, сум') + '<input class="in" id="drBf" inputmode="numeric" maxlength="15" placeholder="' + h(x.est_sum != null ? money(x.est_sum) : '') + '"></label>' +
+    dr_photoBtn('drBrp', 'Фото чека') + '<button type="button" class="btn green full" id="drBok" style="min-height:52px">' + dr_e('Куплено') + '</button>';
+  if (x.status === 'bought' && (mine || lead)) html += '<button type="button" class="btn green full" id="drBrc" style="min-height:52px">' + dr_e('Получено') + '</button>';
+  if ((x.status === 'new' || x.status === 'approved') && (mine || own)) html += '<button type="button" class="btn ghostbad full sm" id="drBc" style="min-height:44px">' + dr_e('Отменить заявку') + '</button>';
+  html += '<button type="button" class="btn ghost full" id="drBx" style="min-height:48px">' + dr_e('Назад') + '</button>';
+  sheet(html); $('drBx').onclick = closeLayer; dr_showPhoto('drBr', x.receipt_path);
+  var reload = function () { closeLayer(); if (S.view === 'drbuy') vDrBuy(); else if (S.view === 'home') render(); };
+  async function call(btn, n, a, msg) { dr_busy(btn, 1); try { var r = await dr_rpc(n, a); if (r.error) throw r.error; toast(dr_t(msg)); reload(); } catch (e) { toast(err(e)); } finally { dr_busy(btn, 0); } }
+  if ($('drBy1')) $('drBy1').onclick = function () { call(this, 'buy_decide', { p_id: x.id, p_yes: true, p_note: $('drBn').value.trim() || null }, 'Одобрено — автор получил уведомление'); };
+  if ($('drBy0')) $('drBy0').onclick = function () { call(this, 'buy_decide', { p_id: x.id, p_yes: false, p_note: $('drBn').value.trim() || null }, 'Отклонено — автор получил уведомление'); };
+  if ($('drBok')) {
+    var rc = null; dr_pick('drBrp', function (b) { rc = b; });
+    $('drBok').onclick = async function () {
+      var s = dr_num($('drBf').value); if (s === null || isNaN(s)) { toast(dr_t('Напишите, сколько заплатили')); $('drBf').focus(); return; }
+      var btn = this; dr_busy(btn, 1);
+      try { var ph = await dr_upload(rc, 'receipt'); var r = await dr_rpc('buy_bought', { p_id: x.id, p_fact_sum: s, p_receipt_path: ph }); if (r.error) throw r.error; toast(dr_t('Отмечено: куплено')); reload(); }
+      catch (e) { toast(err(e)); } finally { dr_busy(btn, 0); }
+    };
+  }
+  if ($('drBrc')) $('drBrc').onclick = function () { call(this, 'buy_received', { p_id: x.id }, 'Отмечено: получено'); };
+  if ($('drBc')) $('drBc').onclick = async function () { var btn = this; if (!(await askSure('Отменить заявку на закупку?', { ok: 'Отменить заявку', cancel: 'Не отменять', danger: true }))) return; call(btn, 'buy_cancel', { p_id: x.id }, 'Заявка отменена'); };
+}
+
+/* ---------- 6. разделы: все типы заведений, все роли ---------- */
+w4Sec({ id: 'drfix', t: 'Заявки на ремонт', sub: 'Что сломалось — сообщить, назначить, отремонтировать', ic: 'tool', can: function () { return !!S.me; }, view: function () { vDrFix(); } });
+w4Sec({ id: 'drlost', t: 'Потерянные вещи', sub: 'Найденные вещи: хранение и выдача', ic: 'lugg', can: function () { return !!S.me; }, view: function () { vDrLost(); } });
+w4Sec({ id: 'drbuy', t: 'Заявки на закупку', sub: 'Что купить для работы — решает владелец', ic: 'bag', can: function () { return !!S.me; }, view: function () { vDrBuy(); } });
+(function () {
+  /* подписи разделов по типу заведения (химчистка — карманы) */
+  var a0 = sectionsAll; sectionsAll = function () { var o = a0.apply(this, arguments); if (!Array.isArray(o) || !S.me) return o; return o.map(function (s) { return s[0] === 'drlost' && dr_lx() ? [s[0], s[1], 'Из карманов и с заказов: деньги, ключи, документы', s[3]] : s; }); };
+})();
+
+/* ---------- 7. уведомления → экран и сама заявка ---------- */
+function dr_openRef(rt, rid) { var v = DR_REF[rt]; if (!v) return false; DR.open = { k: rt, id: rid }; closeLayer(); S.sub.drFixF = 'open'; if (rt === 'found') S.sub.drLostF = 'stored'; if (rt === 'buy') S.sub.drBuyF = 'open'; if (S.view === v) W3V[v](); else go(v); return true; }
+(function () {
+  var o0 = openRef; openRef = function (rt, rid, nid) {
+    if (DR_REF[rt] && S.me) { if (nid) try { markRead(+nid); } catch (e) {} try { alarmStop(); } catch (e) {} dr_openRef(rt, rid); return; }
+    return o0.apply(this, arguments);
+  };
+})();
+
+/* ---------- 8. главная: «Заявки» — что ждёт меня ---------- */
+async function dr_homeCard() {
+  var el = w3HomeSlot('drHome'); if (!el) return; el.setAttribute('data-cp', '5.8'); el.hidden = true;
+  var r = await dr_rpc('requests_home'); el = $('drHome'); if (!el || !r || r.error || !r.data) return;
+  var d = r.data, L = [];
+  if (+d.repair_todo) L.push(['drfix', 'mine', 'Ремонт — назначено вам', d.repair_todo, 'info']);
+  if (+d.repair_nobody) L.push(['drfix', 'nobody', 'Ремонт — без исполнителя', d.repair_nobody, 'warn']);
+  if (+d.repair_urgent && !+d.repair_nobody) L.push(['drfix', 'open', 'Срочный ремонт', d.repair_urgent, 'bad']);
+  if (+d.buy_new) L.push(['drbuy', 'open', 'Закупки ждут вашего решения', d.buy_new, 'warn']);
+  if (+d.buy_to_buy) L.push(['drbuy', 'open', 'Одобрено — купить', d.buy_to_buy, 'info']);
+  if (+d.found_stored) L.push(['drlost', 'stored', 'Находки на хранении', d.found_stored, 'mute']);
+  if (!L.length) { el.innerHTML = ''; return; }
+  el.hidden = false;
+  el.innerHTML = '<div class="card dr-home' + (+d.repair_urgent ? ' w3-red' : '') + '"><h2><span>' + dr_e('Заявки') + '</span></h2>' + L.map(function (x, i) {
+    return '<button type="button" class="dr-hl" data-drh="' + i + '"><span class="grow">' + dr_e(x[2]) + '</span><span class="chip t-' + x[4] + ' num">' + x[3] + '</span>' + icon('chev', 16) + '</button>';
+  }).join('') + '</div>';
+  el.querySelectorAll('[data-drh]').forEach(function (b) { b.onclick = function () { var x = L[+b.getAttribute('data-drh')]; if (x[0] === 'drfix') S.sub.drFixF = x[1]; if (x[0] === 'drlost') S.sub.drLostF = x[1]; if (x[0] === 'drbuy') S.sub.drBuyF = x[1]; go(x[0]); }; });
+}
+W3.home.push(function () { if (S.me) dr_homeCard(); });
+
+/* ---------- 9. «Как пользоваться»: три ответа ---------- */
+(function () {
+  var f0 = obFaq; obFaq = function () {
+    var Q = f0.apply(this, arguments); if (!Array.isArray(Q)) return Q;
+    Q.push(['Что-то сломалось — как сообщить?', '«Разделы» → «Заявки на ремонт» → «Что сломалось — сообщить»: выберите оборудование, напишите где и что случилось, добавьте фото. Срочное отметьте «Срочно» — руководитель получит уведомление сразу.']);
+    Q.push([dr_lx() ? 'Нашли деньги или ключи в кармане?' : 'Нашли чужую вещь?', '«Разделы» → «Потерянные вещи» → «Нашли вещь — записать»: что нашли, где или у какого заказа, сумма для денег и фото. Вещь хранится, пока руководитель не отметит «Выдано».']);
+    Q.push(['Нужно что-то купить для работы?', '«Разделы» → «Заявки на закупку»: что, сколько, зачем и примерная сумма. Владелец одобряет; после покупки отметьте «Куплено» с суммой и фото чека.']);
+    return Q;
+  };
+})();
+
+
+/* ===== ВОЛНА 4 · 92s-misc.js ===== */
+/* ===== 92s — мелочи «демо → сервер» (префикс ds_). Журнал w4/log/ds.md, сервер 0023_misc.sql, переходник — блок «92s misc» в sv-adapter.js =====
+   В режиме сервера снимает скрытие 92n: chat «Чат руководителей», autoclock «Подсказка о приходе», pspaste правка и вставка расчётного листа.
+   1. Пункт чек-листа, добавленный после создания задачи (нет sid) → task_item_add.
+   2. «Настройки отметки»: понятные причины неудачных попыток (с адресом сети); сеть Wi-Fi заведения (только сервер: адрес видит сервер).
+   3. Карточка сотрудника: «История изменений» (владелец) и «Оценки работы» с сервера; «Переделать» возвращает задачу.
+   4. «Подсказка о приходе» сохраняется на сервере; проверка «я на месте» — только когда человек сам открыл приложение.
+   5. Расчётный лист: «Править расчёт» и «Вставить из таблицы» — строки считает экран (как в демо), сервер сохраняет (payslip_save / payslip_import).
+   6. «Оформление»: цвет, заставка, название и логотип с сервера видны на всех телефонах (копия в mlx-one-prefs при входе). */
+function ds_on() { return typeof sv_on === 'function' && sv_on(); }
+function ds_t(s, o) { var r = s; try { r = trUi(s); } catch (e) {} if (o) Object.keys(o).forEach(function (k) { r = r.split('{' + k + '}').join(o[k]); }); return r; }
+function ds_h(s, o) { return h(ds_t(s, o)); }
+function ds_SV() { return window.JAMOA_SV || null; }
+var DS = { ac: undefined, gr: {}, redo: {} };
+if (ds_on()) window.DN_HIDE = Object.assign(window.DN_HIDE || {}, { chat: false, autoclock: false, pspaste: false });
+/* «Чат руководителей» на сервере: владелец и хотя бы один руководитель (в демо — по анкете: 2 должности руководителей) */
+(function () {
+  if (!ds_on() || typeof featOk !== 'function') return;
+  var f0 = featOk;
+  featOk = function (id) {
+    if (id !== 'chat') return f0.apply(this, arguments);
+    if (typeof cm_featOk === 'function' && !cm_featOk('chat')) return false;
+    return (S.emps || []).filter(function (e) { return e && e.active !== false && !e.colleague && (e.role === 'manager' || e.role === 'director'); }).length >= 2;
+  };
+})();
+if (/[?&]w4dbg/.test(location.search)) window.__ds = { S: S, sb: sb, DS: DS, go: function (v) { return go(v); }, sections: function () { return sections().map(function (s) { return s[0]; }); }, can: function (v) { return canView(v); },
+  cdSave: function () { return cd_save(); }, psPaste: function (ym, all) { return psPaste(ym, all); }, psOpen: function (p, e) { return psOpen(p, e); }, daily: function (e) { return dg_dailySheet(e); }, emp: function (id) { return emp(id); }, autoClock: function (f) { return autoClock(f); }, vEmp: function () { return vEmp(); } };
+
+/* ---------- 1. Пункт чек-листа после создания задачи ---------- */
+(function () {
+  if (!ds_on() || typeof cd_save !== 'function') return;
+  var cs0 = cd_save;
+  cd_save = function () {
+    var r = cs0.apply(this, arguments), SV = ds_SV(); if (!SV) return r;
+    var ids = {}; (SV.T.tasks || []).forEach(function (t) { ids[t.id] = t; });
+    var todo = [];
+    (SV.T.cd_ck || []).forEach(function (c) { if (!ids[c.task_id]) return; (c.items || []).forEach(function (it) { if (!it.sid && !it.dsPend && it.t) { it.dsPend = 1; todo.push([c.task_id, it]); } }); });
+    if (!todo.length) return r;
+    (async function () {
+      var bad = null;
+      for (var i = 0; i < todo.length; i++) {
+        var x = await sb.rpc('task_item_add', { p_task: todo[i][0], p_text: todo[i][1].t, p_needs_photo: !!todo[i][1].ph });
+        if (x.error) { bad = x.error; todo[i][1].dsPend = 0; break; }
+        todo[i][1].sid = x.data;
+      }
+      if (bad) toast(err(bad), 4000);
+      SV.stale('tasks');
+    })();
+    return r;
+  };
+})();
+
+/* ---------- 2. «Настройки отметки»: неудачные попытки и Wi-Fi ---------- */
+var DS_WHY = { far: 'далеко от заведения', nogps: 'телефон не определил место', denied: 'нет разрешения на геолокацию', nonet: 'нет интернета', cam: 'без фото',
+  early: 'рано для отметки', device_other: 'с чужого телефона', device_blocked: 'телефон заблокирован', server: 'сервер не принял', already_in: 'приход уже отмечен',
+  not_in: 'уход без прихода', pin: 'неверный PIN', health: 'журнал здоровья не заполнен', wifi: 'не через Wi-Fi заведения', bio: 'без Face ID', bio_fail: 'Face ID не прошёл', no_geo: 'нет геолокации', other: 'другая причина' };
+function ds_failRow(f) {
+  var e = typeof emp === 'function' ? emp(f.employee_id) : null, why = ds_t(DS_WHY[f.reason] || DS_WHY.other);
+  if (f.reason === 'far' && f.dist_m) why += ' (' + f.dist_m + ' ' + ds_t('м') + ')';
+  return '<div class="row"><div class="grow"><div class="name">' + h(e ? fullName(e) : '—') + '</div><div class="meta" style="white-space:normal"><span>' + ds_h(f.action === 'out' ? 'Уход' : 'Приход') + '</span> · <span>' + h(why) + '</span>' +
+    (f.ip ? ' · <span>' + ds_h('сеть') + '</span> <span class="mono">' + h(f.ip) + '</span>' : '') + '</div></div><span class="mono meta">' + h(when(f.at)) + '</span></div>';
+}
+async function ds_fails(card) {
+  var r = await sb.from('clock_attempts').select('*').eq('ok', false).order('at', { ascending: false }).limit(30); if (!card.isConnected) return;
+  var L = (r && r.data) || [];
+  card.id = 'dsFails';
+  card.innerHTML = '<h2>' + ds_h('Неудачные попытки отметки') + ' <small>' + ds_h('последние 30') + '</small></h2>' +
+    '<div class="meta" style="white-space:normal;margin:-4px 0 6px">' + ds_h('Кто пытался отметиться и почему не получилось. Сотрудник мог потом отправить «Забыл отметиться» — это в «Ждут решения».') + '</div>' +
+    (L.length ? L.map(ds_failRow).join('') : '<div class="empty">' + ds_h('Неудачных попыток не было') + '</div>');
+}
+async function ds_wifi(col) {
+  var old = $('dsWifi'); if (old) old.remove();
+  var c = document.createElement('div'); c.className = 'card'; c.id = 'dsWifi'; c.innerHTML = '<h2>' + ds_h('Wi-Fi заведения') + '</h2><div class="meta">' + ds_h('Загрузка…') + '</div>';
+  col.appendChild(c);
+  var r = await sb.rpc('wifi_list'); if (!c.isConnected) return;
+  if (r.error) { c.innerHTML = '<h2>' + ds_h('Wi-Fi заведения') + '</h2><div class="meta">' + h(err(r.error)) + '</div>'; return; }
+  var W = r.data || {}, nets = W.nets || [], own = isDirector(), on = !!W.on && nets.length > 0;
+  c.innerHTML = '<h2>' + ds_h('Wi-Fi заведения') + ' <small>' + (on ? '<span class="chip t-ok">' + ds_h('проверяется') + '</span>' : '<span class="chip t-mute">' + ds_h('не проверяется') + '</span>') + '</small></h2>' +
+    '<div class="meta" style="white-space:normal;margin:-4px 0 8px">' + ds_h('Отметка проходит только с телефона, подключённого к Wi-Fi заведения. Без интернета отметка сохраняется на телефоне и при отправке Wi-Fi не проверяется.') + '</div>' +
+    (nets.length ? nets.map(function (n) { return '<div class="row"><div class="grow"><div class="name">' + h(n.label) + '</div><div class="meta"><span>' + ds_h('адрес сети') + '</span> <span class="mono">' + h(String(n.net).replace(/\/32$/, '')) + '</span></div></div>' +
+      (own ? '<button type="button" class="btn ghost sm" data-dsnx="' + n.id + '" style="min-height:44px">' + ds_h('Убрать') + '</button>' : '') + '</div>'; }).join('') : '<div class="meta" style="padding:4px 0">' + ds_h('Сети ещё не добавлены') + '</div>') +
+    '<div class="meta" style="white-space:normal;margin:8px 0">' + (W.here ? '<span class="chip t-ok">' + ds_h('Этот телефон сейчас в сети заведения') + '</span>' : '<span>' + ds_h('Этот телефон сейчас не в сети заведения') + '</span>' + (W.ip ? ' · <span class="mono">' + h(W.ip) + '</span>' : '')) + '</div>' +
+    (own ? '<label class="f">' + ds_h('Название сети') + '<input class="in" id="dsWn" maxlength="60" placeholder="' + ds_h('Например, Wi-Fi зала') + '"></label>' +
+      '<button type="button" class="btn ghost full" id="dsWa" style="min-height:44px">' + icon('plus', 18) + '<span>' + ds_h('Добавить сеть, к которой подключён этот телефон') + '</span></button>' +
+      '<label style="display:flex;gap:10px;align-items:center;min-height:44px;font-size:15px;margin-top:8px"><input type="checkbox" id="dsWo"' + (on ? ' checked' : '') + (nets.length ? '' : ' disabled') + ' style="width:22px;height:22px;accent-color:var(--gold)"><span>' + ds_h('Отмечаться только через Wi-Fi заведения') + '</span></label>' +
+      '<div class="meta" style="white-space:normal">' + ds_h('Подключите этот телефон к Wi-Fi заведения и нажмите «Добавить сеть». Если интернет у заведения меняет адрес, добавьте сеть ещё раз.') + '</div>'
+      : '<div class="meta" style="white-space:normal">' + ds_h('Сети Wi-Fi добавляет владелец.') + '</div>');
+  var redraw = function () { ds_wifi(col); };
+  if ($('dsWa')) $('dsWa').onclick = async function () { this.disabled = true; var x = await sb.rpc('wifi_add', { p_label: ($('dsWn').value || '').trim() || null }); this.disabled = false; if (x.error) return toast(err(x.error), 4000); toast(ds_t('Сеть добавлена')); redraw(); };
+  if ($('dsWo')) $('dsWo').onchange = async function () { var v = this.checked, x = await sb.rpc('wifi_set', { p_on: v }); if (x.error) { this.checked = !v; return toast(err(x.error), 4000); } toast(ds_t(v ? 'Отметка — только через Wi-Fi заведения' : 'Wi-Fi больше не проверяется')); redraw(); };
+  c.querySelectorAll('[data-dsnx]').forEach(function (b) { b.onclick = async function () {
+    if (!(await askSure('Убрать эту сеть? С неё больше нельзя будет отметиться.', { ok: 'Убрать' }))) return;
+    var x = await sb.rpc('wifi_remove', { p_id: +b.getAttribute('data-dsnx') }); if (x.error) return toast(err(x.error), 4000); toast(ds_t('Сеть убрана')); redraw(); }; });
+}
+(function () {
+  if (typeof dSet !== 'function') return;
+  var d0 = dSet;
+  dSet = async function () {
+    var r = await d0.apply(this, arguments), dk = $('dk'); if (!dk) return r;
+    try {
+      var g = dk.querySelector('.dgrid'), fc = g && g.querySelector(':scope > .card'), col = g && g.querySelector(':scope > div:not(.card)');
+      if (fc) await ds_fails(fc);
+      if (ds_on() && col && (isDirector() || (S.me && S.me.role === 'manager'))) await ds_wifi(col);
+    } catch (e) { console.warn('ds set', e); }
+    return r;
+  };
+})();
+
+/* ---------- 3. Карточка сотрудника: «История изменений», «Оценки работы», «Переделать» ---------- */
+var DS_AUD = { invite: 'Добавлен в команду', invite_accept: 'Первый вход в приложение', transfer: 'Переведён', archive: 'Уволен, доступ закрыт', restore: 'Возвращён из архива',
+  pay_rule: 'Изменена оплата', bonus: 'Премия', fine: 'Штраф', bonus_cancel: 'Премия отменена', fine_cancel: 'Штраф отменён', adj_decide: 'Решение по премии или штрафу',
+  advance: 'Решение по авансу', advance_paid: 'Аванс выдан', award: 'Награда месяца', clock_fix: 'Исправлена отметка («Забыл отметиться»)', delay_decide: 'Решение по отметке с задержкой',
+  device_reset: 'Сброшен телефон для отметки', device_block: 'Телефон для отметки заблокирован', device_unblock: 'Телефон для отметки разблокирован', auth_reset: 'Сброшен пароль',
+  auth_reset_done: 'Сброшен пароль', auth_disable: 'Вход закрыт', auth_disable_done: 'Вход закрыт', auth_enable: 'Вход открыт', auth_enable_done: 'Вход открыт', auth_create_done: 'Создан вход',
+  revenue: 'Выручка за смену', skill_ok: 'Допуск к работе: навык принят', skill_no: 'Допуск к работе: навык не принят', sub_request: 'Срочная замена',
+  payslip_edit: 'Расчётный лист изменён вручную', kiosk_pin_fail: 'Неверный PIN на планшете', update: 'Изменены данные' };
+function ds_audTxt(x) {
+  var d = x.details || {}, a = x.action, t = DS_AUD[a] ? ds_t(DS_AUD[a]) : null;
+  if (!ds_on() && typeof auditText === 'function' && ['create', 'update', 'transfer', 'reset_password', 'archive', 'restore', 'schedule', 'schedule_delete'].indexOf(a) >= 0) { try { return auditText(x); } catch (e) {} }
+  if (a === 'update' && d.old && d.new) {
+    var ch = [];
+    if (d.old.last !== d.new.last || d.old.first !== d.new.first) ch.push((d.old.last || '') + ' ' + (d.old.first || '') + ' → ' + (d.new.last || '') + ' ' + (d.new.first || ''));
+    if (d.old.phone !== d.new.phone) ch.push(ds_t('телефон') + ': ' + (d.new.phone || '—'));
+    if (d.old.hire !== d.new.hire) ch.push(ds_t('дата приёма') + ': ' + (d.new.hire ? dm(d.new.hire) : '—'));
+    return t + (ch.length ? ': ' + ch.join(' · ') : '');
+  }
+  if (a === 'transfer') return t + ': ' + (typeof posName === 'function' && d.position ? posName(d.position) : '') + (d.role && d.old_role && d.role !== d.old_role ? ' · ' + ds_t(d.role === 'manager' ? 'стал руководителем' : 'больше не руководитель') : '');
+  if ((a === 'bonus' || a === 'fine' || a === 'advance_paid' || a === 'award' || a === 'bonus_cancel' || a === 'fine_cancel') && d.amount != null) return t + ': ' + money(d.amount) + ' ' + ds_t('сум') + (d.reason ? ' · ' + d.reason : '');
+  if (a === 'advance') return t + ': ' + ds_t(d.yes ? 'выдать' : 'отказ') + (d.amount != null ? ' · ' + money(d.amount) + ' ' + ds_t('сум') : '');
+  if (a === 'clock_fix' || a === 'adj_decide' || a === 'delay_decide') return t + ': ' + ds_t(d.yes ? 'подтверждено' : 'отказ');
+  if (a === 'payslip_edit') return t + (d.ym ? ' · ' + (typeof psYm === 'function' ? psYm(d.ym) : d.ym) : '') + (d.after != null ? ' · ' + ds_t('к выплате') + ' ' + money(d.after) + ' ' + ds_t('сум') : '') + (d.src === 'import' ? ' · ' + ds_t('из таблицы') : d.src === 'reset' ? ' · ' + ds_t('по табелю') : '');
+  if (a === 'pay_rule') return t + (d.rate ? ': ' + money(d.rate) + ' ' + ds_t('сум') : d.hour_rate ? ': ' + money(d.hour_rate) + ' ' + ds_t('сум/ч') : '');
+  if (a === 'skill_ok' || a === 'skill_no') return t + (d.note ? ' · ' + d.note : '');
+  return t || a;
+}
+async function ds_hist(e, seq) {
+  if (!isDirector() || !e) return;
+  var r = await sb.from('audit_log').select('*').eq('target_id', e.id).order('at', { ascending: false }).limit(30);
+  var b = $('dgBody'); if (!b || (typeof DG !== 'undefined' && seq != null && seq !== DG.seq) || $('dsHist')) return;
+  var L = (r && r.data) || [], c = document.createElement('div'); c.className = 'card'; c.id = 'dsHist';
+  c.innerHTML = '<h2>' + ds_h('История изменений') + '</h2>' + (L.length ? L.map(function (x) { var who = x.actor_id ? emp(x.actor_id) : null;
+    return '<div class="row"><span class="mono meta" style="width:84px;flex:none">' + h(dm(String(x.at).slice(0, 10))) + '</span><div class="grow"><div class="name" style="white-space:normal;font-size:14px">' + h(ds_audTxt(x)) + '</div><div class="meta">' + h(who ? fullName(who) : ds_t('система')) + '</div></div></div>'; }).join('')
+    : '<div class="empty">' + ds_h('Изменений пока не было') + '</div>');
+  b.appendChild(c);
+}
+(function () {
+  if (typeof dg_pr === 'function') { var p0 = dg_pr; dg_pr = async function (e, seq) { var r = await p0.apply(this, arguments); try { await ds_hist(e, seq); } catch (x) { console.warn('ds hist', x); } return r; }; }
+  if (!ds_on()) return;
+  /* оценки с сервера: перед «Обзором» — оценки человека; в задачах — все за 2 месяца */
+  if (typeof dg_ov === 'function') { var o0 = dg_ov; dg_ov = async function (e) { try { var r = await sb.from('task_grades').select('*').eq('employee_id', e.id); DS.gr[e.id] = (r && r.data) || []; } catch (x) {} return o0.apply(this, arguments); }; }
+  if (typeof dg_grades === 'function') dg_grades = function (e) {
+    var from = addDays(today(), -30), L = (DS.gr[e.id] || []).filter(function (g) { return (g.day || String(g.at).slice(0, 10)) >= from; }).sort(function (a, b) { return String(b.at).localeCompare(String(a.at)); });
+    var c = { good: 0, better: 0, redo: 0 }; L.forEach(function (g) { c[g.grade] = (c[g.grade] || 0) + 1; }); return { n: L.length, c: c, L: L };
+  };
+  if (typeof w4mGrades === 'function') w4mGrades = function (taskId) { var SV = ds_SV(); return ((SV && SV.dsGrades) || []).filter(function (g) { return g.task_id === taskId; }).sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); }); };
+  if (typeof vTasks === 'function') { var v0 = vTasks; vTasks = async function () { try { sb.from('task_grades').select('*').then(function () {}); } catch (x) {} return v0.apply(this, arguments); }; }
+})();
+
+/* ---------- 4. «Подсказка о приходе» (сервер): настройка — members.auto_clock; проверка места — только при открытии приложения ---------- */
+async function ds_acLoad() { if (DS.ac !== undefined || !S.me) return DS.ac; var r = await sb.rpc('my_auto_clock'); DS.ac = !r.error && r.data === true; return DS.ac; }
+(function () {
+  if (!ds_on()) return;
+  if (typeof autoClockHtml === 'function') { var h0 = autoClockHtml; autoClockHtml = function () { if (S.me && DS.ac !== undefined) S.me.auto_clock = DS.ac; var x = h0.apply(this, arguments); return typeof x === 'string' ? x.replace(/Автоотметка/g, 'Подсказка') : x; }; }
+  if (typeof bindAutoClock === 'function') {
+    var b0 = bindAutoClock;
+    bindAutoClock = function (redraw) {
+      var r = b0.apply(this, arguments), i = $('acOn'); if (!i) return r;
+      if (DS.ac === undefined) ds_acLoad().then(function (v) { var j = $('acOn'); if (j && j.checked !== !!v && redraw) redraw(); });
+      i.onchange = async function () {
+        var v = this.checked, x = await sb.rpc('set_auto_clock', { p_on: v }); if (x.error) { this.checked = !v; return toast(err(x.error)); }
+        DS.ac = v; S.me.auto_clock = v; toast(ds_t(v ? 'Подсказка о приходе включена' : 'Подсказка о приходе выключена'));
+        if (v && typeof autoClock === 'function') autoClock(true); if (redraw) redraw();
+      };
+      return r;
+    };
+  }
+  if (typeof autoClock === 'function') {
+    var a0 = autoClock;
+    autoClock = async function () { try { await ds_acLoad(); if (S.me) S.me.auto_clock = DS.ac; DS.acRun = Date.now(); return await a0.apply(this, arguments); } finally { setTimeout(function () { DS.acRun = 0; }, 1500); } };
+  }
+  if (typeof toast === 'function') { var t0 = toast; toast = function (m) { if (DS.acRun && /^Вы в (отеле|заведении)/.test(String(m))) { var a = [].slice.call(arguments); a[0] = ds_t('Вы на месте. Нажмите «Пришёл»'); return t0.apply(this, a); } return t0.apply(this, arguments); }; }
+})();
+
+/* ---------- 5. Расчётный лист: правка и вставка из таблицы на сервере ---------- */
+var DS_KM = { base: 'base', night: 'night', ot: 'overtime', other_plus: 'upsell', bonus: 'bonus', fine: 'fine', advance: 'advance', other_minus: 'tax' };
+var DS_KEEP = ['pct', 'hour', 'shift', 'piece', 'award', 'debt_in'];
+function ds_psLines(psId) { var SV = ds_SV(); return ((SV && SV.T.payslip_lines) || []).filter(function (l) { return String(l.payslip_id) === String(psId); }); }
+function ds_sum(L, k) { return L.filter(function (l) { return l.kind === k; }).reduce(function (s, l) { return s + Math.abs(+l.amount || 0); }, 0); }
+function ds_r100(x) { return Math.round(x / 100) * 100; }
+/* строки как в предпросмотре «Править расчёт»: изменённое — по формуле демо, не тронутое — как на сервере */
+function ds_calc(ps, inp, cur) {
+  cur = cur || ds_psLines(ps.id); inp = inp || {};
+  var NH = typeof PS_NORM_H === 'number' ? PS_NORM_H : 176, ok = +inp.oklad || +ps.oklad || 0, norm0 = +ps.norm_shifts || +ps.shifts || 0, norm = +inp.norm_shifts || norm0, rate = ok / NH;
+  var nh = inp.night_h != null ? +inp.night_h : +ps.night_h || 0, oh = inp.ot_h != null ? +inp.ot_h : +ps.ot_h || 0, has = function (k) { return cur.some(function (l) { return l.kind === k; }); }, out = [];
+  out.push({ kind: 'base', amount: ok === +ps.oklad && norm === norm0 && has('base') ? ds_sum(cur, 'base') : ds_r100(ok * Math.min(1, norm ? (+ps.shifts || 0) / norm : 1)) });
+  out.push({ kind: 'night', amount: nh === (+ps.night_h || 0) && has('night') ? ds_sum(cur, 'night') : ds_r100(nh * rate * 0.5) });
+  out.push({ kind: 'overtime', amount: oh === (+ps.ot_h || 0) && has('ot') ? ds_sum(cur, 'ot') : ds_r100(oh * rate * 2) });
+  out.push({ kind: 'upsell', amount: inp.upsell != null ? +inp.upsell : ds_sum(cur, 'other_plus') });
+  (inp.bonus || []).forEach(function (b) { if (+b.amount) out.push({ kind: 'bonus', amount: Math.abs(+b.amount), comment: b.comment || null }); });
+  (inp.fine || []).forEach(function (b) { if (+b.amount) out.push({ kind: 'fine', amount: Math.abs(+b.amount), comment: b.comment || null }); });
+  cur.forEach(function (l) { if (DS_KEEP.indexOf(l.kind) < 0) return; out.push({ kind: l.kind === 'debt_in' ? 'advance' : l.kind, amount: Math.abs(+l.amount || 0), comment: l.comment || null, keep: 1 }); });
+  out.push({ kind: 'advance', amount: inp.advance != null ? +inp.advance : ds_sum(cur, 'advance') });
+  out.push({ kind: 'tax', amount: inp.tax != null ? +inp.tax : ds_sum(cur, 'other_minus') });
+  return out;
+}
+var DS_K2 = { base: 'base', night: 'night', overtime: 'ot', upsell: 'other_plus', bonus: 'bonus', fine: 'fine', advance: 'advance', tax: 'other_minus' };
+function ds_srvLines(L) {
+  return L.filter(function (l) { return !l.keep && DS_K2[l.kind] && (l.kind === 'base' || +l.amount); }).map(function (l) {
+    var k = DS_K2[l.kind], c = l.comment || (k === 'other_minus' ? ds_t('Налог (НДФЛ)') : k === 'other_plus' ? ds_t('Прочее начисление') : null);
+    return { kind: k, amount: Math.round(Math.abs(+l.amount || 0)), comment: c };
+  });
+}
+async function ds_psRow(id) { var r = await sb.from('payslips').select('*').eq('id', +id).maybeSingle(); return r && r.data; }
+(function () {
+  if (!ds_on()) return;
+  if (typeof psCalc === 'function') psCalc = function (ps, inp) { return ds_calc(ps, inp); };
+  /* «Править расчёт»: строки сервера → поля экрана (налог = прочие удержания, «прочее начисление» вместо бонуса допродаж) */
+  if (typeof psEdit === 'function') {
+    var pe0 = psEdit;
+    psEdit = function (p, lines) {
+      var L = (lines || []).map(function (l) { return Object.assign({}, l, { kind: DS_KM[l.kind] || l.kind, amount: Math.abs(+l.amount || 0) }); });
+      ['advance', 'tax', 'upsell'].forEach(function (k) { var s = ds_sum(L, k); L = L.filter(function (l) { return l.kind !== k; }); if (s) L.push({ kind: k, amount: s }); });
+      var r = pe0.call(this, p, L), lay = $('layer'); if (!lay) return r;
+      var up = $('peUp'), tx = $('peTax'); if (up) { var lb = up.closest('label'); if (lb && lb.firstChild) lb.firstChild.textContent = ds_t('Прочее начисление, сум'); }
+      if (tx) tx.placeholder = ds_t('пусто — как сейчас');
+      var adv = $('peAdv'); if (adv) adv.placeholder = ds_t('пусто — как сейчас');
+      return r;
+    };
+  }
+  /* «Вернуть расчёт по табелю» у листа, изменённого вручную */
+  if (typeof psOpen === 'function') {
+    var po0 = psOpen;
+    psOpen = async function (p) {
+      var r = await po0.apply(this, arguments), lay = $('layer');
+      try {
+        if (p && p.manual_at && lay && !$('dsPsM') && !$('peSave') && (isDirector() || (typeof isAccounting === 'function' && isAccounting()))) {
+          var box = lay.querySelector('.box') || lay, d = document.createElement('div'); d.id = 'dsPsM'; d.style.marginTop = '8px';
+          d.innerHTML = '<div class="meta" style="white-space:normal">' + ds_h('Лист изменён вручную — «Подготовить месяц» его не пересчитывает.') + '</div>' +
+            (p.status === 'draft' ? '<button type="button" class="btn ghost full" id="dsPsR" style="margin-top:6px;min-height:44px">' + ds_h('Вернуть расчёт по табелю') + '</button>' : '');
+          box.appendChild(d);
+          if ($('dsPsR')) $('dsPsR').onclick = async function () {
+            if (!(await askSure('Вернуть расчёт по табелю? Ручные суммы этого листа будут заменены.', { ok: 'Вернуть по табелю' }))) return;
+            this.disabled = true; var x = await sb.rpc('payslip_save', { p_payslip: p.id, p_reset: true }); this.disabled = false;
+            if (x.error) return toast(err(x.error), 4000); closeLayer(); toast(ds_t('Расчёт снова по табелю')); if (typeof vPayroll === 'function') vPayroll();
+          };
+        }
+      } catch (e) {}
+      return r;
+    };
+  }
+  /* экран присылает поля демо — переводим в строки сервера */
+  var rp0 = sb.rpc;
+  sb.rpc = function (n, a) {
+    if (n === 'payslip_save' && a && a.p_payslip && a.p_lines === undefined && !a.p_reset) return ds_save(rp0, a);
+    if (n === 'payslip_import' && a && Array.isArray(a.p_rows) && a.p_rows.some(function (x) { return x && !x.lines; })) return ds_import(rp0, a);
+    if (n === 'prefs_save') return rp0.apply(this, arguments).then(function (r) { if (r && !r.error) ds_brandCopy(Object.assign({}, (r.data && typeof r.data === 'object') ? r.data : {}, (a && a.p) || {})); return r; });
+    return rp0.apply(this, arguments);
+  };
+})();
+async function ds_save(rp0, a) {
+  var ps = await ds_psRow(a.p_payslip); if (!ps) return { data: null, error: { message: ds_t('Расчётный лист не найден') } };
+  var inp = { oklad: a.oklad, norm_shifts: a.norm_shifts, night_h: a.night_h, ot_h: a.ot_h, upsell: a.upsell, advance: a.advance, tax: a.tax, bonus: a.bonus || [], fine: a.fine || [] };
+  var head = {}; ['oklad', 'norm_shifts', 'night_h', 'ot_h'].forEach(function (k) { if (inp[k] != null && inp[k] === inp[k]) head[k] = +inp[k]; });
+  return rp0.call(sb, 'payslip_save', { p_payslip: ps.id, p_head: head, p_lines: ds_srvLines(ds_calc(ps, inp)) });
+}
+async function ds_import(rp0, a) {
+  var ym = a.p_ym, rows = a.p_rows, SV = ds_SV();
+  var all = ((await sb.from('payslips').select('*').eq('ym', ym)).data || []), by = {}; all.forEach(function (p) { by[p.employee_id] = p; });
+  var miss = rows.filter(function (r) { return !by[r.employee_id]; });
+  for (var i = 0; i < miss.length; i++) { var x = await rp0.call(sb, 'payslip_prepare', { p_ym: ym, p_member: miss[i].employee_id }); if (x.error) return x; }
+  if (miss.length) { if (SV) await SV.refresh('pay'); all = ((await sb.from('payslips').select('*').eq('ym', ym)).data || []); by = {}; all.forEach(function (p) { by[p.employee_id] = p; }); }
+  var out = rows.map(function (r) {
+    var ps = by[r.employee_id] || { id: null, oklad: +r.oklad || 0, shifts: 0, norm_shifts: 0, night_h: 0, ot_h: 0 }, cur = ps.id ? ds_psLines(ps.id) : [];
+    var keepL = function (k) { return cur.filter(function (l) { return l.kind === k; }).map(function (l) { return { amount: Math.abs(+l.amount || 0), comment: l.comment }; }); };
+    var inp = { oklad: r.oklad != null ? r.oklad : null, advance: r.advance != null ? r.advance : null, tax: r.tax != null ? r.tax : null,
+      bonus: (r.bonus || []).length ? r.bonus : keepL('bonus'), fine: (r.fine || []).length ? r.fine : keepL('fine') };
+    return { member_id: r.employee_id, head: r.oklad != null ? { oklad: +r.oklad } : {}, lines: ds_srvLines(ds_calc(ps, inp, cur)) };
+  });
+  return rp0.call(sb, 'payslip_import', { p_ym: ym, p_rows: out });
+}
+
+/* ---------- 6. «Оформление» на всех телефонах: цвет, заставка, название и логотип — из настроек сервера ---------- */
+var DS_BK = ['brand_accent', 'brand_title', 'splash_on', 'splash_len', 'theme_default', 'org_name', 'org_type'];
+function ds_brandCopy(p) {
+  if (!ds_on() || !p || typeof sxJ !== 'function') return;
+  try {
+    var all = sxJ(SX_PK, {}), ch = false;
+    DS_BK.forEach(function (k) { if (p[k] !== undefined && all[k] !== p[k]) { all[k] = p[k]; ch = true; } });
+    var lg = p.brand_logo || '';
+    if (/^data:/.test(lg) && lg.length < 60000) { if (all.brand_logo !== lg) { all.brand_logo = lg; ch = true; } }   /* маленький логотип — и на заставке до входа */
+    else if (all.brand_logo) { delete all.brand_logo; ch = true; }
+    if (ch) sxLS(SX_PK, JSON.stringify(all));
+    if (typeof sxApplyBrand === 'function') sxApplyBrand(all);
+  } catch (e) {}
+}
+(function () {
+  if (!ds_on()) return;
+  if (typeof loadPrefs === 'function') { var lp0 = loadPrefs; loadPrefs = async function () { var r = await lp0.apply(this, arguments); ds_brandCopy(S.prefs); return r; }; }
+  var n = 0, t = setInterval(function () { if (++n > 600) return clearInterval(t); if (!S.me || S.loading) return; clearInterval(t);
+    sb.from('hotel_settings').select('*').eq('id', 1).maybeSingle().then(function (r) { if (r && r.data && r.data.prefs) ds_brandCopy(r.data.prefs); });
+  }, 500);
+})();
+
+
+/* ===== ВОЛНА 4 · 92t-ux.js ===== */
+/* ===== 92t-ux — часть T: удобства из Mir Luxe One (префикс dt_) =====
+   Перенесено по сравнению с Mir Luxe One (MLO), для всех типов заведений, в демо и на сервере:
+   1. тревога на весь экран со звуком — только тем, кто на работе; остальным — тихо (колокольчик, строка без звука);
+   2. после «Пришёл» карточка смены — одна строка «На смене с 08:27 · Закончить смену» (нажатие раскрывает);
+   3. главная «сначала дела»: «Срочно», «Сейчас», «Ждут решения» — всегда на первом экране; заработок, тест, месяц, новости — под «Ещё»;
+   4. «Ждут решения» на главной: 2–3 строки сразу с главной кнопкой и «ещё N»;
+   5. «Команда сегодня» у руководителя (и владельца заведения до 30 человек);
+   6. цвет — только для отклонений (через классы 92j, палитра не меняется);
+   7. «Пульт → Приход и уход» открывает список сразу;
+   8. плитки руководителя «Не назначено / В работе / Ждут проверки / Вернули»;
+   9. узкая плашка тревоги, пока человек занят (фото, чек-лист, объяснительная, тест), через 2 минуты — на весь экран;
+   10. черновики форм до конца дня (localStorage);
+   11. «Сегодня сделано 3 из 8» над задачами сотрудника;
+   12. «Команда»: меню одной строкой переключателей, люди выше;
+   13. «+ Поставить задачу» — золотая; «+ Добавить себе задачу» — вверху списка;
+   14. «Разделы» — одна сетка плиток, без пустой фразы;
+   15. «Ещё сегодня»: подписи карточек без склейки («НовостьВсем»).
+   Чужие функции — только обёртками (часть — после загрузки всех частей, setTimeout 0, как в 92m). */
+function dt_on() { return typeof cm_on === 'function' ? cm_on() : window.JAMOA_CORE === true; }
+function dt_e(s) { return '<span>' + h(s) + '</span>'; }
+function dt_tr(s) { try { return trUi(s); } catch (e) { return s; } }
+function dt_mm(v) { var p = String(v || '').split(':'); return (+p[0] || 0) * 60 + (+p[1] || 0); }
+var DT = { cbOpen: false, alAt: 0, quiet: {}, tl: null };
+function dt_of() { var uz = false; try { uz = uiLang() === 'uz'; } catch (e) {} return uz ? '/' : '<span>из</span>'; } /* «3 из 8»: по-узбекски «3 / 8» (порядок слов другой) */
+function dt_dbg() { return /[?&]w4dbg/.test(location.search); }
+
+/* =====================================================================
+   1. Тревога на весь экран — только тем, кто на работе
+   ===================================================================== */
+var DT_ALWAYS = ['emerg', 'clock', 'w4hsos', 'w4hemg']; /* ЧС («Экстренно»), «Отметить приход», вызов охраны и авария */
+function dt_inShiftWindow() {
+  var sh = null; try { sh = myShiftToday(); } catch (x) {}
+  if (!sh || sh.off || !sh.start || !sh.end) return false;
+  var c = dt_mm(nowHM(0)), s0 = dt_mm(sh.start) - 30, e0 = dt_mm(sh.end) + 30;
+  if (sh.overnight || e0 - 30 <= s0 + 30) return c >= s0 || c <= (e0 % 1440);
+  return c >= s0 && c <= e0;
+}
+/* кому — полноэкранная тревога со звуком */
+function dt_full(n) {
+  if (!n || DT_ALWAYS.indexOf(n.ref_type) >= 0) return true;
+  if (!S.me) return false;
+  if (isDirector()) return true;                      /* владелец — всегда */
+  if (onShift()) return true;                         /* на смене: есть открытая отметка прихода */
+  if (isLead()) return dt_inShiftWindow();            /* руководитель — в часы своей смены по графику ±30 мин */
+  return false;
+}
+/* остальным — тихо: уведомление остаётся в колокольчике, одна строка без звука; эскалация по времени — как была */
+function dt_quiet(n) {
+  if (!n || DT.quiet[n.id]) return; DT.quiet[n.id] = 1;
+  try { if (typeof loadNotif === 'function') loadNotif().then(function () { try { if (S.view === 'home' && typeof homeNewCard === 'function') homeNewCard(); } catch (e) {} }); } catch (x) {}
+  var t = ''; try { t = alUp(alTitle(n.title).replace(/^СРОЧНО\s*[:!.—-]?\s*/i, '')); } catch (x) { t = String(n.title || ''); }
+  if (t) toast(dt_tr('Новое срочное уведомление') + ': ' + dt_tr(t.replace(/\s+/g, ' ').trim()));
+}
+/* проверка срочного: та же, что в базе, плюс правило «кому на весь экран» */
+alarmCheck = async function () {
+  if (!S.me || document.hidden) return;
+  if (typeof obActive === 'function' && obActive()) return;
+  if (ALM.cur && !$('alarm')) { var cn = ALM.curN; alarmStop(); alarmSnooze(cn, true); }
+  if ($('alarm') || ALM.busy) return;
+  ALM.busy = true;
+  try {
+    var now = Date.now();
+    var r = await sb.from('notifications').select('*').eq('employee_id', S.me.id).eq('urgent', true).is('read_at', null).gte('at', new Date(now - ALM_MAXAGE).toISOString()).order('at', { ascending: false }).limit(8);
+    var all = ((r && r.data) || []).filter(function (n) { var t = Date.parse(n.at); return !(t < now - ALM_MAXAGE); }), escMin = Pn('urgent_escalate_min', 15), shown = false;
+    all.sort(function (x, y) { return (DT_ALWAYS.indexOf(y.ref_type) >= 0) - (DT_ALWAYS.indexOf(x.ref_type) >= 0); });
+    for (var i = 0; i < all.length; i++) {
+      var n = all[i], due = ALM_ACT.indexOf(n.ref_type) >= 0 && escMin > 0 && !ALM.esc[n.id] && now - Date.parse(n.at) >= escMin * 6e4;
+      if (!(ALM.snooze[n.id] > now) && !shown || due) {
+        if (await alarmAccepted(n)) { markRead(n.id); continue; }
+        if (due) alarmEscalate(n, 'time');
+        if (!dt_full(n)) { dt_quiet(n); continue; }
+        /* w4_fb — обход старого правила 10-fixes (только «на смене по графику в эту минуту»): решение уже принято выше */
+        if (!shown && !(ALM.snooze[n.id] > now) && !$('alarm') && !(typeof obActive === 'function' && obActive())) { alarmShow(Object.assign({}, n, { w4_fb: n.w4_fb || 1 })); shown = !!$('alarm'); }
+      }
+    }
+    if (shown) loadNotif().then(function () { if (S.view === 'home' && typeof homeNewCard === 'function') homeNewCard(); });
+    var live = {}; all.forEach(function (n) { live[n.id] = 1; }); Object.keys(ALM.mini || {}).forEach(function (k) { if (!live[k]) delete ALM.mini[k]; }); if (typeof almStrip === 'function') almStrip();
+  } catch (x) {} finally { ALM.busy = false; }
+};
+
+/* =====================================================================
+   9. Пока человек занят (фото задачи, чек-лист, объяснительная, тест) — узкая плашка; через 2 минуты — на весь экран
+   ===================================================================== */
+function dt_busy() {
+  try {
+    if (S.view === 'fun' && S.sub && S.sub.fT === 'quiz') return true;                 /* тест дня */
+    if ($('dkQN')) return true;                                                          /* тест допуска (92k) */
+    var L = $('layer'); if (!L || !L.querySelector('#sh')) return false;
+    if (L.querySelector('#cdDo,#cdDone,#cdShot,#phDone,[data-st="done"],.cd-ckb,[data-cdck],#ecT,#cbLt,#cbExT')) return true; /* задача с фото и чек-листом, объяснительная */
+    var ae = document.activeElement; if (ae && L.contains(ae) && /^(TEXTAREA|INPUT)$/.test(ae.tagName)) return true; /* заполняет форму */
+  } catch (e) {}
+  return false;
+}
+function dt_alFull() { var a = $('alarm'); if (a) a.classList.remove('compact'); }
+function dt_alCompact() {
+  var a = $('alarm'); if (!a || !dt_busy()) return;
+  a.classList.add('compact'); DT.alAt = Date.now();
+  if (a._dtc) return; a._dtc = 1;
+  a.addEventListener('click', function (e) { if (a.classList.contains('compact') && !(e.target.closest && e.target.closest('button'))) { e.stopPropagation(); dt_alFull(); } }, true);
+}
+(function () {
+  var as0 = alarmShow;
+  alarmShow = function (n) { var r = as0.apply(this, arguments); try { dt_alCompact(); } catch (e) {} return r; };
+  setInterval(function () { var a = $('alarm'); if (!a || !a.classList.contains('compact')) return; if (!dt_busy() || Date.now() - DT.alAt >= 120000) dt_alFull(); }, 2000);
+  var st = document.createElement('style');
+  st.textContent = '.alarm.compact{inset:calc(8px + env(safe-area-inset-top)) 8px auto 8px!important;height:auto!important;max-height:none;padding:10px 12px!important;border-radius:18px;border:1.5px solid var(--gold);box-shadow:0 12px 30px rgba(0,0,0,.35);overflow:hidden;cursor:pointer}' +
+    '.alarm.compact .alin{min-height:0!important;gap:4px}.alarm.compact .altop{padding-top:0!important;gap:2px}.alarm.compact .alic,.alarm.compact .alb,.alarm.compact .alhint,.alarm.compact .alr,.alarm.compact #alLater,.alarm.compact #alOpen{display:none!important}' +
+    '.alarm.compact .alk{font-size:12px!important}.alarm.compact .alt{font-size:16px!important;line-height:1.25}.alarm.compact::before{display:none}' +
+    '.alarm.compact .albt{display:flex;flex-direction:row;gap:8px;margin-top:6px!important;padding-top:0!important}.alarm.compact .albt .btn{min-height:44px;margin:0;flex:1}';
+  document.head.appendChild(st);
+})();
+
+/* =====================================================================
+   2. Карточка смены после «Пришёл» — одна строка; нажатие раскрывает
+   ===================================================================== */
+(function () {
+  if (typeof cb_cardHtml !== 'function') return;
+  var ch0 = cb_cardHtml;
+  cb_cardHtml = function () {
+    var s = cb_state(), html = ch0.apply(this, arguments);
+    /* обычный приход — без цвета (цвет только для отклонений) */
+    html = html.replace('chip t-ok hm-shc', 'chip t-mute hm-shc');
+    if (s.k !== 'on') { DT.cbOpen = false; return html; }
+    if (DT.cbOpen) return html.replace('<div class="cb-lks">', '<div class="cb-lks"><button type="button" class="cb-lk" id="dtCbClose">' + icon('chev', 14) + '<span>Свернуть</span></button>');
+    var a = s.a, late = a && a.is_late && a.late_min > 0 ? ' <span class="chip t-warn"><span>Опоздание</span> <b class="num">' + h(fmtMin(a.late_min)) + '</b></span>' : '';
+    var wait = (CB.myReq || []).filter(function (x) { return x.status === 'new'; })[0];
+    return '<div class="cb-w dt-cbw" id="cbClock" data-cp="1"><div class="card dt-cbl">' +
+      '<button type="button" class="dt-cbx" id="dtCbOpen" aria-expanded="false"><span class="grow"><b><span>На смене с</span> <span class="num">' + hm(a.clock_in) + '</span></b>' + late + (wait ? '<span class="meta dt-cbm"><span>Запрос руководителю ждёт подтверждения</span></span>' : '') + '</span></button>' +
+      '<button type="button" class="btn ghost sm dt-cbo" id="clk">' + icon('out', 18) + '<span>Закончить смену</span></button></div></div>';
+  };
+  var cbb0 = cb_bind;
+  cb_bind = function () {
+    var r = cbb0.apply(this, arguments);
+    if ($('dtCbOpen')) $('dtCbOpen').onclick = function () { DT.cbOpen = true; cb_mount(); };
+    if ($('dtCbClose')) $('dtCbClose').onclick = function () { DT.cbOpen = false; cb_mount(); };
+    return r;
+  };
+  var st = document.createElement('style');
+  st.textContent = '.dt-cbw{margin:0 0 12px}.dt-cbl{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 14px;min-height:56px;margin:0}' +
+    '.dt-cbx{all:unset;box-sizing:border-box;cursor:pointer;flex:1;min-width:0;min-height:44px;display:flex;align-items:center;-webkit-tap-highlight-color:transparent}.dt-cbx:focus-visible{outline:2px solid var(--gold);outline-offset:2px}' +
+    '.dt-cbx .grow{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-width:0;line-height:1.3}.dt-cbx b{font-size:15.5px}.dt-cbm{flex-basis:100%;white-space:normal;font-size:12.5px}' +
+    '.dt-cbo{flex:none;min-height:44px;margin:0;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}@media (max-width:350px){.dt-cbo{padding-left:10px;padding-right:10px}.dt-cbx b{font-size:14.5px}}';
+  document.head.appendChild(st);
+})();
+
+/* =====================================================================
+   3. Главная «сначала дела»: номера приоритета (data-cp ≤ 2 — никогда не уходит под «Ещё»; ≥ 50 — всегда под «Ещё»)
+   ===================================================================== */
+var DT_CP = {
+  homeNew: 1.2,            /* Срочно — нужно принять */
+  homeNow: 1.4,            /* Сейчас */
+  dqHome: 1.45,            /* передача смены (часть Q) — по смыслу «Сейчас» */
+  w3Dec: 1.5,              /* Ждут решения */
+  drHome: 1.55,            /* заявки (часть R): ремонт без исполнителя, закупки ждут решения */
+  dtTiles: 1.6,            /* плитки руководителя */
+  jcNowCard: 1.9,          /* Сейчас в заведении (часть C) */
+  dtTeam: 1.95,            /* Команда сегодня */
+  cfWg_earn: 51, cfWg_quiz: 51.5, cfWg_month: 52.5, homeAnn: 53, homeUnread: 50
+};
+(function () {
+  if (typeof cf_cp !== 'function') return;
+  var cp0 = cf_cp;
+  cf_cp = function (el) {
+    try { var id = el && el.id; if (id && DT_CP[id] != null && dt_on()) return DT_CP[id]; } catch (e) {}
+    return cp0.apply(this, arguments);
+  };
+  /* подписи «Ещё сегодня»: без склейки соседних меток («НовостьВсем») */
+  if (typeof cf_name === 'function') {
+    var nm0 = cf_name, NM = { homeAnn: 'Объявления', homeUnread: 'Новое', cfWeek: 'Моя неделя', bdAsk: 'День рождения', obFs: 'Первые шаги', cfWg_earn: 'Заработок сегодня', cfWg_quiz: 'Тест дня', cfWg_month: 'Мой месяц', cfWg_quick: 'Быстрые действия' };
+    cf_name = function (el) { if (el && NM[el.id]) return NM[el.id]; var t = nm0.apply(this, arguments); return String(t || '').replace(/([а-яё])([А-ЯЁ])/g, '$1 $2'); };
+  }
+})();
+
+/* =====================================================================
+   4. «Ждут решения» на главной: 2–3 строки с главной кнопкой и «ещё N»
+   ===================================================================== */
+var DT_QUICK = { leave: 1, jc_req: 1, jc_forgot: 1, jc_zone: 1, xchg: 1, jc_adv: 1 };
+function dt_decBtn(i) { return DT_QUICK[i.k] ? (i.ok || 'Подтвердить') : 'Открыть'; }
+function dt_decOpen(i) {
+  if (i.k === 'jc_task' && i.x && i.x.id && typeof taskSheet === 'function') { var t = i.x; return taskSheet(t, function () { d6HomeLine(); }); }
+  go('decide');
+}
+d6HomeLine = async function () {
+  var L = [], el;
+  try { L = await d6Load(); } catch (e) { L = []; }
+  el = w3HomeSlot('w3Dec'); if (!el) return;
+  el.setAttribute('data-cp', '1.5');
+  if (!L || !L.length) { el.innerHTML = ''; return; }
+  var top = L.slice(0, 3);
+  el.innerHTML = '<div class="card dt-dec"><h2><span>Ждут решения</span> <small class="num">' + L.length + '</small></h2>' +
+    top.map(function (i, k) {
+      var e = i.e;
+      return '<div class="row dt-dr"><div class="grow" style="min-width:0"><div class="name dt-dn"><span>' + h(i.what) + '</span>' + (i.det ? ': <span>' + h(i.det) + '</span>' : '') + '</div>' +
+        '<div class="meta dt-dm">' + (e ? '<b>' + h(e.first_name + ' ' + String(e.last_name || '').charAt(0) + '.') + '</b>' : '') + (i.sum ? ' · <span class="num">' + money(i.sum) + '</span> <span>сум</span>' : '') + (i.at ? ' · <span>ждёт</span> <span class="num">' + w3Ago(i.at) + '</span>' : '') + '</div></div>' +
+        '<button type="button" class="btn ' + (DT_QUICK[i.k] ? 'gold' : 'ghost') + ' sm dt-db" data-dtd="' + k + '"><span>' + h(dt_decBtn(i)) + '</span></button></div>';
+    }).join('') +
+    '<button type="button" class="btn ghost full sm dt-dall" id="dtDecAll">' + (L.length > 3 ? '<span>ещё</span> <span class="num">' + (L.length - 3) + '</span>' : '<span>Все решения</span>') + '</button></div>';
+  el.querySelectorAll('[data-dtd]').forEach(function (b) {
+    b.onclick = async function () {
+      var i = top[+b.getAttribute('data-dtd')]; if (!i) return;
+      if (!DT_QUICK[i.k]) return dt_decOpen(i);
+      b.disabled = true; var ok = false; try { ok = await d6Do(i, true); } catch (e) { ok = false; }
+      if (ok) { toast('Решено'); d6HomeLine(); } else b.disabled = false;
+    };
+  });
+  $('dtDecAll').onclick = function () { go('decide'); };
+};
+(function () {
+  var st = document.createElement('style');
+  st.textContent = '.dt-dec h2 small{margin-left:6px}.dt-dr{align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line2)}.dt-dr:first-of-type{border-top:0}.dt-dn{white-space:normal!important;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}' +
+    '.dt-dm{white-space:normal}.dt-db{flex:none;min-height:44px;min-width:96px;max-width:46%;margin:0;white-space:normal;line-height:1.2}.dt-dall{margin-top:8px;min-height:44px}';
+  document.head.appendChild(st);
+})();
+
+/* =====================================================================
+   5. «Команда сегодня» и 8. плитки руководителя
+   ===================================================================== */
+function dt_teamWho() {
+  if (!S.me) return null;
+  if (isDirector()) { var all = (S.emps || []).filter(function (e) { return e.active !== false && e.role !== 'director'; }); return all.length && all.length <= 30 ? all : null; }
+  if (isLead()) { var t = myTeam(); return t.length ? t : null; }
+  return null;
+}
+function dt_short(e) { return e ? e.first_name + ' ' + String(e.last_name || '').charAt(0) + '.' : ''; }
+async function dt_teamCard() {
+  var team = dt_teamWho(); if (!team) { if ($('dtTeam')) $('dtTeam').innerHTML = ''; return; }
+  var el = w3HomeSlot('dtTeam'); if (!el) return;
+  var R; try { R = await teamPhases(team); } catch (x) { return; }
+  el = $('dtTeam'); if (!el || S.view !== 'home') return;
+  DT.tl = R;
+  var rest = {}, rows = [];
+  R.list.forEach(function (x) {
+    if (x.p.st === 'off' || x.p.st === 'nosched' || x.p.st === 'skip') { if (x.p.st !== 'skip') { var g = x.p.st === 'off' ? (kdFor(x.e.dept_id, x.k) || {}).label || 'Выходной' : 'не в графике'; (rest[g] = rest[g] || []).push(x.e); } return; }
+    rows.push(x);
+  });
+  /* исключения наверху: не пришли, опаздывают, опоздали; потом на месте; потом «ещё не началась» и ушли */
+  var ord = { missing: 0, absent: 0, late: 1, in: 2, soon: 3, left: 4 };
+  rows.sort(function (a, b) { return (ord[a.p.st] != null ? ord[a.p.st] : 5) - (ord[b.p.st] != null ? ord[b.p.st] : 5) || fullName(a.e).localeCompare(fullName(b.e), 'ru'); });
+  var MAX = 10, c = R.c;
+  function st(x) {
+    var p = x.p, a = x.a;
+    if (p.st === 'in') return '<span class="dt-tin"><span>с</span> <b class="num">' + hm(a && a.clock_in) + '</b></span>';
+    if (p.st === 'late') return '<span class="chip t-warn"><span>опоздание</span> <b class="num">' + fmtMin(p.lateMin || (a && a.late_min) || 0) + '</b></span>' + (a && a.clock_in ? ' <span class="dt-tin"><span>с</span> <b class="num">' + hm(a.clock_in) + '</b></span>' : '');
+    if (p.st === 'left') return '<span class="meta"><span>ушёл</span> <span class="num">' + hm(a && a.clock_out) + '</span></span>';
+    if (p.st === 'soon') return '<span class="meta">' + (p.start ? '<span>смена с</span> <span class="num">' + h(p.start) + '</span>' : '') + '</span>';
+    return p.chip || p.main || '';
+  }
+  var html = '<div class="card dt-tm"><h2><span>Команда сегодня</span> <small><span>на месте</span> <b class="num dt-tok">' + c.on + '</b> ' + dt_of() + ' <b class="num">' + c.started + '</b>' + (c.late ? ' · <span>опоздали</span> <b class="num">' + c.late + '</b>' : '') + '</small></h2>' +
+    (rows.length ? rows.slice(0, MAX).map(function (x) {
+      var e = x.e, sw = typeof swChipBtn === 'function' ? swChipBtn(e, x.p) : '';
+      return '<div class="row dt-tr"><div class="grow" style="min-width:0"><div class="name">' + h(fullName(e)) + '</div><div class="meta">' + h(posName(e.position_id)) + (typeof ttShift === 'function' ? ttShift(e, x.k, x.tm) : '') + '</div>' + (sw ? '<div class="dt-tsw">' + sw + '</div>' : '') + '</div><div class="dt-ts">' + st(x) + '</div></div>';
+    }).join('') : '<div class="empty">' + dt_e('Сегодня по графику никого нет') + '</div>') +
+    (rows.length > MAX ? '<div class="meta" style="text-align:center;padding-top:6px"><span>и ещё</span> <span class="num">' + (rows.length - MAX) + '</span></div>' : '') +
+    Object.keys(rest).map(function (g) { return '<div class="dt-trest"><span>' + h(g) + '</span>: <b class="num">' + rest[g].length + '</b> — <span class="dt-trn">' + rest[g].map(function (e) { return h(dt_short(e)); }).join(', ') + '</span></div>'; }).join('') +
+    '<button type="button" class="btn ghost full sm dt-tall" id="dtTeamAll"><span>' + (isDirector() ? 'Приход и уход' : 'Вся команда') + '</span></button></div>';
+  if (el._h !== html) { el.innerHTML = html; el._h = html; }
+  $('dtTeamAll').onclick = function () { if (isDirector()) { S.sub.desk = 'att'; S.sub.attF = 'all'; S.sub.attDay = today(); go('desk'); } else go('team'); };
+  dt_tilesCard();
+}
+/* 8. плитки руководителя: каждая открывает отфильтрованные задачи */
+var DT_TL = [['un', 'Не назначено', 'warn'], ['work', 'В работе', ''], ['review', 'Ждут проверки', 'warn'], ['back', 'Вернули', 'warn']];
+async function dt_tilesData() {
+  var team = myTeam(), ids = team.map(function (e) { return e.id; }); if (!ids.length) return null;
+  var r = await qSafe(sb.from('tasks').select('*').in('assignee_id', ids).gte('day', addDays(today(), -14)));
+  var L = ((r && r.data) || []).filter(function (t) { return t.status !== 'done' && t.status !== 'cancelled' && !t.deleted && t.day <= today(); });
+  var away = {}; ((DT.tl && DT.tl.list) || []).forEach(function (x) { if (/^(off|absent|left)$/.test(x.p.st)) away[x.e.id] = 1; });
+  var act = {}; team.forEach(function (e) { act[e.id] = 1; });
+  var G = { un: [], work: [], review: [], back: [] };
+  L.forEach(function (t) {
+    if (t.status === 'work') G.work.push(t); else if (t.status === 'review') G.review.push(t); else if (t.status === 'back') G.back.push(t);
+    /* «Не назначено»: задача на сегодня, а исполнителя нет на работе (выходной, не пришёл, ушёл) или нет в команде */
+    if ((t.status === 'new' || t.status === 'back') && t.day === today() && (!t.assignee_id || !act[t.assignee_id] || away[t.assignee_id])) G.un.push(t);
+  });
+  return G;
+}
+async function dt_tilesCard() {
+  if (!S.me || isDirector() || !isLead() || !myTeam().length) return;
+  var el = w3HomeSlot('dtTiles'); if (!el) return;
+  var G = await dt_tilesData(); el = $('dtTiles'); if (!el || !G || S.view !== 'home') return;
+  var html = '<div class="card dt-tls"><h2><span>Задачи команды</span></h2><div class="dt-tg">' + DT_TL.map(function (t) { var n = G[t[0]].length; return '<button type="button" class="stat jc-tile dt-tl' + (n && t[2] ? ' jc-' + t[2] : '') + '" data-dttl="' + t[0] + '"><div class="v num">' + n + '</div><div class="l"><span>' + t[1] + '</span></div></button>'; }).join('') + '</div></div>';
+  if (el._h !== html) { el.innerHTML = html; el._h = html; }
+  el.querySelectorAll('[data-dttl]').forEach(function (b) { b.onclick = function () { dt_tilesOpen(b.getAttribute('data-dttl')); }; });
+}
+async function dt_tilesOpen(k) {
+  var G = await dt_tilesData(); if (!G) return;
+  var L = (G[k] || []).slice().sort(function (a, b) { return (overdue(b) - overdue(a)) || byTime(a, b); }), T = DT_TL.filter(function (x) { return x[0] === k; })[0];
+  sheet(sheetHead('<span>' + h(T[1]) + '</span> <span class="num">' + L.length + '</span>', k === 'un' ? dt_e('Исполнителя сегодня нет на работе — передайте задачу другому') : '') +
+    '<div id="dtTlL">' + (L.length ? L.map(function (t) { return taskRow(t, { who: 1, date: 1 }); }).join('') : '<div class="empty">' + dt_e('Задач нет') + '</div>') + '</div>');
+  if (L.length) bindTaskRows($('dtTlL'), L, function () { if (S.view === 'home') dt_tilesCard(); });
+}
+W3.home.push(function () { try { dt_teamCard(); } catch (e) { console.warn(e); } });
+(function () {
+  var st = document.createElement('style');
+  st.textContent = '.dt-tr{align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line2)}.dt-tm h2+.dt-tr{border-top:0}.dt-tr .name,.dt-tr .meta{white-space:normal}.dt-ts{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:4px;text-align:right;max-width:46%}' +
+    '.dt-tin{font-size:13.5px;color:var(--muted)}.dt-tin b{color:var(--ink);font-weight:600}.dt-tsw{margin-top:4px}.dt-trest{padding:10px 0 2px;border-top:1px solid var(--line2);font-size:13.5px;line-height:1.45;color:var(--muted)}.dt-trest b{color:var(--ink)}.dt-tall{margin-top:8px;min-height:44px}' +
+    'html[data-lx]:root .dt-tok{color:var(--ok)}.dt-tg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:4px}.dt-tl{min-height:64px}@media (min-width:420px){.dt-tg{grid-template-columns:repeat(4,minmax(0,1fr))}}';
+  document.head.appendChild(st);
+})();
+
+/* =====================================================================
+   6. Цвет только для отклонений
+   ===================================================================== */
+(function () {
+  /* задачи: «Новая» — нейтральная, «В работе» — сапфировая обводка (одинаково в шапке задачи и в списках) */
+  if (typeof TST === 'object' && TST) { if (TST.new) TST.new = [TST.new[0], 't-mute dt-new']; if (TST.work) TST.work = [TST.work[0], 't-mute dt-work']; }
+  /* обычный приход «с 08:27» — нейтральный (отклонения — янтарь и рубин) */
+  function neutral(o) { if (o && o.st === 'in') { ['main', 'chip'].forEach(function (k) { if (typeof o[k] === 'string') o[k] = o[k].replace('chip t-ok', 'chip t-mute'); }); } return o; }
+  if (typeof attPhase === 'function') { var ap0 = attPhase; attPhase = function () { return neutral(ap0.apply(this, arguments)); }; }
+  if (typeof shiftPhase === 'function') { var sp0 = shiftPhase; shiftPhase = function () { return neutral(sp0.apply(this, arguments)); }; }
+  /* слова, которые 92j красил сапфиром, хотя это норма: «смена с …», «Новое» */
+  try { if (typeof DJ_WORDS === 'object') { DJ_WORDS.info = DJ_WORDS.info.filter(function (w) { return ['смена с', 'новое', 'Новое'].indexOf(w) < 0; }); Object.keys(DJ_MAP).forEach(function (k) { delete DJ_MAP[k]; }); } } catch (e) {}
+  /* любая метка «В работе» (заявки, задачи, другие части) — обводкой, без заливки */
+  var WORK = ['в работе'];
+  function dt_markWork(root) {
+    try {
+      var w = WORK.concat([String(dt_tr('В работе')).toLowerCase()]);
+      (root || document).querySelectorAll('.chip:not(.dt-work):not([data-dtw])').forEach(function (c) {
+        c.setAttribute('data-dtw', ''); var t = String(c.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (w.indexOf(t) >= 0) c.classList.add('dt-work');
+      });
+    } catch (e) {}
+  }
+  if (typeof dj_mark === 'function') { var dm0 = dj_mark; dj_mark = function (root) { var r = dm0.apply(this, arguments); dt_markWork(root); return r; }; }
+  var css = 'html[data-lx]:root body .chip.chip.dt-work{background:transparent!important;color:var(--info)!important;box-shadow:inset 0 0 0 1.5px var(--dj-infof,var(--info))!important;border-color:transparent!important}' +
+    'html[data-lx]:root body .chip.chip.dt-work *{color:inherit!important}' +
+    'html[data-lx]:root body .chip.chip.dt-new{background:var(--mute2,transparent);color:var(--muted)!important;box-shadow:none!important}';
+  var st = document.createElement('style'); st.id = 'dtCss'; st.textContent = css; document.head.appendChild(st);
+  window.addEventListener('load', function () { setTimeout(function () { if (st.parentNode) document.head.appendChild(st); }, 0); });
+})();
+
+/* =====================================================================
+   7. «Пульт → Приход и уход»: сразу список (исключения наверху), без раскрытия
+   ===================================================================== */
+(function () {
+  if (typeof dm_pultHtml !== 'function') return;
+  dm_pultHtml = function () {
+    if (!isDirector()) return '';
+    return '<div class="pl-gt">' + dm_e('Сегодня') + '</div><div class="pl-card pl-ics dm-pa" id="dmPA">' +
+      '<button type="button" class="pl-row" id="dmPAh"><span class="pl-ic dm-gr">' + icon('tick', 18) + '</span><span class="pl-t"><span class="pl-tt">' + dm_e('Приход и уход') + '</span></span><span class="dm-bdg num" id="dmPAb" data-n="0"></span><span class="pl-v" id="dmPAv"></span><span class="pl-ch">' + icon('chev', 16) + '</span></button>' +
+      '<button type="button" class="pl-row" data-pl="tasks"><span class="pl-ic dm-bl">' + icon('check', 18) + '</span><span class="pl-t"><span class="pl-tt">' + dm_e('Задачи') + '</span></span><span class="dm-bdg num" id="dmPTb" data-n="0"></span><span class="pl-v num" id="dmPTv"></span><span class="pl-ch">' + icon('chev', 16) + '</span></button>' +
+      (typeof dm_mapOk === 'function' && dm_mapOk() ? '<button type="button" class="pl-row" data-pl="map"><span class="pl-ic dm-rd">' + icon('pin', 18) + '</span><span class="pl-t"><span class="pl-tt">' + dm_e('Карта сотрудников') + '</span><span class="pl-st">' + dm_e('Где отметились сегодня') + '</span></span><span class="pl-ch">' + icon('chev', 16) + '</span></button>' : '') + '</div>';
+  };
+  dm_pultBind = function () {
+    var hd = $('dmPAh'); if (!hd) return;
+    hd.onclick = function () { S.sub.attF = 'all'; S.sub.attDay = today(); try { PL.find = ''; } catch (e) {} plOpen('att'); };
+    dm_pultFill();
+  };
+})();
+
+/* =====================================================================
+   10. Черновики форм до конца дня: объяснительная, «Сообщить о проблеме», новая задача, приглашение
+   ===================================================================== */
+var DT_FORMS = [
+  { k: 'explain', mark: '#ecT', f: ['ecT'] },
+  { k: 'late', mark: '#cbLt', f: ['cbLt'] },
+  { k: 'zone', mark: '#cbExT', f: ['cbExT'] },
+  { k: 'problem', mark: '#prT', f: ['prP', 'prT'] },
+  { k: 'task', mark: '#nsave', f: ['nt', 'nn'] },
+  { k: 'invite', mark: '#cfGo', f: ['cfN', 'cfP', 'cfSal'] }
+];
+function dt_dKey(k) { return 'dt-draft-' + (S.me && S.me.id) + '-' + k; }
+function dt_dGet(k) { try { var o = JSON.parse(localStorage.getItem(dt_dKey(k)) || 'null'); return o && o.day === today() && o.v ? o : null; } catch (e) { return null; } }
+function dt_dSave(F) { try { var v = {}, any = false; F.f.forEach(function (id) { var el = $(id); if (el && el.value) { v[id] = el.value; if (String(el.value).trim()) any = true; } }); if (any) localStorage.setItem(dt_dKey(F.k), JSON.stringify({ day: today(), v: v })); else localStorage.removeItem(dt_dKey(F.k)); } catch (e) {} }
+function dt_dDrop(k) { try { localStorage.removeItem(dt_dKey(k)); } catch (e) {} }
+function dt_dScan() {
+  if (!S.me) return;
+  DT_FORMS.forEach(function (F) {
+    var mk = document.querySelector(F.mark); if (!mk) return;
+    var box = mk.closest('.box') || mk.closest('#main') || document.body;
+    var first = $(F.f[0]); if (!first || first._dtd) return;
+    F.f.forEach(function (id) { var el = $(id); if (el) el._dtd = 1; });
+    /* восстановить, если поля пустые */
+    var d = dt_dGet(F.k), restored = false;
+    if (d) {
+      var txt = function (el) { return el && (el.tagName === 'TEXTAREA' || /^(text|search|tel|)$/.test(el.type || '') || el.getAttribute('inputmode') === 'numeric'); };
+      var empty = F.f.every(function (id) { var el = $(id); return !txt(el) || !String(el.value || '').trim(); });
+      if (empty) F.f.forEach(function (id) { var el = $(id); if (txt(el) && d.v[id] != null) { el.value = d.v[id]; restored = true; try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {} } });
+      if (restored && !box.querySelector('.dt-drn')) { var n = document.createElement('div'); n.className = 'meta dt-drn'; n.innerHTML = icon('clip', 14) + ' <span>Черновик восстановлен</span> · <button type="button" class="dt-drx"><span>Очистить</span></button>'; var fe = $(F.f[0]), lab = fe.closest('label') || fe; lab.parentNode.insertBefore(n, lab); n.querySelector('.dt-drx').onclick = function () { F.f.forEach(function (id) { var el = $(id); if (el && el.type !== 'date') { el.value = ''; try { el.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {} } }); dt_dDrop(F.k); n.remove(); }; }
+    }
+    F.f.forEach(function (id) { var el = $(id); if (el) { el.addEventListener('input', function () { dt_dSave(F); }); el.addEventListener('change', function () { dt_dSave(F); }); } });
+    /* отправка: главная кнопка формы; черновик удаляется, когда форма закрылась (успешно отправлено) */
+    box.addEventListener('click', function (ev) {
+      var b = ev.target && ev.target.closest && ev.target.closest('button'); if (!b || b.id === 'shx' || b.classList.contains('pick') || b.classList.contains('dt-drx')) return;
+      var main = b.id === 'nsave' || b.id === 'cfGo' || b.id === 'prSend' || b.id === 'ecS' || b.id === 'cbLs' || b.id === 'cbExGo' || (b.classList.contains('btn') && !b.classList.contains('ghost') && (b.classList.contains('gold') || b.classList.contains('dark') || b.classList.contains('green')));
+      if (!main) return;
+      [1500, 4000, 8000].forEach(function (ms) { setTimeout(function () { if (!document.querySelector(F.mark) || ($(F.f[0]) && !$(F.f[0])._dtd)) dt_dDrop(F.k); }, ms); });
+    }, true);
+  });
+}
+(function () {
+  var pend = false;
+  function run() { pend = false; try { dt_dScan(); } catch (e) { console.warn(e); } }
+  function start() {
+    try { new MutationObserver(function () { if (pend) return; pend = true; setTimeout(run, 60); }).observe(document.body, { childList: true, subtree: true }); } catch (e) {}
+  }
+  if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+  var st = document.createElement('style'); st.textContent = '.dt-drn{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:2px 0 -2px;white-space:normal}.dt-drx{all:unset;cursor:pointer;color:var(--goldink);font-weight:600;min-height:32px;display:inline-flex;align-items:center}'; document.head.appendChild(st);
+})();
+
+/* =====================================================================
+   11–14. После загрузки всех частей (93–99 обёртывают те же экраны) — внешние обёртки
+   ===================================================================== */
+/* 11. «Сегодня сделано 3 из 8» над задачами сотрудника */
+async function dt_taskBar() {
+  var m = $('main'), tl = $('tl'); if (!m || S.view !== 'tasks' || !tl || (S.sub.tScope || 'mine') !== 'mine') return;
+  var r = await qSafe(sb.from('tasks').select('id,status,day').eq('assignee_id', S.me.id).eq('day', today()));
+  var L = ((r && r.data) || []).filter(function (t) { return t.status !== 'cancelled' && !t.deleted; }), n = L.length, d = L.filter(function (t) { return t.status === 'done' || t.status === 'review'; }).length;
+  tl = $('tl'); if (!tl || S.view !== 'tasks') return;
+  var el = $('dtTBar'); if (!n) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement('div'); el.id = 'dtTBar'; el.className = 'dt-tbar'; }
+  el.innerHTML = '<div class="dt-tbt"><span>Сегодня сделано</span> <b class="num">' + d + '</b> ' + dt_of() + ' <b class="num">' + n + '</b></div><div class="dt-tbb"><i style="width:' + Math.round(d / n * 100) + '%"></i></div>';
+  if (el.parentNode !== m || el.nextElementSibling !== tl) m.insertBefore(el, tl);
+}
+/* 12. «Команда»: меню одной строкой переключателей, люди выше */
+function dt_teamLay() {
+  var m = $('main'); if (!m || S.view !== 'team') return;
+  var src = [];
+  var nx = $('nav_teamX');
+  if (nx) Array.prototype.slice.call(nx.querySelectorAll('.pl-row')).forEach(function (b) { var t = b.querySelector('.pl-tt'); src.push({ el: b, t: t ? t.textContent : b.textContent, hide: nx }); });
+  if ($('jcTeamNow')) src.push({ el: $('jcTeamNow'), t: $('jcTeamNow').textContent, hide: $('jcTeamNow') });
+  Array.prototype.slice.call(m.querySelectorAll(':scope > .grid2')).forEach(function (g) { var bs = g.querySelectorAll('button'); if (bs.length && bs.length <= 2) { Array.prototype.forEach.call(bs, function (b) { src.push({ el: b, t: b.textContent, hide: g }); }); } });
+  var tr = $('cdTabRow'); if (tr) { var tb = tr.querySelector('button') || tr; var tt = tr.querySelector('.name, b, .pl-tt'); src.push({ el: tb, t: tt ? tt.textContent : 'Табель', hide: tr }); }
+  if (!src.length) return;
+  var q = $('dtTq');
+  if (!q) { q = document.createElement('div'); q.id = 'dtTq'; q.className = 'dt-tq'; q.setAttribute('role', 'group'); }
+  var html = src.map(function (s, i) { return '<button type="button" class="pick" data-dtq="' + i + '">' + h(String(s.t || '').replace(/\s+/g, ' ').trim()) + '</button>'; }).join('');
+  if (q._h !== html) { q.innerHTML = html; q._h = html; }
+  q.querySelectorAll('[data-dtq]').forEach(function (b) { b.onclick = function () { var s = src[+b.getAttribute('data-dtq')]; if (s && s.el) s.el.click(); }; });
+  src.forEach(function (s) { if (s.hide && s.hide.style.display !== 'none') s.hide.style.display = 'none'; });
+  var inv = $('nav_inv'), at = inv && inv.parentNode === m ? inv.nextSibling : m.firstChild;
+  if (q.parentNode !== m || (inv ? q.previousElementSibling !== inv : m.firstElementChild !== q)) m.insertBefore(q, at);
+  /* люди выше: карточки отделов (строки сотрудников) — сразу после переключателей и подсказки */
+  var hint = Array.prototype.slice.call(m.children).filter(function (c) { return c.classList.contains('muted') && /сотрудник|xodim/i.test(c.textContent || ''); })[0];
+  var ppl = Array.prototype.slice.call(m.children).filter(function (c) { return c.classList.contains('card') && !c.id && c.querySelector('.row .av, .row [class*="av"]') && c.querySelector('h2'); });
+  var ref = q.nextSibling;
+  if (hint) { if (hint !== ref) m.insertBefore(hint, ref); ref = hint.nextSibling; }
+  ppl.forEach(function (c) { if (c !== ref) m.insertBefore(c, ref); ref = c.nextSibling; });
+}
+/* 14. «Разделы»: одна сетка плиток; без пустой фразы */
+function dt_moreGrid() {
+  var m = $('main'); if (!m || S.view !== 'more' || (S.sub && S.sub.secEdit)) return;
+  var emp = m.querySelector(':scope > .card.empty'); if (emp && /раздел|bo.?lim/i.test(emp.textContent || '')) emp.remove();
+  var x = $('nav_moreX'); if (!x) return;
+  var grid = m.querySelector('.secg'); if (!grid) { var v = 'grid'; try { v = secView(); } catch (e) {} if (v !== 'grid') return; }
+  else if (!grid.querySelector('.seci')) return;
+  function tile(b) {
+    var id = b.getAttribute('data-navsec'), nm = b.querySelector('.name'), ic = b.querySelector('.secb svg');
+    var t = document.createElement('button'); t.type = 'button'; t.className = 'seci'; t.setAttribute('data-navsec', id);
+    var mt = b.querySelector('.meta'); if (mt) t.title = mt.textContent;
+    t.innerHTML = '<span class="secb">' + (ic ? ic.outerHTML.replace(/width="\d+"/, 'width="26"').replace(/height="\d+"/, 'height="26"') : '') + '</span><span class="secl">' + (nm ? nm.innerHTML : h(id)) + '</span>';
+    t.onclick = function () { go(id); }; return t;
+  }
+  Array.prototype.slice.call(x.querySelectorAll('.card.row[data-navsec]')).forEach(function (b) {
+    if (b.closest('#nav_over')) { var ov = $('nav_over'); var g = ov.querySelector('.secg.dt-g'); if (!g) { g = document.createElement('div'); g.className = 'secg dt-g'; ov.insertBefore(g, ov.firstChild); } g.appendChild(tile(b)); b.remove(); return; }
+    var g2 = x.querySelector(':scope > .secg.dt-fa'); if (!g2) { g2 = document.createElement('div'); g2.className = 'secg dt-fa'; b.parentNode.insertBefore(g2, b); }
+    g2.appendChild(tile(b)); b.remove();
+  });
+}
+setTimeout(function () {
+  try {
+    var vt0 = vTasks;
+    vTasks = async function () {
+      var r = await vt0.apply(this, arguments);
+      try {
+        var m = $('main'), b = $('addT'), tl = $('tl');
+        if (m && S.view === 'tasks' && b) {
+          var lead = Object.keys(teamIds()).length > 0;
+          if (lead) { b.classList.remove('ghost', 'sm'); b.classList.add('gold', 'full'); b.style.marginTop = ''; }   /* 13. «+ Поставить задачу» — золотая залитая */
+          if (tl && tl.parentNode === m && b.nextElementSibling !== tl && !lead) { m.insertBefore(b, tl); b.style.marginTop = ''; b.style.marginBottom = '10px'; } /* «+ Добавить себе задачу» — вверху списка */
+        }
+        await dt_taskBar();
+      } catch (e) { console.warn(e); }
+      return r;
+    };
+    if (typeof W3V === 'object' && W3V.tasks === vt0) W3V.tasks = vTasks;
+    var ht0 = homeTasks;
+    homeTasks = async function () { var r = await ht0.apply(this, arguments); try { var b = $('addTask'); if (b && Object.keys(teamIds()).length) { b.classList.remove('ghost', 'sm'); b.classList.add('gold'); } } catch (e) {} return r; };
+    var tm0 = vTeam;
+    vTeam = async function () { var r = await tm0.apply(this, arguments); [0, 120, 450, 1000].forEach(function (ms) { setTimeout(function () { try { dt_teamLay(); } catch (e) { console.warn(e); } }, ms); }); return r; };
+    if (typeof W3V === 'object' && W3V.team === tm0) W3V.team = vTeam;
+    var vm0 = vMore;
+    vMore = function () { var r = vm0.apply(this, arguments); try { dt_moreGrid(); } catch (e) { console.warn(e); } return r; };
+    if (typeof W3V === 'object' && W3V.more === vm0) W3V.more = vMore;
+  } catch (e) { console.warn('dt wrap', e); }
+}, 0);
+(function () {
+  var st = document.createElement('style');
+  st.textContent = '.dt-tbar{margin:0 2px 10px}.dt-tbt{font-size:14px;margin-bottom:6px;color:var(--muted)}.dt-tbt b{color:var(--ink)}.dt-tbb{height:6px;border-radius:99px;background:var(--line2);overflow:hidden}.dt-tbb i{display:block;height:100%;background:var(--gold);border-radius:inherit}' +
+    '.dt-tq{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 0 10px;padding:2px 0}.dt-tq::-webkit-scrollbar{display:none}.dt-tq .pick{flex:none;min-height:44px;white-space:nowrap}' +
+    '.secg.dt-fa,.secg.dt-g{margin-top:4px}';
+  document.head.appendChild(st);
+})();
+
+/* отладка (только ?w4dbg) */
+if (dt_dbg()) window.__dt = { S: function () { return S; }, go: function (v) { return go(v); }, render: function () { return render(); }, sb: sb, full: dt_full, busy: dt_busy, check: function () { return alarmCheck(); }, show: function (n) { return alarmShow(n); }, team: function () { return dt_teamCard(); }, tiles: dt_tilesOpen, taskSheet: function (id) { return sb.from('tasks').select('*').eq('id', id).maybeSingle().then(function (r) { return taskSheet(r.data, function () {}); }); }, explain: function () { return explainSheet(); }, assign: function () { return assignSheet({}, function () {}); } };
 
 
 /* ===== ВОЛНА 4 · 93-u45.js ===== */
