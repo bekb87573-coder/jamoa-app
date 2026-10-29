@@ -45029,7 +45029,7 @@ function nav_tabOk(k) {
   if (k === 'home') return true;
   if (k === 'more') return sections().length > 0;
   if (k === 'desk') return isDirector();
-  if (k === 'team') return myTeam().length > (isDirector() ? 3 : 0);
+  if (k === 'team') return isDirector() || myTeam().length > 0;   /* 29.10: у владельца «Команда» всегда — с неё начинают (добавить сотрудников) */
   var T = NAV_T[k]; if (!T) return false;
   try { return canView(T[0]); } catch (e) { return false; }
 }
