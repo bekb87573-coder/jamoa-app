@@ -59,6 +59,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-glossary.js"></script>
 <script src="uz-w4-home2.js"></script>
 <script src="uz-w4-integ.js"></script>
+<script src="uz-w4-map.js"></script>
 <script src="uz-w4-mgr.js"></script>
 <script src="uz-w4-mgr2.js"></script>
 <script src="uz-w4-misc.js"></script>
@@ -66,6 +67,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-owner.js"></script>
 <script src="uz-w4-paint.js"></script>
 <script src="uz-w4-parity.js"></script>
+<script src="uz-w4-perms.js"></script>
 <script src="uz-w4-polish.js"></script>
 <script src="uz-w4-praise.js"></script>
 <script src="uz-w4-requests.js"></script>
@@ -73,6 +75,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-shift.js"></script>
 <script src="uz-w4-shift2.js"></script>
 <script src="uz-w4-skills.js"></script>
+<script src="uz-w4-support.js"></script>
 <script src="uz-w4-tasks2.js"></script>
 <script src="uz-w4-types.js"></script>
 <script src="uz-w4-u0.js"></script>
@@ -48720,6 +48723,1242 @@ var DW_TTL = ['Отметка без геолокации', 'Отметка сн
   };
 })();
 if (/[?&]w4dbg/.test(location.search)) window.__dw = { S: S, sb: sb, DW: DW, free: function (e) { return dw_free(e); }, meFree: function () { return dw_meFree(); }, go: function (v) { return go(v); } };
+
+
+/* ===== ВОЛНА 4 · 92x-map.js ===== */
+/* ===== 92x — «Карта сотрудников» как в Mir Luxe One, но БЕЗ постоянного слежения (префикс dx_). Журнал w4/log/dx.md,
+   сервер 0027_mappts.sql, переходник — блок «92x map» в конце sv-adapter.js. Решение владельца 29.10.
+   1. Над картой: «День», «Сотрудник» (по умолчанию «Все на смене — последнее место», «Все за день», каждый сотрудник — его точки
+      за день по времени, соединённые линией) и «Обновить».
+   2. Точки — только в момент действий сотрудника: «Пришёл» / «Ушёл» (как раньше, из отметки), задача «Готово» / фото-отчёт,
+      передача смены, заявка (ремонт / находка / закупка). Одно определение места при нажатии (getCurrentPosition с таймаутом),
+      без watchPosition и фоновых запросов. Нет места или сотруднику разрешено «без геолокации» (0026) — точка не пишется,
+      действие не блокируется. Подпись точки: имя, время, что делал.
+   3. Точка заведения не задана — над картой карточка «Задайте точку заведения, чтобы видеть круг зоны» → Пульт → Настройки отметки.
+   Экран заменяет dm_map (92m): тот же вход (Пульт → Сегодня → «Карта сотрудников», руководителю — Разделы), та же схема SVG без
+   интернета, Leaflet без флага (dm_noFlag 92m не трогаю).
+   Демо: точки условные (рядом с заведением), из учебных отметок, сданных задач, заявок, передач смены и новых действий в демо. */
+var DX = { asked: false, seq: 0 };
+var DX_LS = 'dx-pts';
+var DX_RPC = { task_status: 'task', repair_create: 'repair', repair_done: 'repair', found_create: 'found', buy_create: 'buy' };
+var DX_KIND = { task: 'Задача', handover: 'Передача смены', repair: 'Заявка на ремонт', found: 'Потерянная вещь', buy: 'Заявка на закупку' };
+function dx_sv() { return typeof sv_on === 'function' && sv_on(); }
+function dx_demo() { return !dx_sv() && !!window.__DB; }
+function dx_t(s) { try { return trUi(s); } catch (e) { return s; } }
+function dx_e(s) { return h(dx_t(s)); }
+function dx_g(e, m, f) { return typeof jc_g === 'function' ? jc_g(e, m, f) : m; }
+function dx_cut(s, n) { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+function dx_short(e) { return e ? e.first_name + (e.last_name ? ' ' + e.last_name.charAt(0) + '.' : '') : ''; }
+function dx_hash(s) { var x = 0; s = String(s); for (var i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) | 0; return Math.abs(x); }
+function dx_dist(a, b) { var R = 6371000, r = Math.PI / 180, dLa = (b.lat - a.lat) * r, dLo = (b.lng - a.lng) * r, s = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLo / 2) * Math.sin(dLo / 2); return Math.round(2 * R * Math.asin(Math.sqrt(s))); }
+
+/* ===================== 1. Точка в момент действия (одно определение места, без слежения) ===================== */
+function dx_free() { try { if (typeof dw_free === 'function' && dw_free(S.me)) return true; } catch (e) {} return !!(S.me && S.me.geo_free); }
+function dx_can() { return !!S.me && !isDirector() && !dx_free(); }
+function dx_perm() {
+  if (!navigator.permissions || !navigator.permissions.query) return Promise.resolve('unknown');
+  return Promise.race([navigator.permissions.query({ name: 'geolocation' }).then(function (p) { return p.state; }, function () { return 'unknown'; }),
+    new Promise(function (res) { setTimeout(function () { res('unknown'); }, 1500); })]);
+}
+/* одно getCurrentPosition с таймаутом; запрещено — не спрашиваем; «спросить» — не чаще одного раза за вход */
+function dx_geo() {
+  if (!navigator.geolocation || !navigator.geolocation.getCurrentPosition) return Promise.resolve(null);
+  return dx_perm().then(function (st) {
+    if (st === 'denied') return null;
+    if (st === 'prompt') { if (DX.asked) return null; DX.asked = true; }
+    return new Promise(function (res) {
+      var done = false, fin = function (v) { if (!done) { done = true; res(v); } };
+      setTimeout(function () { fin(null); }, 9000);
+      try {
+        navigator.geolocation.getCurrentPosition(function (p) { var c = p && p.coords; fin(c && isFinite(c.latitude) && isFinite(c.longitude) ? { lat: c.latitude, lng: c.longitude, acc: Math.round(c.accuracy || 0) } : null); },
+          function () { fin(null); }, { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 });
+      } catch (e) { fin(null); }
+    });
+  }).catch(function () { return null; });
+}
+/* начало действия: место спрашиваем сразу (параллельно с отправкой), пишем — только если действие прошло */
+function dx_start(kind) {
+  try { if (!dx_can()) return null; } catch (e) { return null; }
+  return { kind: kind, geo: dx_demo() ? Promise.resolve({ demo: true }) : dx_geo() };
+}
+async function dx_finish(st, ref) {
+  if (!st) return;
+  try {
+    var g = await st.geo; if (!g) return;
+    var a = { p_kind: st.kind, p_ref: ref == null || ref === '' ? null : String(ref).slice(0, 64) };
+    if (!g.demo) { a.p_lat = g.lat; a.p_lng = g.lng; a.p_acc = g.acc; }
+    await sb.rpc('map_point_add', a);
+  } catch (e) {}
+}
+/* sb.rpc: задача «Готово» / фото-отчёт, заявки; в демо — map_point_add / map_points */
+(function () {
+  var r0 = sb.rpc;
+  sb.rpc = function (n, a) {
+    if (dx_demo() && n === 'map_point_add') return Promise.resolve(dx_demoAdd(a || {}));
+    if (dx_demo() && n === 'map_points') return dx_demoPts(a || {});
+    var k = DX_RPC[n], st = null;
+    if (k && !(n === 'task_status' && !(a && a.p_status === 'done'))) st = dx_start(k);
+    var p = r0.apply(this, arguments);
+    if (st) Promise.resolve(p).then(function (x) {
+      if (!x || x.error) return;
+      var d = x.data, ref = n === 'task_status' || n === 'repair_done' ? a && a.p_id : d && typeof d === 'object' ? d.id : d;
+      dx_finish(st, ref);
+    }, function () {});
+    return p;
+  };
+})();
+/* передача смены: sb.from('dq_handovers').insert(…).select().single() (92q) — место в момент «Передать смену» */
+function dx_wrapQ(b, cb) {
+  var fired = false;
+  function w(o) {
+    if (!o || (typeof o !== 'object' && typeof o !== 'function') || o.__dxw) return o;
+    try { o.__dxw = 1; } catch (e) { return o; }
+    ['select', 'single', 'maybeSingle'].forEach(function (k) { if (typeof o[k] === 'function') { var f = o[k]; o[k] = function () { return w(f.apply(o, arguments)); }; } });
+    if (typeof o.then === 'function') { var t = o.then; o.then = function (a, c) { return t.call(o, function (x) { if (!fired) { fired = true; try { cb(x); } catch (e) {} } return a ? a(x) : x; }, c); }; }
+    return o;
+  }
+  return w(b);
+}
+(function () {
+  var f0 = sb.from;
+  sb.from = function (t) {
+    var q = f0.apply(this, arguments);
+    if (t === 'dq_handovers' && q && typeof q.insert === 'function') {
+      var i0 = q.insert;
+      q.insert = function () {
+        var st = dx_start('handover'), b = i0.apply(this, arguments);
+        return st ? dx_wrapQ(b, function (x) { if (x && !x.error) { var d = Array.isArray(x.data) ? x.data[0] : x.data; dx_finish(st, d && d.id); } }) : b;
+      };
+    }
+    return q;
+  };
+})();
+
+/* ===================== 2. Демо: точки условные ===================== */
+function dx_lsGet() { try { var o = JSON.parse(localStorage.getItem(DX_LS) || '[]'); return Array.isArray(o) ? o : []; } catch (e) { return []; } }
+function dx_lsSet(L) { try { localStorage.setItem(DX_LS, JSON.stringify(L.slice(-400))); } catch (e) {} }
+(function () {
+  if (!dx_demo()) return;
+  var DB = window.__DB; if (!Array.isArray(DB.dx_points)) DB.dx_points = [];
+  dx_lsGet().forEach(function (x) { if (!DB.dx_points.some(function (y) { return y.id === x.id; })) DB.dx_points.push(x); });
+})();
+function dx_demoAdd(a) {
+  var DB = window.__DB, me = S.me; if (!me) return { data: null, error: { message: 'Нужно войти' } };
+  if (!DX_KIND[a.p_kind]) return { data: null, error: { message: 'Неверное действие' } };
+  if (dx_free()) return { data: { ok: false, skipped: 'geo_free' }, error: null };
+  var now = Date.now(), L = DB.dx_points || (DB.dx_points = []), ref = a.p_ref == null ? null : String(a.p_ref);
+  if (L.some(function (x) { return x.employee_id === me.id && now - Date.parse(x.at) < 15000; })) return { data: { ok: false, skipped: 'rate' }, error: null };
+  if (L.some(function (x) { return x.employee_id === me.id && x.kind === a.p_kind && x.ref === ref && now - Date.parse(x.at) < 120000; })) return { data: { ok: false, skipped: 'dup' }, error: null };
+  var tk = a.p_kind === 'task' ? (DB.tasks || []).filter(function (t) { return String(t.id) === ref; })[0] : null;
+  var row = { id: 'dx' + now + '_' + (++DX.seq), employee_id: me.id, at: new Date(now).toISOString(), kind: a.p_kind, ref: ref, label: tk ? dx_cut(tk.title, 80) : null };
+  L.push(row); var S0 = dx_lsGet(); S0.push(row); dx_lsSet(S0);
+  return { data: { ok: true, id: row.id }, error: null };
+}
+/* условная точка рядом с заведением: в зоне; закупка — обычно в магазине (вне зоны) */
+function dx_demoXY(c, key, out) {
+  var hs = dx_hash(key), ang = (hs % 360) * Math.PI / 180, d = out ? c.rad + 180 + (hs % 420) : 10 + (hs % Math.max(12, Math.round(c.rad * 0.75)));
+  return { lat: c.lat + d * Math.cos(ang) / 111320, lng: c.lng + d * Math.sin(ang) / (111320 * Math.cos(c.lat * Math.PI / 180)) };
+}
+async function dx_demoPts(a) {
+  var DB = window.__DB, day = a.p_day || today();
+  var hsR = await dm_q(sb.from('hotel_settings').select('*').eq('id', 1).maybeSingle()), hs = (hsR && hsR.data) || {};
+  var rad = +hs.radius_m || 150, set = !!(hs.lat && hs.lng), pt0 = typeof CB_DEMO_PT !== 'undefined' ? CB_DEMO_PT : { lat: 41.2906, lng: 69.2781 };
+  var c = set ? { lat: +hs.lat, lng: +hs.lng, rad: rad } : { lat: pt0.lat, lng: pt0.lng, rad: rad };
+  var P = [], seen = {};
+  function add(empId, at, kind, ref, label, xy, zone) {
+    if (!empId || !at || tsDate(at) !== day) return;
+    var k = empId + '|' + kind + '|' + ref; if (seen[k]) return; seen[k] = 1;
+    var dist = dx_dist(c, xy);
+    P.push({ employee_id: empId, member_id: empId, at: at, kind: kind, ref: ref == null ? null : String(ref), label: label || null, lat: xy.lat, lng: xy.lng, acc_m: null, dist_m: dist, zone: zone || (dist <= c.rad ? 'in' : 'out'), demo: true });
+  }
+  var q = await dm_q(sb.from('attendance').select('*').eq('day', day));
+  ((q && q.data) || []).forEach(function (r) {
+    if (r.clock_in) { var pi = dm_demoPt(c, r, 'in'); add(r.employee_id, r.clock_in, 'in', r.id, null, pi, r.out_zone && !r.zone_ok ? 'out' : null); }
+    if (r.clock_out) add(r.employee_id, r.clock_out, 'out', r.id, null, dm_demoPt(c, r, 'out'));
+  });
+  var T = {}; (DB.tasks || []).forEach(function (t) { T[t.id] = t; });
+  var act = function (empId, at, kind, ref, label) { add(empId, at, kind, ref, label, dx_demoXY(c, empId + kind + ref, kind === 'buy')); };
+  (DB.dx_points || []).forEach(function (x) { var t = x.kind === 'task' ? T[x.ref] || T[+x.ref] : null; act(x.employee_id, x.at, x.kind, x.ref, t ? t.title : x.label || null); });
+  (DB.tasks || []).forEach(function (t) { if (t.status === 'done' && t.done_at && (t.done_by || t.assignee_id)) act(t.done_by || t.assignee_id, t.done_at, 'task', t.id, t.title); });
+  (DB.dq_handovers || []).forEach(function (x) { act(x.from_id, x.created_at, 'handover', x.id); });
+  (DB.dr_fix || []).forEach(function (x) { act(x.created_by, x.created_at, 'repair', x.id); if (x.done_at && x.done_by) act(x.done_by, x.done_at, 'repair', x.id + '·done'); });
+  (DB.dr_lost || []).forEach(function (x) { act(x.found_by, x.created_at || x.found_at, 'found', x.id); });
+  (DB.dr_buy || []).forEach(function (x) { act(x.created_by, x.created_at, 'buy', x.id); });
+  if (!set) P.forEach(function (p) { p.zone = null; p.dist_m = null; });   /* точка заведения не задана — зону не знаем */
+  if (a.p_member) P = P.filter(function (p) { return p.employee_id === a.p_member; });
+  P.sort(function (x, y) { return Date.parse(x.at) - Date.parse(y.at); });
+  return { data: { day: day, venue: set ? { lat: c.lat, lng: c.lng, radius_m: rad } : null, points: P, demo: true, center: c }, error: null };
+}
+
+/* ===================== 3. Экран «Карта сотрудников» ===================== */
+function dx_label(p, e) {
+  if (p.kind === 'in') return dx_t(dx_g(e, 'Пришёл на смену', 'Пришла на смену'));
+  if (p.kind === 'out') return dx_t(dx_g(e, 'Ушёл со смены', 'Ушла со смены'));
+  if (p.kind === 'task') return p.label ? dx_t('Задача') + ' «' + dx_cut(p.label, 40) + '»' : dx_t('Задача');
+  return dx_t(DX_KIND[p.kind] || p.kind);
+}
+function dx_people(team) {
+  return isDirector() && !team ? (S.emps || []).filter(function (e) { return e.active !== false && e.role !== 'director'; })
+    : (typeof myTeam === 'function' ? myTeam() : []).filter(function (e) { return e.role !== 'director'; });
+}
+async function dx_data(day, who, people) {
+  var r = await dm_q(sb.rpc('map_points', { p_day: day, p_member: who && who !== '*' ? who : null }));
+  if (!r) return null;
+  var d = r.data || {}, ids = {}; people.forEach(function (e) { ids[e.id] = e; });
+  var v = d.venue && d.venue.lat != null ? { lat: +d.venue.lat, lng: +d.venue.lng, rad: +d.venue.radius_m || 150 } : null;
+  var P = (d.points || []).filter(function (p) { return ids[p.employee_id || p.member_id] && p.lat != null && p.lng != null; }).map(function (p) {
+    var e = ids[p.employee_id || p.member_id], dist = p.dist_m != null ? +p.dist_m : v ? dx_dist(v, p) : null;
+    var zone = p.zone || (v && dist != null ? (dist <= v.rad ? 'in' : 'out') : null);
+    return { e: e, at: p.at, kind: p.kind, label: p.label, lat: +p.lat, lng: +p.lng, dist: dist, out: zone === 'out' || zone === 'nogps', zone: zone, txt: dx_label(p, e) };
+  });
+  P.sort(function (x, y) { return Date.parse(x.at) - Date.parse(y.at); });
+  /* на смене сейчас: последняя отметка без ухода */
+  var on = {};
+  if (day === today()) {
+    var q = await dm_q(sb.from('attendance').select('*').eq('day', day));
+    ((q && q.data) || []).forEach(function (a) { if (a.clock_in && !a.clock_out) on[a.employee_id] = true; });
+  }
+  return { v: v, P: P, demo: !!d.demo || P.some(function (p) { return p.demo; }), center: d.center || null, on: on };
+}
+function dx_col() {
+  var css = getComputedStyle(document.documentElement), g = function (k, d) { var x = (css.getPropertyValue(k) || '').trim(); return x || d; };
+  return { ok: g('--dj-okf', '#12A06C'), bad: g('--dj-badf', '#E0342E'), info: g('--dj-infof', '#2F6FB3'), gold: g('--gold', '#A57F35') };
+}
+function dx_ptCol(p, C) { return p.zone == null ? C.info : p.out ? C.bad : C.ok; }
+/* выбор показа: last — последнее место (на смене), day — все за день, иначе — один сотрудник с линией */
+function dx_view(D, who, day) {
+  if (who && who !== '*') return { mode: 'one', P: D.P.filter(function (p) { return p.e.id === who; }) };
+  if (who === '*') return { mode: 'day', P: D.P };
+  var last = {}; D.P.forEach(function (p) { last[p.e.id] = p; });
+  var L = Object.keys(last).map(function (k) { return last[k]; });
+  if (day === today()) L = L.filter(function (p) { return D.on[p.e.id]; });
+  L.sort(function (x, y) { return (y.out - x.out) || Date.parse(y.at) - Date.parse(x.at); });
+  return { mode: 'last', P: L };
+}
+function dx_svg(D, V) {
+  var v = D.v, P0 = V.P, c = v || D.center || (P0[0] ? { lat: P0[0].lat, lng: P0[0].lng } : { lat: 41.29, lng: 69.27 });
+  var kx = 111320 * Math.cos(c.lat * Math.PI / 180), ky = 111320, maxd = (v ? v.rad : 60) * 1.35;
+  P0.forEach(function (p) { maxd = Math.max(maxd, Math.abs((p.lng - c.lng) * kx) * 1.15, Math.abs((p.lat - c.lat) * ky) * 1.15); });
+  var W = 400, H = 340, s = Math.min(W, H) / 2 / (maxd + 20), X = function (lng) { return W / 2 + (lng - c.lng) * kx * s; }, Y = function (lat) { return H / 2 - (lat - c.lat) * ky * s; };
+  var o = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + h(dx_t('Карта сотрудников')) + '" preserveAspectRatio="xMidYMid meet">';
+  for (var g = -4; g <= 4; g++) o += '<line x1="0" x2="' + W + '" y1="' + (H / 2 + g * 40) + '" y2="' + (H / 2 + g * 40) + '" stroke="var(--line)" stroke-width="1"/><line y1="0" y2="' + H + '" x1="' + (W / 2 + g * 50) + '" x2="' + (W / 2 + g * 50) + '" stroke="var(--line)" stroke-width="1"/>';
+  if (v) o += '<circle cx="' + W / 2 + '" cy="' + H / 2 + '" r="' + Math.max(8, v.rad * s) + '" fill="color-mix(in srgb,var(--gold) 12%,transparent)" stroke="var(--gold)" stroke-width="2"/><circle cx="' + W / 2 + '" cy="' + H / 2 + '" r="5" fill="var(--gold)"/>';
+  if (V.mode === 'one' && P0.length > 1) o += '<polyline points="' + P0.map(function (p) { return X(p.lng).toFixed(1) + ',' + Y(p.lat).toFixed(1); }).join(' ') + '" fill="none" stroke="var(--dj-infof,#2F6FB3)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity=".85"/>';
+  var lab = P0.length <= (V.mode === 'one' ? 10 : 14);
+  P0.forEach(function (p, i) {
+    var x = X(p.lng), y = Y(p.lat), col = p.zone == null ? 'var(--dj-infof,#2F6FB3)' : p.out ? 'var(--dj-badf,#E0342E)' : 'var(--dj-okf,#12A06C)';
+    o += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (V.mode === 'one' && i < P0.length - 1 ? 6 : 8) + '" fill="' + col + '" stroke="var(--card)" stroke-width="2"><title>' + h(dx_short(p.e) + ' · ' + hm(p.at) + ' · ' + p.txt) + '</title></circle>';
+    if (lab) o += '<text x="' + (x + 10).toFixed(1) + '" y="' + (y + 4).toFixed(1) + '" font-size="11" fill="var(--ink)" style="paint-order:stroke;stroke:var(--card);stroke-width:3px">' + h((V.mode === 'one' ? '' : p.e.first_name + ' ') + hm(p.at) + ' · ' + dx_cut(p.txt, 22)) + '</text>';
+  });
+  return o + '</svg>';
+}
+function dx_rowHtml(p, V) {
+  var nm = V.mode === 'one' ? '<div class="name">' + h(p.txt) + '</div>' : '<div class="name">' + h(fullName(p.e)) + '</div>';
+  var meta = (V.mode === 'one' ? '' : '<span>' + h(p.txt) + '</span> ') + '<b class="num">' + hm(p.at) + '</b>' + (p.dist != null ? ' · <span class="num">' + Math.round(p.dist) + ' ' + dx_e('м') + '</span>' : '');
+  var chip = p.zone == null ? '' : '<span class="chip ' + (p.out ? 't-bad' : 't-ok') + '"><span>' + dx_e(p.out ? 'вне зоны' : 'в зоне') + '</span></span>';
+  var lead = V.mode === 'one' ? '<span class="dx-tm num">' + hm(p.at) + '</span>' : '<span class="av sm">' + avIn(p.e) + '</span>';
+  var tag = V.mode === 'one' ? 'div' : 'button type="button" data-dxw="' + h(p.e.id) + '"';
+  return '<' + tag + ' class="dm-mr dx-r">' + lead + '<div class="grow" style="min-width:0">' + nm + '<div class="meta" style="white-space:normal">' + (V.mode === 'one' ? (p.dist != null ? '<span class="num">' + Math.round(p.dist) + ' ' + dx_e('м') + '</span>' : '') : meta) + '</div></div>' + chip + (V.mode === 'one' ? '' : '<span class="dx-ch">' + icon('chev', 16) + '</span>') + '</' + (V.mode === 'one' ? 'div' : 'button') + '>';
+}
+function dx_css() {
+  if ($('dxCss')) return;
+  var st = document.createElement('style'); st.id = 'dxCss';
+  st.textContent = '.dx-fl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}.dx-fl .f{margin:0;min-width:0}.dx-fl .dx-day{grid-column:1/-1}' +
+    '.dx-fl select.in{width:100%;min-width:0;text-overflow:ellipsis}.dx-fl .btn{min-height:44px;white-space:nowrap}' +
+    'button.dx-r{width:100%;background:none;border:0;border-bottom:1px solid var(--line2);text-align:left;color:inherit;font:inherit;cursor:pointer}button.dx-r:last-child{border-bottom:0}' +
+    '.dx-tm{min-width:44px;font-weight:600}.dx-ch{color:var(--mute);display:inline-flex}.dx-set{display:flex;flex-direction:column;gap:8px;border-left:3px solid var(--dj-infof,#2F6FB3)}' +
+    '.dm-mk.dx-nz{background:var(--dj-infof,#2F6FB3)}.dm-mk.dx-ln{width:16px;height:3px;border-radius:2px;background:var(--dj-infof,#2F6FB3);vertical-align:2px}';
+  document.head.appendChild(st);
+}
+function dx_goSet() {
+  try { if (S.view === 'desk' && typeof plOpen === 'function') plOpen('set'); else { S.sub.desk = 'set'; go('desk'); } } catch (e) { S.sub.desk = 'set'; go('desk'); }
+}
+var dm_map0 = typeof dm_map === 'function' ? dm_map : null;
+async function dx_map(box, team) {
+  if (!box) return;
+  dx_css();
+  var day = S.sub.dmMapDay || today(), dir = isDirector(), people = dx_people(team);
+  var who = S.sub.dxWho || ''; if (who && who !== '*' && !people.some(function (e) { return e.id === who; })) who = S.sub.dxWho = '';
+  if (!box.querySelector('#dxHead')) box.innerHTML = '<div class="card empty">' + dx_e('Загрузка…') + '</div>';
+  var D = await dx_data(day, who, people); if (!box.isConnected) return;
+  if (!D) { if (dm_map0) return dm_map0(box, team); box.innerHTML = '<div class="card empty">' + dx_e('Карта не загрузилась — проверьте интернет') + '</div>'; return; }
+  var V = dx_view(D, who, day), nIn = V.P.filter(function (p) { return p.zone && !p.out; }).length, nOut = V.P.filter(function (p) { return p.out; }).length;
+  var opt = function (val, txt) { return '<option value="' + h(val) + '"' + (who === val ? ' selected' : '') + '>' + h(txt) + '</option>'; };
+  var sel = opt('', dx_t('Все на смене — последнее место')) + opt('*', dx_t('Все за день')) +
+    people.slice().sort(function (a, b) { return fullName(a).localeCompare(fullName(b)); }).map(function (e) { var ps = typeof posName === 'function' ? posName(e.position_id) : ''; return opt(e.id, fullName(e) + (ps ? ' — ' + trUi(ps) : '')); }).join('');
+  var e1 = V.mode === 'one' ? people.filter(function (e) { return e.id === who; })[0] : null;
+  var title = V.mode === 'one' ? h(fullName(e1)) : dx_e(V.mode === 'day' ? 'Все точки за день' : day === today() ? 'На смене — последнее место' : 'Последнее место');
+  var empty = V.mode === 'one' ? dx_e('За этот день точек нет.') : day === today() ? dx_e(V.mode === 'last' && D.P.length ? 'Сейчас на смене никого с точкой. Выберите «Все за день».' : 'Точек пока нет. Точка появляется, когда сотрудник отмечает приход или уход, сдаёт задачу, передаёт смену или подаёт заявку.') : dx_e('В этот день точек не было.');
+  var list = V.mode === 'one' ? V.P.slice().reverse() : V.mode === 'day' ? V.P.slice().reverse() : V.P;
+  var html = '<div class="card" id="dxHead"><div class="dx-fl">' +
+      '<label class="f dx-day">' + dx_e('День') + '<input class="in" type="date" id="dmMd" value="' + day + '" max="' + today() + '"></label>' +
+      '<label class="f">' + dx_e('Сотрудник') + '<select class="in" id="dxWho">' + sel + '</select></label>' +
+      '<button type="button" class="btn ghost sm" id="dxRe"><span>' + dx_e('Обновить') + '</span></button></div>' +
+      '<div class="dm-leg">' + (D.v ? '<span class="chip t-ok"><span class="dm-mk in"></span><span>' + dx_e('в зоне') + '</span> <b class="num">' + nIn + '</b></span><span class="chip t-bad"><span class="dm-mk out"></span><span>' + dx_e('вне зоны') + '</span> <b class="num">' + nOut + '</b></span>'
+        : '<span class="chip t-info"><span class="dm-mk dx-nz"></span><span>' + dx_e('точки') + '</span> <b class="num">' + V.P.length + '</b></span>') +
+      (D.v ? '<span class="chip t-mute"><span class="dm-mk v"></span><span>' + dx_e('заведение и радиус') + '</span> <b class="num">' + D.v.rad + ' ' + dx_e('м') + '</b></span>' : '') +
+      (V.mode === 'one' && V.P.length > 1 ? '<span class="chip t-mute"><span class="dm-mk dx-ln"></span><span>' + dx_e('путь по времени') + '</span></span>' : '') + '</div></div>' +
+    (!D.v ? '<div class="card dx-set" id="dxNoPt"><div class="name" style="white-space:normal">' + dx_e('Задайте точку заведения, чтобы видеть круг зоны') + '</div>' +
+      '<div class="meta" style="white-space:normal">' + dx_e(dir ? 'Точка и радиус — в «Пульт → Настройки отметки». Без точки на карте видны места сотрудников, но не видно, в зоне они или нет.' : 'Точку и радиус задаёт владелец в «Пульт → Настройки отметки».') + '</div>' +
+      (dir ? '<button type="button" class="btn gold sm" id="dxSet" style="align-self:flex-start"><span>' + dx_e('Задать точку заведения') + '</span></button>' : '') + '</div>' : '') +
+    '<div class="card" style="padding:6px"><div class="dm-map" id="dmMap"></div></div>' +
+    '<div class="card"><h2><span>' + title + '</span> <small class="num">' + V.P.length + '</small></h2>' +
+      (V.mode === 'one' && e1 ? '<div class="meta" style="margin:-4px 0 6px">' + dx_e(D.on[e1.id] ? 'на смене' : '') + '</div>' : '') +
+      (list.length ? list.map(function (p) { return dx_rowHtml(p, V); }).join('') : '<div class="empty" style="white-space:normal">' + empty + '</div>') + '</div>' +
+    '<div class="meta" style="white-space:normal;margin:0 2px 8px">' + dx_e('Точки — только в момент действий: приход, уход, задача, передача смены, заявка. Постоянного слежения нет.') + (D.demo ? ' ' + dx_e('В демо точки условные.') : '') + '</div>' +
+    (dir ? '<div class="card"><label class="cb-sw" style="display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer"><input type="checkbox" id="dmMgr"' + (dm_mapMgrOn() ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--gold)"><span class="grow" style="white-space:normal">' + dx_e('Руководители видят карту своей команды (Разделы)') + '</span></label></div>' : '');
+  box.innerHTML = html;
+  $('dmMd').onchange = function () { S.sub.dmMapDay = this.value || today(); dx_map(box, team); };
+  $('dxWho').onchange = function () { S.sub.dxWho = this.value; dx_map(box, team); };
+  $('dxRe').onclick = function () { var b = this; b.disabled = true; Promise.resolve(dx_map(box, team)).then(function () { toast(dx_t('Обновлено')); }, function () {}); };
+  if ($('dxSet')) $('dxSet').onclick = dx_goSet;
+  if ($('dmMgr')) $('dmMgr').onchange = function () { w3SavePref({ dm_map_mgr: !!this.checked }); toast(dx_t('Сохранено')); };
+  box.querySelectorAll('[data-dxw]').forEach(function (b) { b.onclick = function () { S.sub.dxWho = b.getAttribute('data-dxw'); dx_map(box, team); try { box.scrollIntoView({ block: 'start' }); } catch (e) {} }; });
+  var el = $('dmMap'); el.innerHTML = dx_svg(D, V);
+  var ok = await dm_leaflet(); if (!ok || !el.isConnected) return;
+  try {
+    var C = dx_col(), c0 = D.v || D.center || V.P[0] || { lat: 41.2906, lng: 69.2781 }, c = [c0.lat, c0.lng];
+    el.innerHTML = ''; var map = L.map(el, { zoomControl: true, attributionControl: true }).setView(c, 17);
+    try { map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>'); } catch (z) {}
+    var tl = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+    var bad = 0; tl.on('tileerror', function () { if (++bad === 6 && el.isConnected) { try { map.remove(); } catch (z) {} el.innerHTML = dx_svg(D, V); } });
+    var ll = [];
+    if (D.v) { L.circle(c, { radius: D.v.rad, color: C.gold, weight: 2, fillOpacity: 0.08 }).addTo(map); L.circleMarker(c, { radius: 5, color: C.gold, fillColor: C.gold, fillOpacity: 1 }).addTo(map).bindTooltip(dx_t('Заведение')); ll.push(c); }
+    if (V.mode === 'one' && V.P.length > 1) L.polyline(V.P.map(function (p) { return [p.lat, p.lng]; }), { color: C.info, weight: 3, opacity: 0.85 }).addTo(map);
+    var perm = V.P.length <= 8;
+    V.P.forEach(function (p, i) {
+      ll.push([p.lat, p.lng]);
+      var tip = (V.mode === 'one' ? '' : dx_short(p.e) + ' · ') + hm(p.at) + ' · ' + p.txt + (p.zone ? ' · ' + dx_t(p.out ? 'вне зоны' : 'в зоне') : '');
+      L.circleMarker([p.lat, p.lng], { radius: V.mode === 'one' && i < V.P.length - 1 ? 6 : 8, color: '#fff', weight: 2, fillColor: dx_ptCol(p, C), fillOpacity: 1 }).addTo(map)
+        .bindTooltip(h(tip), { permanent: perm, direction: 'top' });
+    });
+    if (ll.length > 1) map.fitBounds(L.latLngBounds(ll).pad(0.25), { maxZoom: 18 });
+    setTimeout(function () { try { map.invalidateSize(); } catch (z) {} }, 200);
+  } catch (z) { console.warn('dx map', z); el.innerHTML = dx_svg(D, V); }
+}
+/* вход тот же, что у 92m: Пульт → Сегодня → «Карта сотрудников» (PL_FN 'map'), руководителю — «Разделы» (W3V.dmmap) — оба зовут dm_map */
+if (typeof dm_map === 'function') dm_map = dx_map;
+window.__dx = { demoPts: dx_demoPts, start: dx_start, geo: dx_geo, map: dx_map };
+if (/[?&]w4dbg/.test(location.search)) Object.assign(window.__dx, { S: S, sb: sb, go: function (v) { return go(v); }, plOpen: function (id) { return plOpen(id); } });
+
+
+/* ===== ВОЛНА 4 · 92y-perms.js ===== */
+/* ===== 92y — «Полномочия»: владелец даёт ЛЮБОМУ сотруднику отдельные права переключателями (префикс dy_). Журнал w4/log/dy.md,
+   сервер 0028_perms.sql, переходник — блок «92y perms» в sv-adapter.js. Решение владельца 29.10.
+   1. Карточка сотрудника (у владельца) → «Профиль»: раздел «Полномочия» — переключатель на каждое направление, у включённого —
+      охват «Своя служба» / «Всё заведение» («Настройки заведения» — только всё заведение). Себе и владельцу — нельзя.
+      Каждое изменение — «История изменений» карточки и уведомление сотруднику «Вам открыт доступ: …» / «Доступ закрыт: …».
+   2. У сотрудника с полномочиями появляются экраны ТОЛЬКО по его правам: «Пульт» с нужными вкладками (в нижнем меню, если есть место,
+      и первой строкой в «Разделах»), «График службы», «Сейчас в заведении», «Карта сотрудников», «Кто что умеет», «+ Объявление».
+      Люди в этих экранах — только из его охвата (сервер отдаёт строки по RLS, телефон дополнительно отсекает чужих).
+   3. Руководитель (role manager) сохраняет права над своей командой — полномочия добавляются к ним.
+   Демо: полномочия — DB.member_perms (+ localStorage dy-perms, чтобы пережить вход другим логином). */
+function dy_sv() { return typeof sv_on === 'function' && sv_on(); }
+function dy_demo() { return !dy_sv() && !!window.__DB; }
+function dy_t(s) { try { return trUi(s); } catch (e) { return s; } }
+function dy_h(s) { return h(dy_t(s)); }
+/* направления: ключ, название, что даёт */
+var DY_P = [
+  ['map', 'Карта сотрудников', 'Смотреть, где отмечались люди'],
+  ['sched', 'График', 'Составлять, менять и публиковать график'],
+  ['att', 'Приход и уход', 'Смотреть отметки, решать «вне зоны» и «забыл отметиться», принимать объяснительные'],
+  ['tasks', 'Задачи', 'Ставить задачи другим, принимать и возвращать, фото-отчёты'],
+  ['leave', 'Отпуска и отгулы', 'Решать отпуска, отгулы, «Отпроситься» и обмены сменами'],
+  ['team', 'Команда', 'Приглашать, менять данные, переводить и увольнять сотрудников'],
+  ['pay', 'Заработок и расчётные листы', 'Смотреть и править заработок и расчётные листы'],
+  ['money', 'Штрафы, премии, аванс', 'Ставить штрафы и премии, решать аванс'],
+  ['req', 'Заявки', 'Ремонт — назначать, находки — выдавать, закупки — одобрять'],
+  ['ann', 'Объявления', 'Писать объявления'],
+  ['rating', 'Рейтинг и награды', 'Номинации, споры по баллам, «Допуск к работе» — засчитывать навыки'],
+  ['reports', 'Отчёты и итоги дня', 'Смотреть отчёты и сводку дня'],
+  ['settings', 'Настройки заведения', 'Настройки отметки и приложения (только всё заведение)']
+];
+function dy_title(p) { var x = DY_P.filter(function (z) { return z[0] === p; })[0]; return x ? x[1] : p; }
+/* вкладки «Пульта» → какое право их открывает */
+var DY_TAB = { att: ['att'], tasks: ['tasks'], map: ['map'], staff: ['team'], face: ['team'], month: ['att', 'pay'], earn: ['pay'], award: ['rating'],
+  rep: ['reports'], prefs: ['settings'], set: ['settings'], org: ['settings'], brand: ['settings'], roles: ['settings'] };
+/* экраны → права (кого считать «командой» на этом экране) */
+var DY_VIEW = { teamsched: ['sched'], tasks: ['tasks'], cdtab: ['tasks'], tpl: ['tasks'], jcnow: ['att'], dmmap: ['map'], dkteam: ['rating'], lead: ['reports'], perm: ['leave'] };
+var DY = { list: [], at: 0, busy: null, force: 0, me: null };
+var DY_LS = 'dy-perms';
+function dy_realDir() { return !!S.me && S.me.role === 'director'; }
+
+/* ---------- данные ---------- */
+function dy_ls() { try { var o = JSON.parse(localStorage.getItem(DY_LS) || 'null'); return o && typeof o === 'object' ? { rows: o.rows || [], log: o.log || [] } : { rows: [], log: [] }; } catch (e) { return { rows: [], log: [] }; } }
+function dy_lsSet(o) { try { localStorage.setItem(DY_LS, JSON.stringify(o)); } catch (e) {} }
+(function () {
+  if (!dy_demo()) return;
+  var DB = window.__DB, o = dy_ls();
+  DB.member_perms = o.rows.slice();
+  if (o.log.length) { if (!Array.isArray(DB.audit_log)) DB.audit_log = []; o.log.forEach(function (x) { if (!DB.audit_log.some(function (y) { return y.id === x.id; })) DB.audit_log.push(x); }); }
+})();
+function dy_allEmps() { return (DY.raw || S.emps || []).filter(function (e) { return e && e.active !== false; }); }
+/* «своя служба» (демо): служба сотрудника с подотделами + службы, которыми он руководит */
+function dy_depts(me) {
+  var out = []; if (!me) return out;
+  if (me.dept_id != null) out.push(me.dept_id);
+  (S.depts || []).forEach(function (d) { if (d.head_id === me.id && out.indexOf(d.id) < 0) out.push(d.id); });
+  if (me.lead_dept && out.indexOf(me.lead_dept) < 0) out.push(me.lead_dept);
+  for (var k = 0; k < 6; k++) (S.depts || []).forEach(function (d) { if (d.parent_id != null && out.indexOf(d.parent_id) >= 0 && out.indexOf(d.id) < 0) out.push(d.id); });
+  return out;
+}
+function dy_demoIds(me, scope) {
+  var ds = dy_depts(me);
+  return dy_allEmps().filter(function (e) { return e.id !== me.id && e.role !== 'director' && (scope === 'venue' || ds.indexOf(e.dept_id) >= 0); }).map(function (e) { return e.id; });
+}
+function dy_demoRows(mid) { var DB = window.__DB; return (DB && DB.member_perms || []).filter(function (r) { return r.member_id === mid; }); }
+async function dy_load(force) {
+  if (!S.me || dy_realDir()) { DY.list = []; DY.me = S.me ? S.me.id : null; return DY.list; }
+  if (!force && DY.me === S.me.id && Date.now() - DY.at < 30000) return DY.list;
+  if (DY.busy) return DY.busy;
+  DY.busy = (async function () {
+    try {
+      if (dy_sv()) {
+        var r = await sb.rpc('my_perms');
+        if (!r.error) DY.list = (r.data || []).map(function (p) { return { perm: p.perm, scope: p.scope, ids: p.ids || [] }; });
+      } else if (dy_demo()) {
+        var me = S.me;
+        DY.list = dy_demoRows(me.id).map(function (p) { return { perm: p.perm, scope: p.scope, ids: dy_demoIds(me, p.scope) }; });
+      }
+      DY.at = Date.now(); DY.me = S.me.id;
+    } catch (e) { console.warn('dy_load', e); }
+    DY.busy = null; return DY.list;
+  })();
+  return DY.busy;
+}
+function dy_my() { return S.me && DY.me === S.me.id && !dy_realDir() ? DY.list : []; }
+function dy_has(p) { return dy_my().some(function (x) { return x.perm === p; }); }
+function dy_scope(p) { var x = dy_my().filter(function (z) { return z.perm === p; })[0]; return x ? x.scope : null; }
+function dy_ids(perms) { var o = {}; dy_my().forEach(function (x) { if (perms.indexOf(x.perm) >= 0) x.ids.forEach(function (id) { o[id] = 1; }); }); return o; }
+function dy_can(p, id) { return !!dy_ids([p])[id]; }
+function dy_deskTabs() { if (dy_realDir()) return []; var o = []; Object.keys(DY_TAB).forEach(function (t) { if (DY_TAB[t].some(dy_has)) o.push(t); }); return o; }
+/* права, которые действуют на текущем экране */
+function dy_ctx() {
+  if (!S.me || dy_realDir()) return null;
+  if (S.view === 'desk') { var t = S.sub && S.sub.desk; return t && DY_TAB[t] ? DY_TAB[t] : Object.keys(DY_TAB).reduce(function (a, k) { return a.concat(DY_TAB[k]); }, []); }
+  if (S.view === 'team' || S.view === 'emp') return DY_P.map(function (x) { return x[0]; });
+  return DY_VIEW[S.view] || null;
+}
+function dy_emu() { return !dy_realDir() && !!S.me && S.view === 'desk' && dy_deskTabs().length > 0; }
+
+/* ---------- 2. Экраны сотрудника с полномочиями ---------- */
+/* «Пульт»: на время работы в пульте сотрудник видит его как владелец, но только вкладки своих прав и людей своего охвата */
+(function () {
+  var d0 = isDirector;
+  isDirector = function () { if (d0.apply(this, arguments)) return true; return DY.force > 0 || dy_emu(); };
+  /* S.emps: в пульте — только люди охвата (и сам сотрудник) */
+  try {
+    DY.raw = S.emps;
+    Object.defineProperty(S, 'emps', { configurable: true, enumerable: true,
+      get: function () {
+        var L = DY.raw || [];
+        if (!dy_emu()) return L;
+        var c = dy_ctx() || [], ok = dy_ids(c), me = S.me && S.me.id;
+        return L.filter(function (e) { return e && (e.id === me || ok[e.id]); });
+      },
+      set: function (v) { DY.raw = v; } });
+  } catch (e) { console.warn('dy emps', e); }
+  var md0 = plDeskOk;
+  plDeskOk = function (id) { if (!md0.apply(this, arguments)) return false; if (dy_realDir() || !dy_emu()) return true; return dy_deskTabs().indexOf(id) >= 0; };
+  var vd0 = vDesk;
+  vDesk = function () {
+    if (dy_emu()) { var tabs = dy_deskTabs(); if (S.sub.desk && tabs.indexOf(S.sub.desk) < 0) S.sub.desk = null; if (!S.sub.desk && plWide()) S.sub.desk = tabs.indexOf('att') >= 0 ? 'att' : tabs[0]; }
+    return vd0.apply(this, arguments);
+  };
+  /* таблицы с людьми: в пульте у сотрудника — только строки людей охвата (на сервере это уже делает RLS) */
+  var COLS = ['employee_id', 'assignee_id', 'emp_id', 'member_id'];
+  var TBL = ['attendance', 'schedule', 'tasks', 'schedule_requests', 'leave_requests', 'cb_forgot', 'ca_advances', 'ca_adj', 'health_checks', 'shift_exchanges', 'member_devices', 'payslips'];
+  var f0 = sb.from;
+  sb.from = function (t) {
+    var q = f0.apply(this, arguments);
+    try {
+      if (!dy_emu() || TBL.indexOf(t) < 0 || !q || typeof q.then !== 'function') return q;
+      var th = q.then;
+      q.then = function (res, rej) {
+        return th.call(q, function (r) {
+          if (r && Array.isArray(r.data) && (!q.op || q.op === 'select')) {
+            var ok = dy_ids(dy_ctx() || []), me = S.me && S.me.id;
+            r.data = r.data.filter(function (x) { for (var i = 0; i < COLS.length; i++) { var v = x[COLS[i]]; if (v != null) return v === me || !!ok[v]; } return true; });
+          }
+          return r;
+        }).then(res, rej);
+      };
+    } catch (e) {}
+    return q;
+  };
+})();
+/* Пульт у сотрудника: список — только вкладки его прав. Обёртки ставятся после загрузки всех частей (96-nav и 92m перестраивают
+   список пульта и сами ставят обёртки через setTimeout) — поэтому здесь тоже setTimeout, он срабатывает позже них. */
+var DY_PLG = [['Сегодня', ['att', 'tasks', 'map'], 'g'], ['Люди', ['staff', 'face', 'month'], 'd'], ['Деньги и мотивация', ['earn', 'award'], 'g'],
+  ['Отчёты', ['rep'], 'g'], ['Настройки', ['org', 'brand', 'roles', 'prefs', 'set'], 'd']];
+setTimeout(function () {
+  try {
+    var ok0 = plDeskOk;
+    plDeskOk = function (id) { if (!dy_emu()) return ok0.apply(this, arguments); return dy_deskTabs().indexOf(id) >= 0 && !!PL_SEC[id] && (id === 'map' || featOk('desk:' + id)); };
+    var ix0 = plIndexHtml;
+    plIndexHtml = function (cur) {
+      if (!dy_emu()) return ix0.apply(this, arguments);
+      var G = DY_PLG.map(function (g) { return { t: g[0], c: g[2], ids: g[1].filter(plDeskOk) }; }).filter(function (g) { return g.ids.length; });
+      return '<div class="pl-sw"><span class="pl-sic">' + icon('search', 16) + '</span><input class="in pl-q" id="plQ" type="search" placeholder="' + h('Поиск по пульту') + '" autocomplete="off" aria-label="' + h('Поиск по пульту') + '" value="' + h(PL.q || '') + '"></div><div id="plRes"></div>' +
+        '<div id="plList">' + G.map(function (g) { return '<div class="pl-gt">' + h(g.t) + '</div><div class="pl-card pl-ics">' + g.ids.map(function (id) { return plRow(id, id === cur); }).join('') + '</div>'; }).join('') +
+        '<div class="pl-gf">' + dy_h('Пульт по вашим полномочиям. Их даёт владелец.') + '</div></div>';
+    };
+    var pg0 = plGroups;
+    plGroups = function () { if (!dy_emu()) return pg0.apply(this, arguments); return DY_PLG.map(function (g) { return { t: g[0], c: g[2], ids: g[1].filter(plDeskOk) }; }).filter(function (g) { return g.ids.length; }); };
+  } catch (e) { console.warn('dy pult', e); }
+}, 0);
+/* «команда» на экране = прежняя команда + люди охвата права этого экрана */
+(function () {
+  var m0 = myTeam;
+  myTeam = function () {
+    var base = m0.apply(this, arguments), c = dy_ctx();
+    if (!c || !dy_my().length) return base;
+    var ok = dy_ids(c), have = {}; base.forEach(function (e) { have[e.id] = 1; });
+    return base.concat(dy_allEmps().filter(function (e) { return ok[e.id] && !have[e.id]; }));
+  };
+})();
+(function () {
+  var c0 = canView;
+  canView = function (v) {
+    var r = c0.apply(this, arguments); if (r || !S.me || dy_realDir() || !dy_my().length) return r;
+    if (v === 'desk') return dy_deskTabs().length > 0;
+    if (v === 'teamsched') return dy_has('sched');
+    if (v === 'jcnow') return dy_has('att');
+    if (v === 'dmmap') return dy_has('map');
+    if (v === 'dkteam') return dy_has('rating');
+    if (v === 'emp' || v === 'team') return Object.keys(dy_ids(DY_P.map(function (x) { return x[0]; }))).length > 0;
+    return r;
+  };
+  if (typeof jc_canNow === 'function') { var n0 = jc_canNow; jc_canNow = function () { return n0.apply(this, arguments) || dy_has('att'); }; }
+  if (typeof dm_mapOk === 'function') { var m0 = dm_mapOk; dm_mapOk = function () { return m0.apply(this, arguments) || dy_has('map'); }; }
+  if (typeof dk_lead === 'function') { var k0 = dk_lead; dk_lead = function () { return k0.apply(this, arguments) || dy_has('rating'); }; }
+  if (typeof canPostAnn === 'function') { var a0 = canPostAnn; canPostAnn = function () { return a0.apply(this, arguments) || dy_has('ann'); }; }
+  /* объявление: с правом на всё заведение — «Всем сотрудникам» (как у владельца) */
+  if (typeof annSheet === 'function') { var s0 = annSheet; annSheet = function () { if (dy_scope('ann') !== 'venue') return s0.apply(this, arguments); DY.force++; try { return s0.apply(this, arguments); } finally { DY.force--; } }; }
+})();
+/* «Разделы»: «Пульт» первой строкой и «График службы» */
+(function () {
+  var a0 = sectionsAll;
+  sectionsAll = function () {
+    var o = a0.apply(this, arguments);
+    try {
+      if (!Array.isArray(o) || !S.me || dy_realDir() || !dy_my().length) return o;
+      var tabs = dy_deskTabs();
+      if (tabs.length && !o.some(function (s) { return s[0] === 'desk'; })) o.unshift(['desk', 'Пульт', dy_t('Ваши полномочия') + ': ' + dy_my().map(function (x) { return dy_t(dy_title(x.perm)); }).join(', '), 'desk']);
+      if (dy_has('sched') && !o.some(function (s) { return s[0] === 'teamsched'; })) o.splice(tabs.length ? 1 : 0, 0, ['teamsched', 'График службы', 'Составить, изменить и опубликовать график', 'cal']);
+    } catch (e) {}
+    return o;
+  };
+  /* нижнее меню: «Пульт», если есть место */
+  if (typeof nav_tabs0 === 'function') {
+    var t0 = nav_tabs0;
+    nav_tabs0 = function () {
+      var o = t0.apply(this, arguments);
+      try {
+        if (!o || !S.me || dy_realDir() || !dy_deskTabs().length || o.some(function (t) { return t.k === 'desk'; }) || o.length >= 5) return o;
+        var i = o.findIndex(function (t) { return t.k === 'more'; }); var tab = { k: 'desk', v: 'desk', l: 'Пульт', ic: 'desk' };
+        if (i >= 0) o.splice(i, 0, tab); else o.push(tab);
+      } catch (e) {}
+      return o;
+    };
+  }
+  if (typeof nav_tabOk === 'function') { var k0 = nav_tabOk; nav_tabOk = function (k) { if (k === 'desk' && dy_deskTabs().length) return true; return k0.apply(this, arguments); }; }
+})();
+/* права загружаются после входа и обновляются на главной, в «Разделах» и в пульте (не чаще раза в 30 с) */
+(function () {
+  var l0 = loadBase;
+  loadBase = async function () { var r = await l0.apply(this, arguments); try { await dy_load(true); } catch (e) {} return r; };
+  var r0 = render;
+  render = function () {
+    var out = r0.apply(this, arguments);
+    try { if (dy_emu()) { var h1 = document.querySelector('.top h1'); if (h1) h1.textContent = dy_t('Пульт'); } } catch (e) {}
+    try {
+      if (S.me && !dy_realDir() && /^(home|more|desk|notif)$/.test(S.view) && Date.now() - DY.at > 30000 && !DY.busy) {
+        var sig = JSON.stringify(dy_my());
+        dy_load().then(function () { if (JSON.stringify(dy_my()) !== sig) { try { NAV.tc = null; } catch (e) {} render(); } });
+      }
+    } catch (e) {}
+    return out;
+  };
+})();
+
+/* ---------- 1. Карточка сотрудника: «Полномочия» (только владелец) ---------- */
+async function dy_rowsOf(e) {
+  if (dy_sv()) { var r = await sb.rpc('perm_list', { p_member: e.id }); return r.error ? null : (r.data || []); }
+  return dy_demoRows(e.id).slice();
+}
+function dy_cardHtml(e, rows) {
+  var on = {}; (rows || []).forEach(function (r) { on[r.perm] = r.scope; });
+  var n = Object.keys(on).length;
+  return '<h2>' + dy_h('Полномочия') + ' <small>' + (n ? '<span class="chip t-info"><span>' + dy_h('включено') + '</span> <b class="num">' + n + '</b></span>' : '') + '</small></h2>' +
+    '<div class="meta" style="white-space:normal;margin-bottom:6px">' + dy_h('Дополнительные права сотрудника. Руководитель сохраняет права над своей командой.') + '</div>' +
+    DY_P.map(function (p) {
+      var s = on[p[0]], only = p[0] === 'settings';
+      return '<div style="padding:8px 0;border-top:1px solid var(--line2)">' +
+        '<label style="display:flex;gap:10px;align-items:flex-start;min-height:40px;font-size:15px"><input type="checkbox" role="switch" data-dyp="' + p[0] + '"' + (s ? ' checked' : '') +
+        ' style="width:22px;height:22px;accent-color:var(--gold);flex:none;margin-top:1px"><span style="min-width:0"><span style="display:block;font-weight:600">' + dy_h(p[1]) + '</span>' +
+        '<span class="meta" style="display:block;white-space:normal;margin:2px 0 0">' + dy_h(p[2]) + '</span></span></label>' +
+        (s ? '<div class="chips" style="margin:6px 0 0 32px">' + (only ? '<span class="chip t-mute">' + dy_h('Всё заведение') + '</span>' :
+          [['dept', 'Своя служба'], ['venue', 'Всё заведение']].map(function (x) { return '<button type="button" class="pick' + (s === x[0] ? ' on' : '') + '" data-dys="' + p[0] + ':' + x[0] + '">' + dy_h(x[1]) + '</button>'; }).join('')) + '</div>' : '') +
+        '</div>';
+    }).join('');
+}
+async function dy_set(e, perm, scope) {
+  if (dy_sv()) {
+    var r = await sb.rpc('perm_set', { p_member: e.id, p_perm: perm, p_scope: scope || null });
+    if (r.error) { toast(err(r.error), 4000); return false; }
+  } else if (dy_demo()) {
+    var DB = window.__DB, o = dy_ls(); if (!Array.isArray(DB.member_perms)) DB.member_perms = [];
+    var old = DB.member_perms.filter(function (x) { return x.member_id === e.id && x.perm === perm; })[0];
+    if ((old ? old.scope : null) === (scope || null)) return true;
+    DB.member_perms = DB.member_perms.filter(function (x) { return !(x.member_id === e.id && x.perm === perm); });
+    if (scope) DB.member_perms.push({ member_id: e.id, perm: perm, scope: scope, granted_by: S.me.id, granted_at: new Date().toISOString() });
+    o.rows = DB.member_perms.slice();
+    var a = { id: 9e8 + Date.now() % 1e8, at: new Date().toISOString(), actor_id: S.me.id, target_id: e.id, action: 'perm', details: { perm: perm, scope: scope || null, old: old ? old.scope : null } };
+    if (!Array.isArray(DB.audit_log)) DB.audit_log = []; DB.audit_log.push(a); o.log.push(a); o.log = o.log.slice(-60); dy_lsSet(o);
+    var t = dy_title(perm);
+    if (typeof w3Notify === 'function') await w3Notify(e.id, scope ? 'Вам открыт доступ: ' + t : 'Доступ закрыт: ' + t,
+      scope ? (scope === 'venue' ? 'Охват: всё заведение' : 'Охват: своя служба') : 'Владелец закрыл полномочие «' + t + '»', 'perm', null, false);
+    if (typeof cb_save === 'function') cb_save();
+  }
+  toast(dy_t(scope ? 'Доступ открыт' : 'Доступ закрыт'));
+  return true;
+}
+(function () {
+  if (typeof dg_pr !== 'function') return;
+  var p0 = dg_pr;
+  dg_pr = async function (e, seq) {
+    var r = await p0.apply(this, arguments);
+    try {
+      var b = $('dgBody');
+      if (!b || !e || e.active === false || $('dyPerms') || !dy_realDir() || !S.me || e.id === S.me.id || e.role === 'director' || (typeof DG !== 'undefined' && seq != null && seq !== DG.seq)) return r;
+      var rows = await dy_rowsOf(e);
+      if (!rows || $('dyPerms') || !$('dgBody') || (typeof DG !== 'undefined' && seq != null && seq !== DG.seq)) return r;
+      var c = document.createElement('div'); c.className = 'card'; c.id = 'dyPerms'; c.innerHTML = dy_cardHtml(e, rows);
+      var hist = $('dsHist'); if (hist && hist.parentNode === b) b.insertBefore(c, hist); else b.appendChild(c);
+      dy_bind(e, c, rows);
+    } catch (x) { console.warn('dy card', x); }
+    return r;
+  };
+})();
+function dy_bind(e, c, rows) {
+  var cur = {}; rows.forEach(function (x) { cur[x.perm] = x.scope; });
+  async function apply(perm, scope) {
+    c.querySelectorAll('input,button').forEach(function (x) { x.disabled = true; });
+    var ok = await dy_set(e, perm, scope);
+    if (ok) { if (scope) cur[perm] = scope; else delete cur[perm]; }
+    var L = Object.keys(cur).map(function (k) { return { perm: k, scope: cur[k] }; });
+    c.innerHTML = dy_cardHtml(e, L); dy_bind(e, c, L);
+    try { if (ok && typeof ds_hist === 'function') { var hh = $('dsHist'); if (hh) hh.remove(); ds_hist(e); } } catch (x) {}
+  }
+  c.querySelectorAll('[data-dyp]').forEach(function (i) { i.onchange = function () { var p = i.getAttribute('data-dyp'); apply(p, i.checked ? (cur[p] || (p === 'settings' ? 'venue' : 'dept')) : null); }; });
+  c.querySelectorAll('[data-dys]').forEach(function (b) { b.onclick = function () { var x = b.getAttribute('data-dys').split(':'); if (cur[x[0]] !== x[1]) apply(x[0], x[1]); }; });
+}
+/* уведомление о доступе: группа «График и заявки» (иначе 92c положит в выключенное «Прочее»); нажатие — «Пульт» или «Разделы» */
+(function () {
+  if (typeof jc_kindOf === 'function') { var k0 = jc_kindOf; jc_kindOf = function (rt) { if (rt === 'perm') return 'sched'; return k0.apply(this, arguments); }; }
+  if (typeof CM_REF !== 'undefined' && CM_REF.indexOf('perm') < 0) CM_REF.push('perm');
+  if (typeof openRef === 'function') {
+    var o0 = openRef;
+    openRef = function (rt, rid, nid, title) {
+      if (rt === 'perm' && /^(Вам открыт доступ|Доступ закрыт|Sizga ruxsat|Ruxsat yopildi)/.test(String(title || '')) ) {
+        if (nid) try { markRead(+nid); } catch (e) {}
+        try { closeLayer(); } catch (e) {}
+        dy_load(true).then(function () { try { NAV.tc = null; } catch (e) {} go(dy_deskTabs().length ? 'desk' : 'more'); });
+        return;
+      }
+      return o0.apply(this, arguments);
+    };
+  }
+})();
+/* «История изменений» (92s): понятный текст записи */
+(function () {
+  if (typeof ds_audTxt !== 'function') return;
+  var t0 = ds_audTxt;
+  ds_audTxt = function (x) {
+    if (x && x.action === 'perm') { var d = x.details || {}, t = dy_t(dy_title(d.perm)); return d.scope ? dy_t('Открыт доступ') + ': ' + t + ' · ' + dy_t(d.scope === 'venue' ? 'всё заведение' : 'своя служба') : dy_t('Закрыт доступ') + ': ' + t; }
+    return t0.apply(this, arguments);
+  };
+})();
+if (/[?&]w4dbg/.test(location.search)) window.__dy = { S: S, sb: sb, DY: DY, load: function (f) { return dy_load(f); }, tabs: function () { return dy_deskTabs(); }, go: function (v) { return go(v); }, has: function (p) { return dy_has(p); } };
+
+
+/* ===== ВОЛНА 4 · 92z-support.js ===== */
+/* ===== 92z — «Помощь и предложения»: связь любого пользователя Jamoa с командой Jamoa (префикс dz_). Журнал w4/log/dz.md =====
+   Сервер: 0029_support.sql (support_send / support_my / support_reply / support_seen, wish_board / wish_vote,
+   founder_support_list / _counts / _get / _reply / _set); переходник — блок «92z support» в sv-adapter.js.
+   В демо те же вызовы выполняет DZ_DEMO над учебным хранилищем этого браузера (localStorage jamoa-dz-support-v1), общим для всех
+   учебных входов и демо-кабинета основателя; учебные обращения кабинета — из 98-founder (FD_MSG0, FD_BUG0, FD_WISH0).
+   1. «Профиль» → «Как пользоваться» → «Помощь и предложения», «Разделы» → «Помощь и предложения», «Справка»: три вида —
+      «Вопрос / не получается», «Ошибка» (снимок экрана или фото; автоматически — версия, экран, тип заведения, браузер),
+      «Предложение / идея» (с согласия — на доску пожеланий). «Мои обращения»: статус, переписка, ответ — уведомлением.
+   2. «Доска пожеланий»: предложения без имени автора и заведения, «+1» один раз от человека, сортировка по голосам, статусы.
+   3. Кабинет основателя → «Обращения» (92p на сервере, 98 в демо): фильтры, карточка с перепиской, статусы, «исправлено в версии»,
+      доска с голосами; на «Обзоре» — счётчики новых. Без интеграций: ни Telegram-бота, ни почты. Без ИИ. */
+var DZ = { tab: 'my', sort: 'votes', from: 'home', f: { tab: 't', kind: '', st: '', ven: '' }, ph: null };
+var DZ_K = 'jamoa-dz-support-v1';
+var DZ_KIND = { question: 'Вопрос / не получается', bug: 'Ошибка', idea: 'Предложение / идея' };
+var DZ_KS = { question: 'Вопрос', bug: 'Ошибка', idea: 'Идея' };
+var DZ_KI = { question: 'chat', bug: 'alert', idea: 'bulb' };
+var DZ_ST = { new: 'Новое', work: 'В работе', answered: 'Ответили', done: 'Сделано' };
+var DZ_STC = { new: 't-warn', work: 't-info', answered: 't-gold', done: 't-ok' };
+var DZ_WS = { consider: 'Рассматриваем', planned: 'В планах', done: 'Сделано' };
+var DZ_WSC = { consider: 't-mute', planned: 't-info', done: 't-ok' };
+var DZ_ROLE = { owner: 'владелец', director: 'владелец', manager: 'руководитель', staff: 'сотрудник', accountant: 'бухгалтер' };
+
+/* ---------- язык: свой словарь DZ_UZ (w4/uz/support.js), затем общий ---------- */
+function dz_uz() { try { return uiLang() === 'uz'; } catch (e) { return false; } }
+function dz_t(s, o) {
+  var X = window.DZ_UZ || {}, r = s;
+  if (dz_uz()) { if (X[s] != null) r = X[s]; else if (window.FD_UZ && window.FD_UZ[s] != null) r = window.FD_UZ[s]; else { try { r = trUi(s); } catch (e) {} } }
+  if (o) Object.keys(o).forEach(function (k) { r = String(r).split('{' + k + '}').join(o[k]); });
+  return r;
+}
+function dz_e(s, o) { return h(dz_t(s, o)); }
+function dz_err(e) { var m = ''; try { m = err(e); } catch (x) { m = (e && e.message) || String(e); } return dz_t(m); }
+
+/* ---------- режимы ---------- */
+function dz_sv() { return typeof sv_on === 'function' && sv_on(); }                                  /* приложение на сервере */
+function dz_srvF() { try { return typeof FP_ON !== 'undefined' && !!FP_ON; } catch (e) { return false; } }   /* кабинет основателя на сервере */
+function dz_fd() { try { return typeof FD_ON !== 'undefined' && !!FD_ON; } catch (e) { return false; } }     /* любой кабинет основателя */
+function dz_SV() { return window.JAMOA_DEMO === false && window.JAMOA_SV ? window.JAMOA_SV : null; }
+
+/* ---------- даты ---------- */
+function dz_ago(ts) {
+  if (!ts) return ''; var ms = Date.now() - Date.parse(ts); if (!isFinite(ms)) return '';
+  var m = Math.max(0, Math.round(ms / 6e4));
+  if (m < 2) return dz_t('только что'); if (m < 60) return dz_t('{n} мин назад', { n: m });
+  var hh = Math.round(m / 60); if (hh < 24) return dz_t('{n} ч назад', { n: hh });
+  var d = Math.round(hh / 24); if (d === 1) return dz_t('вчера'); if (d < 30) return dz_t('{n} дн. назад', { n: d });
+  try { return dm(String(ts).slice(0, 10)); } catch (e) { return String(ts).slice(0, 10); }
+}
+function dz_cut(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+function dz_chip(c, t) { return '<span class="chip ' + c + '">' + dz_e(t) + '</span>'; }
+function dz_kchip(k) { return '<span class="chip t-mute">' + icon(DZ_KI[k] || 'chat', 13) + '<span>' + dz_e(DZ_KS[k] || k) + '</span></span>'; }
+/* учебные тексты кабинета 98 переводятся словарём FD_UZ */
+function dz_tx(x, k) { var s = x[k]; return x.seed ? dz_t(s) : s; }
+
+/* ---------- служебные сведения к обращению: без личных данных ---------- */
+function dz_meta() {
+  var ua = navigator.userAgent || '', b = 'другой', m, os = '—';
+  if ((m = /Edg\/(\d+)/.exec(ua))) b = 'Edge ' + m[1]; else if ((m = /OPR\/(\d+)/.exec(ua))) b = 'Opera ' + m[1];
+  else if ((m = /YaBrowser\/(\d+)/.exec(ua))) b = 'Yandex ' + m[1]; else if ((m = /SamsungBrowser\/(\d+)/.exec(ua))) b = 'Samsung Internet ' + m[1];
+  else if ((m = /(?:Chrome|CriOS)\/(\d+)/.exec(ua))) b = 'Chrome ' + m[1]; else if ((m = /(?:Firefox|FxiOS)\/(\d+)/.exec(ua))) b = 'Firefox ' + m[1];
+  else if ((m = /Version\/(\d+)[\d.]* .*Safari/.exec(ua))) b = 'Safari ' + m[1];
+  if ((m = /Android (\d+(?:\.\d+)?)(?:; ([^;)]+))?/.exec(ua))) os = 'Android ' + m[1] + (m[2] && !/^(K|wv|Linux)$/.test(m[2].trim()) ? ' · ' + m[2].trim() : '');
+  else if ((m = /(iPhone|iPad)[^)]*OS (\d+)/.exec(ua))) os = m[1] + ' · iOS ' + m[2];
+  else if (/Windows/.test(ua)) os = 'Windows'; else if (/Mac OS X/.test(ua)) os = 'macOS'; else if (/Linux/.test(ua)) os = 'Linux';
+  var sc = DZ.from || 'home', st = '';
+  try { st = (typeof W3T !== 'undefined' && W3T[sc]) || ''; } catch (e) {}
+  return { ver: String(window.JAMOA_VERSION || '—'), screen: sc + (st ? ' · ' + st : ''), browser: b, os: os, lang: dz_uz() ? 'uz' : 'ru',
+    size: (window.innerWidth || 0) + '×' + (window.innerHeight || 0), mode: dz_sv() ? 'server' : 'demo', online: navigator.onLine === false ? 'нет' : 'да' };
+}
+var DZ_META_L = [['ver', 'Версия приложения'], ['screen', 'Экран'], ['vtype', 'Тип заведения'], ['role', 'Должность в приложении'], ['browser', 'Браузер'], ['os', 'Телефон / система'], ['size', 'Размер экрана'], ['lang', 'Язык'], ['mode', 'Режим'], ['online', 'Интернет']];
+function dz_vtype(code) { if (!code) return '—'; try { var t = vType(code); if (t && t[0] === code) return dz_t(t[1]); } catch (e) {} return code; }
+
+/* ---------- фото: снимок экрана / фото ---------- */
+function dz_small(file, max, q) {
+  return new Promise(function (res) {
+    var img = new Image(), url = URL.createObjectURL(file);
+    img.onload = function () {
+      var k = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      c.toBlob(function (bl) { res(bl || file); }, 'image/jpeg', q);
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); res(null); }; img.src = url;
+  });
+}
+function dz_dataUrl(bl) { return new Promise(function (res) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = function () { res(null); }; r.readAsDataURL(bl); }); }
+/* сервер: файл в свою папку <заведение>/<я>/support-…; демо: маленькая картинка прямо в учебном хранилище */
+async function dz_upload(file) {
+  if (!file) return null;
+  if (dz_sv()) { var bl = await dz_small(file, 1600, 0.78); if (!bl) throw new Error(dz_t('Это не картинка')); return await dz_SV().upload(bl, 'support'); }
+  var b2 = await dz_small(file, 900, 0.6); if (!b2) throw new Error(dz_t('Это не картинка')); return await dz_dataUrl(b2);
+}
+var DZ_URL = {};
+async function dz_phUrl(p) {
+  if (!p) return null; if (/^(data:|blob:|https?:)/.test(p)) return p; if (DZ_URL[p] && DZ_URL[p].t > Date.now()) return DZ_URL[p].u;
+  var SVx = dz_SV(); if (!SVx) return null;
+  try {
+    var u = null;
+    if (dz_srvF()) { var r = await SVx.real.storage.from(SVx.bucket || 'jamoa-photos').createSignedUrl(p, 3600); u = r && r.data && r.data.signedUrl; }
+    else u = await SVx.photoUrl(p, 3600);
+    if (u) DZ_URL[p] = { u: u, t: Date.now() + 3000e3 }; return u;
+  } catch (e) { return null; }
+}
+async function dz_phFill(root) {
+  (root || document).querySelectorAll('.dz-ph[data-p]').forEach(async function (a) {
+    var u = await dz_phUrl(a.getAttribute('data-p')); a.removeAttribute('data-p');
+    a.innerHTML = u ? '<img src="' + h(u) + '" alt="">' : '<span class="meta">' + dz_e('Снимок не открылся') + '</span>'; if (u) a.href = u;
+  });
+}
+function dz_ph(p) { return p ? '<a class="dz-ph" data-p="' + h(p) + '" target="_blank" rel="noopener"><span class="meta">' + dz_e('Загрузка снимка…') + '</span></a>' : ''; }
+
+/* =====================================================================================
+   Демо: учебное хранилище этого браузера (общее для всех учебных входов и демо-кабинета основателя)
+   ===================================================================================== */
+function dz_ld() { try { var o = JSON.parse(localStorage.getItem(DZ_K) || 'null'); if (o && o.v === 1 && Array.isArray(o.T)) return o; } catch (e) {} return { v: 1, seq: 1000, T: [], M: [], V: [], N: [] }; }
+function dz_put(o) { try { localStorage.setItem(DZ_K, JSON.stringify(o)); return true; } catch (e) { return false; } }
+function dz_iso(daysAgo, hh) { var d = new Date(Date.now() - daysAgo * 864e5); d.setHours(hh || 11, (daysAgo * 7) % 60, 0, 0); if (d > new Date()) d = new Date(Date.now() - 36e5); return d.toISOString(); }
+function dz_seed(o) {
+  if (o.seeded || typeof FD_V0 === 'undefined' || !FD_V0 || typeof FD_MSG0 === 'undefined') return o;
+  var V0 = FD_V0, id = 1, mk = function (k, vi, text, days, st, x) {
+    var v = V0[vi] || V0[0];
+    var t = Object.assign({ id: id++, seed: 1, who: 'seed', kind: k, text: text, photo_path: null, meta: { ver: 'v24-geofree', vtype: v[1], role: 'owner' },
+      on_board: false, status: st, wish_status: 'consider', fixed_in: null, votes0: 0, author_unread: false, founder_unread: st === 'new',
+      last_at: dz_iso(days), created_at: dz_iso(days + (st === 'new' ? 0 : 1)), venue_name: v[0], venue_type: v[1], author_name: v[9], author_role: 'owner' }, x || {});
+    o.T.push(t); return t;
+  };
+  FD_MSG0.forEach(function (m, i) {
+    var t = mk('question', m[0], m[2], m[1], i === 5 ? 'answered' : 'new', { meta: { ver: 'v24-geofree', vtype: V0[m[0]][1], role: 'owner', screen: 'home', browser: 'Chrome 129', os: 'Android 14' } });
+    if (i === 5) o.M.push({ id: 1, ticket_id: t.id, from_founder: true, text: 'Спасибо, что написали! Рады, что стало удобнее.', photo_path: null, created_at: dz_iso(m[1]) });
+  });
+  var BV = [1, 6, 13, 3, 14];
+  FD_BUG0.forEach(function (b, i) {
+    mk('bug', BV[i] || 0, b[1], b[3], b[4] === 'new' ? 'new' : b[4], { meta: { ver: 'v23', vtype: (V0[BV[i]] || V0[0])[1], role: 'staff', screen: b[0], browser: 'Chrome 128', os: 'Android 13' },
+      fixed_in: b[4] === 'done' ? 'v24' : null, author_role: 'staff' });
+  });
+  var WS = { new: 'consider', work: 'planned', plan: 'planned', done: 'done' };
+  FD_WISH0.forEach(function (w, i) {
+    mk('idea', w[1][0] || 0, w[0], 10 + i * 3, w[2] === 'new' ? 'new' : 'answered', { on_board: true, wish_status: WS[w[2]] || 'consider', votes0: Math.max(0, w[1].length - 1) });
+  });
+  o.seq = Math.max(o.seq || 1000, 1000); o.seeded = 1; return o;
+}
+function dz_db() { var o = dz_ld(); if (!o.seeded) { dz_seed(o); if (o.seeded) dz_put(o); } return o; }
+function dz_who() {
+  var nm = '', ty = '';
+  try { nm = orgP('org_name', '') || ''; } catch (e) {}
+  try { var vp = venueP(); ty = (vp && vp.type) || ''; } catch (e) {}
+  return (nm || ty || 'plaza') + '|' + (S.me ? S.me.id : '');
+}
+function dz_myVenue() {
+  var nm = '', ty = 'hotel';
+  try { var vp = venueP(); if (vp && vp.type) ty = vp.type; } catch (e) {}
+  try { nm = orgP('org_name', '') || ''; } catch (e) {}
+  if (!nm) nm = ty === 'hotel' ? 'Mir Luxe Plaza' : dz_vtype(ty);
+  return { name: nm, type: ty };
+}
+function dz_nm(e) { return e ? (e.first_name + (e.last_name ? ' ' + String(e.last_name).charAt(0) + '.' : '')) : '—'; }
+function dz_votes(o, t) { return (+t.votes0 || 0) + o.V.filter(function (x) { return x.tid === t.id; }).length; }
+function dz_row(o, t, full, msgs) {
+  var r = { id: t.id, kind: t.kind, text: t.text, photo_path: t.photo_path, meta: t.meta || {}, on_board: !!t.on_board, status: t.status, wish_status: t.wish_status,
+    fixed_in: t.fixed_in, votes: dz_votes(o, t), author_unread: !!t.author_unread, founder_unread: !!t.founder_unread, last_at: t.last_at, created_at: t.created_at, seed: t.seed };
+  var M = o.M.filter(function (m) { return m.ticket_id === t.id; }).sort(function (a, b) { return a.id - b.id; });
+  r.n_msgs = M.length; r.n_answers = M.filter(function (m) { return m.from_founder; }).length;
+  var la = M.filter(function (m) { return m.from_founder; }).pop(); r.last_answer = la ? la.text : null;
+  if (full) Object.assign(r, { venue_id: t.venue_name, venue_name: t.venue_name, venue_type: t.venue_type, author_name: t.author_name, author_role: t.author_role });
+  if (msgs) r.msgs = M.map(function (m) { return { id: m.id, from_founder: m.from_founder, text: m.text, photo_path: m.photo_path, created_at: m.created_at, seed: t.seed }; });
+  return r;
+}
+function dz_E(m, c) { return { data: null, error: { message: dz_t(m), details: c || 'bad_input', code: c || 'bad_input' } }; }
+function dz_ok(d) { return { data: d, error: null }; }
+function dz_nid(o) { o.seq = (o.seq || 1000) + 1; return o.seq; }
+function dz_noteFor(o, t, kind, title, body) { if (t.who && t.who !== 'seed') o.N.push({ who: t.who, kind: kind, title: title, body: body, tid: t.id, at: new Date().toISOString() }); }
+function dz_needF() { return dz_fd() ? null : dz_E('Только для основателя Jamoa', 'no_rights'); }
+var DZ_DEMO = {
+  support_send: async function (a) {
+    if (!S.me) return dz_E('Нужно войти', 'no_auth');
+    var o = dz_db(), t = String(a.p_text || '').trim(), who = dz_who(), vn = dz_myVenue(), now = new Date().toISOString();
+    if (!DZ_KIND[a.p_kind]) return dz_E('Выберите вид обращения');
+    if (!t) return dz_E('Напишите, что случилось или что предлагаете'); if (t.length > 2000) return dz_E('Не больше 2000 знаков');
+    if (o.T.filter(function (x) { return x.who === who && Date.now() - Date.parse(x.created_at) < 864e5; }).length >= 20) return dz_E('Сегодня вы уже отправили 20 обращений. Завтра можно снова', 'limit');
+    var m = a.p_meta || {}, meta = {};
+    ['ver', 'screen', 'browser', 'os', 'lang', 'size', 'mode', 'online'].forEach(function (k) { if (m[k] != null && String(m[k]).trim()) meta[k] = String(m[k]).trim().slice(0, 120); });
+    meta.vtype = vn.type; meta.role = S.me.role === 'director' ? 'owner' : S.me.role;
+    var row = { id: dz_nid(o), who: who, kind: a.p_kind, text: t, photo_path: a.p_photo || null, meta: meta, on_board: a.p_kind === 'idea' && !!a.p_board, status: 'new', wish_status: 'consider',
+      fixed_in: null, votes0: 0, author_unread: false, founder_unread: true, last_at: now, created_at: now, venue_name: vn.name, venue_type: vn.type, author_name: dz_nm(S.me), author_role: meta.role };
+    o.T.push(row);
+    if (!dz_put(o)) { o.T.pop(); if (row.photo_path) { row.photo_path = null; o.T.push(row); if (!dz_put(o)) return dz_E('Не удалось сохранить в этом браузере'); } else return dz_E('Не удалось сохранить в этом браузере'); }
+    return dz_ok(dz_row(o, row, false, true));
+  },
+  support_my: async function () {
+    if (!S.me) return dz_E('Нужно войти', 'no_auth');
+    var o = dz_db(), who = dz_who();
+    return dz_ok(o.T.filter(function (x) { return x.who === who; }).sort(function (a, b) { return String(b.last_at).localeCompare(String(a.last_at)) || b.id - a.id; }).map(function (x) { return dz_row(o, x, false, true); }));
+  },
+  support_reply: async function (a) {
+    var o = dz_db(), who = dz_who(), t = o.T.filter(function (x) { return x.id === +a.p_id && x.who === who; })[0], tx = String(a.p_text || '').trim();
+    if (!t) return dz_E('Обращение не найдено', 'not_found'); if (!tx) return dz_E('Напишите сообщение'); if (tx.length > 2000) return dz_E('Не больше 2000 знаков');
+    var now = new Date().toISOString();
+    o.M.push({ id: dz_nid(o), ticket_id: t.id, from_founder: false, text: tx, photo_path: a.p_photo || null, created_at: now });
+    Object.assign(t, { founder_unread: true, author_unread: false, last_at: now, status: t.status === 'answered' || t.status === 'done' ? 'new' : t.status });
+    if (!dz_put(o)) return dz_E('Не удалось сохранить в этом браузере');
+    return dz_ok(dz_row(o, t, false, true));
+  },
+  support_seen: async function (a) {
+    var o = dz_db(), who = dz_who(), t = o.T.filter(function (x) { return x.id === +a.p_id && x.who === who; })[0];
+    if (!t || !t.author_unread) return dz_ok(false); t.author_unread = false; dz_put(o); return dz_ok(true);
+  },
+  wish_board: async function (a) {
+    var o = dz_db(), who = S.me ? dz_who() : 'founder';
+    var L = o.T.filter(function (x) { return x.on_board && x.kind === 'idea'; }).map(function (x) {
+      return { id: x.id, text: x.text, seed: x.seed, votes: dz_votes(o, x), status: x.wish_status, created_at: x.created_at, voted: o.V.some(function (v) { return v.tid === x.id && v.who === who; }), mine: x.who === who };
+    });
+    var nw = a && a.p_sort === 'new';
+    L.sort(function (x, y) { return (nw ? 0 : y.votes - x.votes) || String(y.created_at).localeCompare(String(x.created_at)) || y.id - x.id; });
+    return dz_ok(L);
+  },
+  wish_vote: async function (a) {
+    if (!S.me) return dz_E('Нужно войти', 'no_auth');
+    var o = dz_db(), who = dz_who(), t = o.T.filter(function (x) { return x.id === +a.p_id && x.on_board && x.kind === 'idea'; })[0];
+    if (!t) return dz_E('Предложение не найдено', 'not_found'); if (t.who === who) return dz_E('Своё предложение поддержать нельзя');
+    o.V = o.V.filter(function (v) { return !(v.tid === t.id && v.who === who); });
+    if (a.p_on !== false) o.V.push({ tid: t.id, who: who });
+    dz_put(o); return dz_ok({ id: t.id, votes: dz_votes(o, t), voted: a.p_on !== false });
+  },
+  founder_support_counts: async function () {
+    var no = dz_needF(); if (no) return no; var o = dz_db(), T = o.T, c = function (f) { return T.filter(f).length; };
+    return dz_ok({ all: T.length, new: c(function (s) { return s.status === 'new'; }), unread: c(function (s) { return s.founder_unread; }), work: c(function (s) { return s.status === 'work'; }),
+      answered: c(function (s) { return s.status === 'answered'; }), done: c(function (s) { return s.status === 'done'; }),
+      question_new: c(function (s) { return s.kind === 'question' && s.status === 'new'; }), bug_new: c(function (s) { return s.kind === 'bug' && s.status === 'new'; }),
+      bug_open: c(function (s) { return s.kind === 'bug' && s.status !== 'done'; }), idea_new: c(function (s) { return s.kind === 'idea' && s.status === 'new'; }),
+      board: c(function (s) { return s.on_board; }), board_open: c(function (s) { return s.on_board && s.wish_status !== 'done'; }),
+      d7: c(function (s) { return Date.now() - Date.parse(s.created_at) < 7 * 864e5; }) });
+  },
+  founder_support_list: async function (a) {
+    var no = dz_needF(); if (no) return no; var o = dz_db();
+    var L = o.T.filter(function (s) { return (!a.p_kind || s.kind === a.p_kind) && (!a.p_status || s.status === a.p_status) && (!a.p_venue || s.venue_name === a.p_venue); });
+    L.sort(function (x, y) { return (y.founder_unread - x.founder_unread) || String(y.last_at).localeCompare(String(x.last_at)) || y.id - x.id; });
+    var vs = {}; o.T.forEach(function (s) { var k = s.venue_name; vs[k] = vs[k] || { id: k, name: k, type: s.venue_type, n: 0 }; vs[k].n++; });
+    return dz_ok({ items: L.map(function (s) { return dz_row(o, s, true, false); }), venues: Object.keys(vs).map(function (k) { return vs[k]; }).sort(function (x, y) { return y.n - x.n || x.name.localeCompare(y.name); }),
+      counts: (await DZ_DEMO.founder_support_counts()).data });
+  },
+  founder_support_get: async function (a) {
+    var no = dz_needF(); if (no) return no; var o = dz_db(), t = o.T.filter(function (x) { return x.id === +a.p_id; })[0];
+    if (!t) return dz_E('Обращение не найдено', 'not_found'); t.founder_unread = false; dz_put(o); return dz_ok(dz_row(o, t, true, true));
+  },
+  founder_support_reply: async function (a) {
+    var no = dz_needF(); if (no) return no; var o = dz_db(), t = o.T.filter(function (x) { return x.id === +a.p_id; })[0], tx = String(a.p_text || '').trim(), st = a.p_status || 'answered';
+    if (!tx) return dz_E('Напишите ответ'); if (tx.length > 2000) return dz_E('Не больше 2000 знаков');
+    if (['work', 'answered', 'done'].indexOf(st) < 0) return dz_E('Неизвестный статус'); if (!t) return dz_E('Обращение не найдено', 'not_found');
+    var now = new Date().toISOString();
+    o.M.push({ id: dz_nid(o), ticket_id: t.id, from_founder: true, text: tx, photo_path: null, created_at: now });
+    Object.assign(t, { status: st, author_unread: true, founder_unread: false, last_at: now });
+    dz_noteFor(o, t, 'support', 'Ответ команды Jamoa', tx.slice(0, 300));
+    dz_put(o); return dz_ok(dz_row(o, t, true, true));
+  },
+  founder_support_set: async function (a) {
+    var no = dz_needF(); if (no) return no; var o = dz_db(), t = o.T.filter(function (x) { return x.id === +a.p_id; })[0], fx = String(a.p_fixed_in || '').trim() || null;
+    if (a.p_status && !DZ_ST[a.p_status]) return dz_E('Неизвестный статус'); if (a.p_wish_status && !DZ_WS[a.p_wish_status]) return dz_E('Неизвестный статус доски');
+    if (fx && (fx.length > 40 || !/^[0-9A-Za-zА-Яа-яЁё._ -]+$/.test(fx))) return dz_E('Версия — например v25 или 1.4.2');
+    if (!t) return dz_E('Обращение не найдено', 'not_found');
+    if (fx && t.kind !== 'bug') return dz_E('«Исправлено в версии» — только для ошибок'); if (a.p_wish_status && t.kind !== 'idea') return dz_E('Статус доски — только для предложений');
+    var old = { status: t.status, fixed_in: t.fixed_in, wish_status: t.wish_status };
+    t.status = a.p_status || (fx ? 'done' : t.status); if (fx) t.fixed_in = fx; if (a.p_wish_status) t.wish_status = a.p_wish_status; if (a.p_hide) t.on_board = false; t.founder_unread = false;
+    var ws = t.wish_status !== old.wish_status, fc = t.fixed_in !== old.fixed_in;
+    if ((t.status !== old.status && (t.status === 'work' || t.status === 'done')) || fc || ws) {
+      t.author_unread = true; t.last_at = new Date().toISOString();
+      var lb = ws ? DZ_WS[t.wish_status] : DZ_ST[t.status];
+      dz_noteFor(o, t, 'support_st', 'Обращение в Jamoa: ' + String(lb).toLowerCase(), (fc ? 'Ошибка исправлена в версии ' + t.fixed_in : ws ? 'Ваше предложение: ' + String(lb).toLowerCase() : 'Статус: ' + String(lb).toLowerCase()) + ' · ' + t.text.slice(0, 120));
+    }
+    dz_put(o); return dz_ok(dz_row(o, t, true, true));
+  }
+};
+/* уведомления демо: ответы основателя из учебного хранилища → колокольчик того, кто писал (при входе в приложение) */
+async function dz_deliver() {
+  if (dz_sv() || !S.me || typeof w3Notify !== 'function') return 0;
+  var o = dz_ld(), who = dz_who(), mine = (o.N || []).filter(function (n) { return n.who === who; }); if (!mine.length) return 0;
+  o.N = o.N.filter(function (n) { return n.who !== who; }); dz_put(o);
+  for (var i = 0; i < mine.length; i++) await w3Notify(S.me.id, mine[i].title, mine[i].body, 'support', mine[i].tid, false);
+  try { if (typeof loadNotif === 'function') await loadNotif(); } catch (e) {}
+  return mine.length;
+}
+async function dz_rpc(n, a) {
+  try {
+    if (dz_srvF()) { var SVx = dz_SV(); return await SVx.real.rpc(n, a || {}); }
+    if (dz_sv()) { var r = await sb.rpc(n, a || {}); return r || dz_E('Нет ответа', 'server'); }
+    if (!DZ_DEMO[n]) return dz_E('Нет ответа', 'server');
+    return await DZ_DEMO[n](a || {});
+  } catch (e) { return { data: null, error: e }; }
+}
+
+/* =====================================================================================
+   Приложение: экран «Помощь и предложения», новое обращение, моё обращение, доска пожеланий
+   ===================================================================================== */
+(function () {
+  try { if (CM_VIEWS.indexOf('dzsup') < 0) CM_VIEWS.push('dzsup'); } catch (e) {}
+  try { if (CM_REF.indexOf('support') < 0) CM_REF.push('support'); } catch (e) {}
+  if (typeof openRef === 'function') {
+    var o0 = openRef;
+    openRef = function (rt, rid, nid) {
+      if (rt === 'support' && S.me) {
+        if (nid) try { markRead(+nid); } catch (e) {} try { alarmStop(); } catch (e) {} closeLayer();
+        DZ.tab = 'my'; go('dzsup'); var id = parseInt(rid, 10); if (id) setTimeout(function () { dz_mine(id); }, 350); return;
+      }
+      return o0.apply(this, arguments);
+    };
+  }
+  /* группы настроек уведомлений (92c): ответ команды Jamoa — «Объявления» (иначе упал бы в «Прочее», выключенное по умолчанию) */
+  try {
+    Object.assign(JC_KINDS, { support: 'ann', support_st: 'ann' });
+    var k0 = jc_kindOf;
+    jc_kindOf = function (rt, title) { if (rt === 'support') return /^Ответ|javob/i.test(String(title || '')) ? 'support' : 'support_st'; return k0.apply(this, arguments); };
+  } catch (e) {}
+  if (/[?&]w4dbg/.test(location.search)) window.__dz = { S: S, DZ: DZ, rpc: function (n, a) { return dz_rpc(n, a); }, go: function (v) { return go(v); },
+    sections: function () { return sections().map(function (s) { return s[0]; }); }, meta: dz_meta, deliver: dz_deliver, store: dz_ld, K: DZ_K };
+})();
+function dz_open(kind) { DZ.from = S.view && S.view !== 'dzsup' ? S.view : (DZ.from || 'home'); if (kind) return dz_new(kind); DZ.tab = 'my'; go('dzsup'); }
+
+async function vDzSup() {
+  var m = $('main'); if (!m) return;
+  if (S.view !== 'dzsup') return;
+  await dz_deliver();
+  var tab = DZ.tab === 'board' ? 'board' : 'my';
+  m.innerHTML = '<div class="card ob-pc"><h2><span>' + dz_e('Написать команде Jamoa') + '</span></h2>' +
+    '<div class="meta" style="white-space:normal;margin:-4px 0 6px">' + dz_e('Отвечает основатель Jamoa. Ответ придёт уведомлением и появится в «Мои обращения».') + '</div>' +
+    ['question', 'bug', 'idea'].map(function (k) {
+      var sub = { question: 'Не понятно, как сделать, или что-то не получается', bug: 'Что-то работает не так. Можно приложить снимок экрана', idea: 'Чего не хватает в Jamoa. Можно показать на доске пожеланий' }[k];
+      return '<button type="button" class="ob-pr" data-dzn="' + k + '"><span class="ob-pi">' + icon(DZ_KI[k], 19) + '</span><span class="ob-sx"><b>' + dz_e(DZ_KIND[k]) + '</b><span>' + dz_e(sub) + '</span></span>' + icon('chev', 16) + '</button>';
+    }).join('') + '</div>' +
+    '<div class="seg" role="group"><button type="button" data-dzt="my" class="' + (tab === 'my' ? 'on' : '') + '">' + dz_e('Мои обращения') + '</button><button type="button" data-dzt="board" class="' + (tab === 'board' ? 'on' : '') + '">' + dz_e('Доска пожеланий') + '</button></div>' +
+    '<div id="dzBody"><div class="card empty">' + dz_e('Загрузка…') + '</div></div>';
+  m.querySelectorAll('[data-dzn]').forEach(function (b) { b.onclick = function () { dz_new(b.getAttribute('data-dzn')); }; });
+  m.querySelectorAll('[data-dzt]').forEach(function (b) { b.onclick = function () { DZ.tab = b.getAttribute('data-dzt'); vDzSup(); }; });
+  if (tab === 'board') return dz_board();
+  var r = await dz_rpc('support_my'); if (S.view !== 'dzsup' || !$('dzBody')) return;
+  if (r.error) { $('dzBody').innerHTML = '<div class="card empty">' + h(dz_err(r.error)) + '</div>'; return; }
+  var L = r.data || [];
+  $('dzBody').innerHTML = '<div class="card"><h2><span>' + dz_e('Мои обращения') + '</span></h2>' + (L.length ? L.map(function (x) {
+    return '<button type="button" class="fd-v' + (x.author_unread ? ' w3-grn' : '') + '" data-dzm="' + x.id + '"><div class="fd-vm"><div class="fd-tags" style="margin:0 0 4px">' + dz_kchip(x.kind) + dz_chip(DZ_STC[x.status] || 't-mute', DZ_ST[x.status] || x.status) +
+      (x.author_unread ? dz_chip('t-ok', 'Новый ответ') : '') + (x.on_board ? '<span class="chip ' + (DZ_WSC[x.wish_status] || 't-mute') + '">' + h(dz_t('На доске') + ': ' + String(dz_t(DZ_WS[x.wish_status] || '')).toLowerCase()) + '</span>' : '') + '</div>' +
+      '<div class="dz-tx">' + h(dz_cut(x.text, 180)) + '</div>' +
+      (x.last_answer ? '<div class="meta" style="white-space:normal"><b>' + dz_e('Jamoa') + ':</b> ' + h(dz_cut(x.last_answer, 120)) + '</div>' : '') +
+      '<div class="meta">' + h(dz_ago(x.created_at)) + (x.fixed_in ? ' · ' + dz_e('исправлено в версии {v}', { v: x.fixed_in }) : '') + (x.n_msgs ? ' · ' + dz_e('сообщений: {n}', { n: x.n_msgs }) : '') + '</div></div>' + icon('chev', 16) + '</button>';
+  }).join('') : '<div class="empty">' + dz_e('Обращений пока нет. Если что-то непонятно или не работает — напишите, мы ответим.') + '</div>') + '</div>';
+  $('dzBody').querySelectorAll('[data-dzm]').forEach(function (b) { b.onclick = function () { dz_mine(+b.getAttribute('data-dzm')); }; });
+}
+
+function dz_new(kind) {
+  if (S.view !== 'dzsup' && S.view) DZ.from = S.view;
+  kind = DZ_KIND[kind] ? kind : 'question';
+  var ph = { question: 'Например: как поменять смену сотруднику на завтра?', bug: 'Что делали, что ожидали и что получилось. Например: нажимаю «Пришёл» — ничего не происходит', idea: 'Например: хочу видеть график на месяц одним списком' }[kind];
+  var meta = dz_meta();
+  DZ.ph = null;
+  sheet(sheetHead(dz_e('Помощь и предложения'), dz_e('Сообщение команде Jamoa')) +
+    '<div class="seg" role="group" style="margin-top:8px">' + ['question', 'bug', 'idea'].map(function (k) { return '<button type="button" data-dzk="' + k + '" class="' + (k === kind ? 'on' : '') + '">' + dz_e(DZ_KS[k]) + '</button>'; }).join('') + '</div>' +
+    '<label class="f" style="margin-top:8px">' + dz_e(kind === 'idea' ? 'Что предлагаете' : kind === 'bug' ? 'Что случилось' : 'Ваш вопрос') +
+    '<textarea class="in" id="dzTx" rows="5" maxlength="2000" placeholder="' + dz_e(ph) + '"></textarea></label>' +
+    '<div class="meta" style="display:flex;justify-content:flex-end"><span class="mono" id="dzTn">0/2000</span></div>' +
+    (kind !== 'idea' ? '<label class="btn ghost full" for="dzPhIn" style="min-height:44px;margin-top:6px">' + icon('cam', 18) + '<span>' + dz_e(kind === 'bug' ? 'Приложить снимок экрана или фото' : 'Приложить снимок экрана') + '</span></label><input type="file" id="dzPhIn" accept="image/*" hidden><div id="dzPhV"></div>' : '') +
+    (kind === 'idea' ? '<label class="dz-ck"><input type="checkbox" id="dzBoard"><span>' + dz_e('Показать на доске пожеланий: другие пользователи Jamoa смогут поддержать «+1». Имя и заведение не показываются.') + '</span></label>' : '') +
+    '<div class="note" style="margin-top:8px;white-space:normal">' + dz_e('К обращению автоматически прикрепятся: версия приложения {v}, экран, тип заведения, браузер и система. Ваше имя и заведение видит только команда Jamoa.', { v: meta.ver }) + '</div>' +
+    '<button type="button" class="btn gold full" id="dzSend" style="margin-top:10px;min-height:44px">' + icon('send', 18) + '<span>' + dz_e('Отправить') + '</span></button>');
+  var L = $('layer');
+  L.querySelectorAll('[data-dzk]').forEach(function (b) { b.onclick = function () { var v = $('dzTx').value; dz_new(b.getAttribute('data-dzk')); $('dzTx').value = v; $('dzTn').textContent = v.length + '/2000'; }; });
+  $('dzTx').oninput = function () { $('dzTn').textContent = this.value.length + '/2000'; };
+  if ($('dzPhIn')) $('dzPhIn').onchange = function () {
+    var f = this.files && this.files[0]; this.value = ''; if (!f) return; DZ.ph = f;
+    var u = URL.createObjectURL(f); $('dzPhV').innerHTML = '<div class="dz-phv"><img src="' + h(u) + '" alt=""><button type="button" class="btn ghost sm" id="dzPhX">' + dz_e('Убрать') + '</button></div>';
+    $('dzPhX').onclick = function () { DZ.ph = null; $('dzPhV').innerHTML = ''; };
+  };
+  $('dzSend').onclick = async function () {
+    var t = $('dzTx').value.trim(); if (!t) return toast(dz_t('Напишите, что случилось или что предлагаете'));
+    var btn = this; btn.disabled = true; var path = null;
+    try { if (DZ.ph) { toast(dz_t('Загружаю снимок…'), 1600); path = await dz_upload(DZ.ph); } }
+    catch (e) { btn.disabled = false; return toast(dz_t('Снимок не загрузился') + ': ' + dz_err(e), 4000); }
+    var r = await dz_rpc('support_send', { p_kind: kind, p_text: t, p_photo: path, p_meta: meta, p_board: kind === 'idea' && !!($('dzBoard') && $('dzBoard').checked) });
+    btn.disabled = false;
+    if (r.error) return toast(dz_err(r.error), 4000);
+    DZ.ph = null; closeLayer(); toast(dz_t('Отправлено команде Jamoa. Ответ придёт уведомлением'), 3000);
+    DZ.tab = 'my'; if (S.view === 'dzsup') vDzSup(); else go('dzsup');
+  };
+}
+
+async function dz_mine(id) {
+  var r = await dz_rpc('support_my'); if (r.error) return toast(dz_err(r.error), 4000);
+  var x = (r.data || []).filter(function (t) { return t.id === id; })[0]; if (!x) return toast(dz_t('Обращение не найдено'));
+  if (x.author_unread) { dz_rpc('support_seen', { p_id: id }).then(function () { if (S.view === 'dzsup' && DZ.tab === 'my') vDzSup(); }); }
+  var me = S.me ? dz_nm(S.me) : '';
+  sheet(sheetHead(dz_e(DZ_KIND[x.kind] || ''), dz_e('№{n}', { n: x.id }) + ' · ' + h(dz_ago(x.created_at))) +
+    '<div class="fd-tags">' + dz_chip(DZ_STC[x.status] || 't-mute', DZ_ST[x.status] || x.status) + (x.on_board ? dz_chip(DZ_WSC[x.wish_status], 'На доске пожеланий') + '<span class="chip t-mute">' + dz_e('голосов: {n}', { n: x.votes }) + '</span>' : '') + '</div>' +
+    (x.fixed_in ? '<div class="note" style="margin-top:8px">' + dz_e('Ошибка исправлена в версии {v}. Обновите страницу, если ещё видите старую.', { v: x.fixed_in }) + '</div>' : '') +
+    '<div class="dz-th">' + dz_msg(false, me, x.text, x.photo_path, x.created_at) + (x.msgs || []).map(function (mm) { return dz_msg(mm.from_founder, mm.from_founder ? dz_t('Команда Jamoa') : me, mm.text, mm.photo_path, mm.created_at); }).join('') + '</div>' +
+    '<label class="f" style="margin-top:10px">' + dz_e('Написать ещё') + '<textarea class="in" id="dzRe" rows="3" maxlength="2000" placeholder="' + dz_e('Уточнение или ответ команде Jamoa') + '"></textarea></label>' +
+    '<button type="button" class="btn dark full" id="dzReS" style="margin-top:8px;min-height:44px">' + dz_e('Отправить') + '</button>');
+  dz_phFill($('layer'));
+  $('dzReS').onclick = async function () {
+    var t = $('dzRe').value.trim(); if (!t) return toast(dz_t('Напишите сообщение'));
+    this.disabled = true; var rr = await dz_rpc('support_reply', { p_id: id, p_text: t }); this.disabled = false;
+    if (rr.error) return toast(dz_err(rr.error), 4000);
+    toast(dz_t('Отправлено')); dz_mine(id); if (S.view === 'dzsup') vDzSup();
+  };
+}
+function dz_msg(fromJ, who, text, ph, at) {
+  return '<div class="dz-m' + (fromJ ? ' dz-mj' : '') + '"><div class="meta" style="margin:0"><b>' + h(who || '') + '</b> · ' + h(dz_ago(at)) + '</div><div class="dz-tx">' + h(text) + '</div>' + dz_ph(ph) + '</div>';
+}
+
+async function dz_board() {
+  var box = $('dzBody'); if (!box) return;
+  var r = await dz_rpc('wish_board', { p_sort: DZ.sort }); if (!$('dzBody') || (S.view !== 'dzsup' && !dz_fd())) return;
+  if (r.error) { box.innerHTML = '<div class="card empty">' + h(dz_err(r.error)) + '</div>'; return; }
+  var L = r.data || [];
+  box.innerHTML = '<div class="chips">' + [['votes', 'По голосам'], ['new', 'Новые']].map(function (c) { return '<button type="button" class="pick' + (DZ.sort === c[0] ? ' on' : '') + '" data-dzs="' + c[0] + '">' + dz_e(c[1]) + '</button>'; }).join('') + '</div>' +
+    '<div class="card"><h2><span>' + dz_e('Доска пожеланий') + '</span></h2><div class="meta" style="white-space:normal;margin:-4px 0 6px">' + dz_e('Предложения пользователей Jamoa — без имени и заведения. Поддержите нужное «+1»: что набирает больше голосов, делаем раньше.') + '</div>' +
+    (L.length ? L.map(function (x) {
+      return '<div class="fd-v" style="cursor:default;align-items:center"><div class="fd-wv">' + x.votes + '<small>' + dz_e('голосов') + '</small></div><div class="fd-vm"><div class="dz-tx">' + h(dz_tx(x, 'text')) + '</div><div class="fd-tags">' + dz_chip(DZ_WSC[x.status] || 't-mute', DZ_WS[x.status] || x.status) + (x.mine ? dz_chip('t-gold', 'Ваше предложение') : '') + '</div></div>' +
+        (x.mine ? '' : '<button type="button" class="btn ' + (x.voted ? 'gold' : 'ghost') + ' sm" data-dzv="' + x.id + '" data-on="' + (x.voted ? 0 : 1) + '" aria-pressed="' + (x.voted ? 'true' : 'false') + '" style="flex:none;min-height:40px">' + (x.voted ? dz_e('Поддержано') : '+1') + '</button>') + '</div>';
+    }).join('') : '<div class="empty">' + dz_e('На доске пока пусто. Предложите идею — и отметьте «Показать на доске пожеланий».') + '</div>') + '</div>';
+  box.querySelectorAll('[data-dzs]').forEach(function (b) { b.onclick = function () { DZ.sort = b.getAttribute('data-dzs'); dz_board(); }; });
+  box.querySelectorAll('[data-dzv]').forEach(function (b) { b.onclick = async function () {
+    b.disabled = true; var rr = await dz_rpc('wish_vote', { p_id: +b.getAttribute('data-dzv'), p_on: b.getAttribute('data-on') === '1' }); b.disabled = false;
+    if (rr.error) return toast(dz_err(rr.error), 4000);
+    toast(dz_t(rr.data && rr.data.voted ? 'Спасибо! Ваш голос учтён' : 'Голос снят')); dz_board();
+  }; });
+}
+
+/* ---------- вход: «Разделы», «Профиль» → «Как пользоваться», «Справка» ---------- */
+w4Sec({ id: 'dzsup', t: 'Помощь и предложения', sub: 'Вопрос, ошибка или идея — команде Jamoa. Доска пожеланий', ic: 'chat', can: function () { return !!S.me; }, view: function () { vDzSup(); } });
+function dz_profEntry() {
+  var m = $('main'); if (!m || S.view !== 'profile' || $('dzPE')) return;
+  var card = m.querySelector('.ob-pc');
+  var html = '<button type="button" class="ob-pr" id="dzPE"><span class="ob-pi">' + icon('chat', 19) + '</span><span class="ob-sx"><b>' + dz_e('Помощь и предложения') + '</b><span id="dzPEs">' + dz_e('Вопрос, ошибка или идея — команде Jamoa') + '</span></span>' + icon('chev', 16) + '</button>';
+  if (card) card.insertAdjacentHTML('beforeend', html);
+  else { var c = document.createElement('div'); c.className = 'card ob-pc'; c.innerHTML = '<h2><span>' + dz_e('Как пользоваться') + '</span></h2>' + html; m.appendChild(c); }
+  $('dzPE').onclick = function () { DZ.from = 'profile'; DZ.tab = 'my'; go('dzsup'); };
+  dz_rpc('support_my').then(function (r) {
+    var n = r && !r.error ? (r.data || []).filter(function (x) { return x.author_unread; }).length : 0, s = $('dzPEs');
+    if (n && s) s.innerHTML = '<span class="chip t-ok">' + dz_e('Новый ответ: {n}', { n: n }) + '</span>';
+  });
+}
+(function () {
+  if (typeof vProfile === 'function') { var vp0 = vProfile; vProfile = async function () { var r = await vp0.apply(this, arguments); setTimeout(dz_profEntry, 0); return r; }; }
+  if (typeof obFaq === 'function') {
+    var f0 = obFaq; obFaq = function () {
+      var Q = f0.apply(this, arguments); if (!Array.isArray(Q)) return Q;
+      Q.push(['Как написать команде Jamoa?', '«Профиль» → «Как пользоваться» → «Помощь и предложения» или «Разделы» → «Помощь и предложения». Выберите: вопрос, ошибка (можно приложить снимок экрана) или идея. Ответ придёт уведомлением.']);
+      return Q;
+    };
+  }
+  /* «Справка»: кнопка «Написать команде Jamoa» под ответами */
+  if (typeof obHelp === 'function') {
+    var h0 = obHelp; obHelp = function () {
+      var r = h0.apply(this, arguments), L = $('layer'), tb = L && $('obHelpTour');
+      if (tb && !$('dzHelp') && S.me) { tb.insertAdjacentHTML('beforebegin', '<button type="button" class="btn ghost full" id="dzHelp" style="margin-bottom:8px">' + icon('chat', 18) + '<span>' + dz_e('Не нашли ответ? Написать команде Jamoa') + '</span></button>'); $('dzHelp').onclick = function () { closeLayer(); DZ.from = S.view; dz_new('question'); }; }
+      return r;
+    };
+  }
+  /* уведомления демо: доставить при показе главной */
+  try { W3.home.push(function () { if (S.me && !dz_sv()) dz_deliver(); }); } catch (e) {}
+})();
+
+/* =====================================================================================
+   Кабинет основателя → «Обращения» (сервер 92p и демо 98) и счётчики на «Обзоре»
+   ===================================================================================== */
+function dz_fRe() { try { if (dz_srvF()) { FP.tab = 'inbox'; fp_main(); } else { FD.tab = 'inbox'; fd_render(); } } catch (e) { console.warn(e); } }
+function dz_fBox() { setTimeout(dz_fFill, 0); return '<div id="dzF"><div class="card"><div class="meta">' + dz_e('Загрузка…') + '</div></div></div>'; }
+function dz_fseg(key, items) {
+  return '<div class="chips" style="margin:2px 0 8px">' + items.map(function (t) { return '<button type="button" class="pick' + ((DZ.f[key] || '') === t[0] ? ' on' : '') + '" data-dzff="' + key + ':' + t[0] + '">' + h(t[1]) + '</button>'; }).join('') + '</div>';
+}
+async function dz_fFill() {
+  var box = $('dzF'); if (!box) return;
+  var f = DZ.f, r = await dz_rpc('founder_support_list', { p_kind: f.kind || null, p_status: f.st || null, p_venue: f.ven || null });
+  var W = f.tab === 'w' ? await dz_rpc('wish_board', { p_sort: 'votes' }) : null;
+  box = $('dzF'); if (!box) return;
+  if (r.error) { box.innerHTML = '<div class="card"><h2>' + dz_e('Обращения в Jamoa') + '</h2><div class="meta">' + h(dz_err(r.error)) + '</div></div>'; return; }
+  var D = r.data || {}, C = D.counts || {}, L = D.items || [];
+  var o = '<div class="seg"><button type="button" class="' + (f.tab !== 'w' ? 'on' : '') + '" data-dzft="t">' + dz_e('Обращения') + ' ' + (+C.unread || 0 ? '<b>' + C.unread + '</b>' : (+C.all || 0)) + '</button>' +
+    '<button type="button" class="' + (f.tab === 'w' ? 'on' : '') + '" data-dzft="w">' + dz_e('Доска пожеланий') + ' ' + (+C.board || 0) + '</button></div>';
+  if (f.tab !== 'w') {
+    o += '<div class="card"><h2>' + dz_e('Обращения в Jamoa') + '</h2><div class="meta" style="margin:-4px 0 6px;white-space:normal">' + dz_e('Вопросы, ошибки и предложения владельцев, руководителей и сотрудников всех заведений. Отвечаете только вы — автору приходит уведомление.') + '</div>' +
+      '<div class="an-sts" style="margin-bottom:8px"><div class="an-st"><b>' + (+C.new || 0) + '</b><span>' + dz_e('новых') + '</span></div><div class="an-st"><b>' + (+C.bug_open || 0) + '</b><span>' + dz_e('открытых ошибок') + '</span></div>' +
+      '<div class="an-st"><b>' + (+C.work || 0) + '</b><span>' + dz_e('в работе') + '</span></div><div class="an-st"><b>' + (+C.d7 || 0) + '</b><span>' + dz_e('за 7 дней') + '</span></div></div>' +
+      dz_fseg('kind', [['', dz_t('Все виды')], ['question', dz_t('Вопросы')], ['bug', dz_t('Ошибки')], ['idea', dz_t('Предложения')]]) +
+      dz_fseg('st', [['', dz_t('Все статусы')], ['new', dz_t('Новые')], ['work', dz_t('В работе')], ['answered', dz_t('Ответили')], ['done', dz_t('Сделано')]]) +
+      ((D.venues || []).length > 1 ? '<label class="f">' + dz_e('Заведение') + '<select class="in" id="dzFv"><option value="">' + dz_e('Все заведения') + '</option>' + D.venues.map(function (v) { return '<option value="' + h(v.id) + '"' + (String(f.ven) === String(v.id) ? ' selected' : '') + '>' + h(v.name) + ' · ' + v.n + '</option>'; }).join('') + '</select></label>' : '') +
+      (L.length ? L.map(dz_fRow).join('') : '<div class="empty">' + dz_e(f.kind || f.st || f.ven ? 'По этим условиям обращений нет' : 'Обращений пока нет') + '</div>') + '</div>';
+  } else {
+    var B = (W && !W.error && W.data) || [];
+    o += '<div class="card"><h2>' + dz_e('Доска пожеланий') + '</h2><div class="meta" style="margin-bottom:4px;white-space:normal">' + dz_e('Предложения, которые авторы разрешили показать всем. Пользователи видят их без имени и заведения и голосуют «+1» — один голос от человека. Нажмите, чтобы сменить статус.') + '</div>' +
+      (B.length ? B.map(function (w) {
+        return '<button type="button" class="fd-v" data-dzf="' + w.id + '"><div class="fd-wv">' + w.votes + '<small>' + dz_e('голосов') + '</small></div><div class="fd-vm"><b>' + h(dz_tx(w, 'text')) + '</b><div class="meta">' + h(dz_ago(w.created_at)) + '</div></div>' + dz_chip(DZ_WSC[w.status] || 't-mute', DZ_WS[w.status] || w.status) + '</button>';
+      }).join('') : '<div class="empty">' + dz_e('На доске пока пусто') + '</div>') + '</div>';
+  }
+  box.innerHTML = o;
+  box.querySelectorAll('[data-dzft]').forEach(function (b) { b.onclick = function () { DZ.f.tab = b.getAttribute('data-dzft'); dz_fFill(); }; });
+  box.querySelectorAll('[data-dzff]').forEach(function (b) { b.onclick = function () { var p = b.getAttribute('data-dzff').split(':'); DZ.f[p[0]] = p[1]; dz_fFill(); }; });
+  box.querySelectorAll('[data-dzf]').forEach(function (b) { b.onclick = function () { dz_fCard(+b.getAttribute('data-dzf')); }; });
+  if ($('dzFv')) $('dzFv').onchange = function () { DZ.f.ven = this.value; dz_fFill(); };
+}
+function dz_fRow(x) {
+  return '<button type="button" class="fd-v' + (x.founder_unread ? ' w3-yel' : '') + '" data-dzf="' + x.id + '"><div class="fd-vm"><div class="fd-tags" style="margin:0 0 4px">' + dz_kchip(x.kind) + dz_chip(DZ_STC[x.status] || 't-mute', DZ_ST[x.status] || x.status) +
+    (x.founder_unread ? dz_chip('t-warn', 'не прочитано') : '') + (x.on_board ? '<span class="chip t-mute">' + dz_e('на доске · {n}', { n: x.votes }) + '</span>' : '') + (x.fixed_in ? '<span class="chip t-ok">' + h(x.fixed_in) + '</span>' : '') + '</div>' +
+    '<div class="dz-tx">' + h(dz_cut(dz_tx(x, 'text'), 200)) + '</div>' +
+    '<div class="meta" style="white-space:normal">' + h(x.venue_name || '—') + ' · ' + h(dz_t(x.author_name || '—')) + (x.author_role ? ' · ' + dz_e(DZ_ROLE[x.author_role] || x.author_role) : '') + ' · ' + h(dz_ago(x.created_at)) + (x.n_msgs ? ' · ' + dz_e('сообщений: {n}', { n: x.n_msgs }) : '') + '</div></div>' + icon('chev', 16) + '</button>';
+}
+async function dz_fCard(id) {
+  var r = await dz_rpc('founder_support_get', { p_id: id }); if (r.error) return toast(dz_err(r.error), 4000);
+  var x = r.data || {}, mt = x.meta || {}, who = dz_t(x.author_name || '—');
+  var rows = DZ_META_L.filter(function (k) { return mt[k[0]] != null && mt[k[0]] !== ''; }).map(function (k) {
+    var v = mt[k[0]]; if (k[0] === 'vtype') v = dz_vtype(v); else if (k[0] === 'role') v = dz_t(DZ_ROLE[v] || v); else if (k[0] === 'mode') v = dz_t(v === 'server' ? 'рабочий сайт' : 'демо');
+    return '<div class="an-sr"><span>' + dz_e(k[1]) + '</span><b style="white-space:normal;text-align:right;overflow-wrap:anywhere">' + h(String(v)) + '</b></div>';
+  }).join('');
+  var html = sheetHead(icon(DZ_KI[x.kind] || 'chat', 18) + ' ' + dz_e(DZ_KIND[x.kind] || '') + ' · ' + dz_e('№{n}', { n: x.id }),
+      h(x.venue_name || '—') + ' · ' + dz_e(DZ_ROLE[x.author_role] || x.author_role || '') + ' ' + h(who) + ' · ' + h(dz_ago(x.created_at))) +
+    '<div class="fd-tags">' + dz_chip(DZ_STC[x.status] || 't-mute', DZ_ST[x.status] || x.status) + (x.on_board ? '<span class="chip ' + (DZ_WSC[x.wish_status] || 't-mute') + '">' + h(dz_t('На доске') + ': ' + String(dz_t(DZ_WS[x.wish_status] || '')).toLowerCase()) + '</span>' + '<span class="chip t-mute">' + dz_e('голосов: {n}', { n: x.votes }) + '</span>' : '') + (x.fixed_in ? '<span class="chip t-ok">' + dz_e('исправлено в версии {v}', { v: x.fixed_in }) + '</span>' : '') + '</div>' +
+    '<div class="dz-th">' + dz_msg(false, who, dz_tx(x, 'text'), x.photo_path, x.created_at) + (x.msgs || []).map(function (mm) { return dz_msg(mm.from_founder, mm.from_founder ? dz_t('Вы (Jamoa)') : who, mm.seed ? dz_t(mm.text) : mm.text, mm.photo_path, mm.created_at); }).join('') + '</div>' +
+    (rows ? '<h3 style="margin-top:12px">' + dz_e('Сведения о приложении') + '</h3><div class="an-sh-rows" style="margin-top:4px">' + rows + '</div>' : '') +
+    '<h3 style="margin-top:12px">' + dz_e('Статус') + '</h3><div class="w3-pk">' + ['new', 'work', 'answered', 'done'].map(function (s) { return '<button type="button" class="pick' + (s === x.status ? ' on' : '') + '" data-dzst="' + s + '">' + dz_e(DZ_ST[s]) + '</button>'; }).join('') + '</div>' +
+    (x.kind === 'bug' ? '<label class="f" style="margin-top:8px">' + dz_e('Исправлено в версии') + '<input class="in" id="dzFx" maxlength="40" value="' + h(x.fixed_in || String(window.JAMOA_VERSION || '')) + '" placeholder="v25"></label><button type="button" class="btn ghost full" id="dzFxS" style="min-height:44px">' + icon('tick', 18) + '<span>' + dz_e('Отметить: ошибка исправлена') + '</span></button>' : '') +
+    (x.kind === 'idea' && x.on_board ? '<h3 style="margin-top:12px">' + dz_e('Доска пожеланий') + '</h3><div class="w3-pk">' + ['consider', 'planned', 'done'].map(function (s) { return '<button type="button" class="pick' + (s === x.wish_status ? ' on' : '') + '" data-dzws="' + s + '">' + dz_e(DZ_WS[s]) + '</button>'; }).join('') + '</div>' +
+      '<button type="button" class="btn ghost full sm" id="dzHide" style="margin-top:6px;min-height:40px">' + dz_e('Убрать с доски') + '</button>' : '') +
+    '<label class="f" style="margin-top:12px">' + dz_e('Ответ автору') + '<textarea class="in" id="dzFr" rows="4" maxlength="2000" placeholder="' + dz_e('Автор получит уведомление «Ответ команды Jamoa»') + '"></textarea></label>' +
+    '<div class="fd-acts"><button type="button" class="btn gold" id="dzFrA">' + icon('send', 18) + '<span>' + dz_e('Ответить') + '</span></button><button type="button" class="btn ghost" id="dzFrD">' + dz_e('Ответить и «Сделано»') + '</button></div>';
+  sheet(html);
+  dz_phFill($('layer'));
+  var after = function (rr, msg) { if (rr.error) return toast(dz_err(rr.error), 4000); toast(dz_t(msg)); dz_fCard(id); dz_fFill(); dz_fOvFill(); };
+  $('layer').querySelectorAll('[data-dzst]').forEach(function (b) { b.onclick = async function () { after(await dz_rpc('founder_support_set', { p_id: id, p_status: b.getAttribute('data-dzst') }), 'Статус сохранён'); }; });
+  $('layer').querySelectorAll('[data-dzws]').forEach(function (b) { b.onclick = async function () { after(await dz_rpc('founder_support_set', { p_id: id, p_wish_status: b.getAttribute('data-dzws') }), 'Статус сохранён'); }; });
+  if ($('dzFxS')) $('dzFxS').onclick = async function () { var v = $('dzFx').value.trim(); if (!v) return toast(dz_t('Укажите версию')); after(await dz_rpc('founder_support_set', { p_id: id, p_fixed_in: v }), 'Отмечено: исправлено'); };
+  if ($('dzHide')) $('dzHide').onclick = async function () { after(await dz_rpc('founder_support_set', { p_id: id, p_hide: true }), 'Убрано с доски'); };
+  var send = async function (st) { var t = $('dzFr').value.trim(); if (!t) return toast(dz_t('Напишите ответ')); after(await dz_rpc('founder_support_reply', { p_id: id, p_text: t, p_status: st }), 'Ответ отправлен'); };
+  $('dzFrA').onclick = function () { send('answered'); };
+  $('dzFrD').onclick = function () { send('done'); };
+}
+/* «Обзор»: счётчики обращений */
+function dz_fOv() { setTimeout(dz_fOvFill, 0); return '<div id="dzFo"></div>'; }
+async function dz_fOvFill() {
+  var el = $('dzFo'); if (!el) return;
+  var r = await dz_rpc('founder_support_counts'); el = $('dzFo'); if (!el) return;
+  if (r.error) { el.innerHTML = ''; return; }
+  var C = r.data || {};
+  el.innerHTML = '<div class="card' + (+C.new ? ' w3-yel' : '') + '"><h2>' + dz_e('Обращения в Jamoa') + '</h2><div class="an-sts">' +
+    '<div class="an-st"><b>' + (+C.new || 0) + '</b><span>' + dz_e('новых обращений') + '</span></div>' +
+    '<div class="an-st"><b>' + (+C.unread || 0) + '</b><span>' + dz_e('не прочитано') + '</span></div>' +
+    '<div class="an-st"><b>' + (+C.bug_open || 0) + '</b><span>' + dz_e('открытых ошибок') + '</span></div>' +
+    '<div class="an-st"><b>' + (+C.board_open || 0) + '</b><span>' + dz_e('пожеланий на доске') + '</span></div></div>' +
+    '<div class="meta" style="margin-top:6px">' + dz_e('вопросов: {a} · ошибок: {b} · предложений: {c} — новых', { a: +C.question_new || 0, b: +C.bug_new || 0, c: +C.idea_new || 0 }) + '</div>' +
+    '<button type="button" class="btn ' + (+C.new ? 'gold' : 'ghost') + ' full" id="dzFoGo" style="margin-top:8px;min-height:44px">' + dz_e('Открыть обращения') + '</button></div>';
+  $('dzFoGo').onclick = function () { DZ.f.tab = 't'; DZ.f.st = +C.new ? 'new' : ''; dz_fRe(); };
+}
+(function () {
+  /* сервер (92p): вместо «Появится позже» — обращения; счётчики «Сообщить о проблеме» (проблемы владельцам) остаются */
+  try {
+    if (typeof fp_inbox === 'function') {
+      var fi0 = fp_inbox; fp_inbox = function () {
+        var o = fi0.apply(this, arguments), later = ''; try { later = fp_later('Сообщения владельцев, ошибки и пожелания', 'на сервере таких записей пока нет.'); } catch (e) {}
+        if (later) o = o.split(later).join('');
+        return dz_fBox() + o;
+      };
+    }
+    if (typeof fp_ov === 'function') { var fo0 = fp_ov; fp_ov = function () { return dz_fOv() + fo0.apply(this, arguments); }; }
+  } catch (e) {}
+  /* демо (98): те же экраны на учебных данных (сообщения, ошибки и доска 98 перенесены в учебное хранилище) */
+  try {
+    if (typeof fd_inbox === 'function') { fd_inbox = function () { return dz_fBox(); }; }
+    if (typeof fd_ov === 'function') { var fv0 = fd_ov; fd_ov = function () { return dz_fOv() + fv0.apply(this, arguments); }; }
+  } catch (e) {}
+})();
+
+(function () {
+  var st = document.createElement('style');
+  st.textContent = '.dz-tx{font-size:14.5px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere;margin:2px 0}' +
+    '.dz-th{display:flex;flex-direction:column;gap:8px;margin-top:10px}.dz-m{border:1px solid var(--line);border-radius:12px;padding:8px 10px;min-width:0}.dz-mj{border-color:var(--gold);background:var(--goldbg)}' +
+    '.dz-ph{display:block;margin-top:6px}.dz-ph img{display:block;max-width:100%;max-height:320px;border-radius:10px;object-fit:contain}' +
+    '.dz-phv{display:flex;align-items:center;gap:10px;margin-top:8px}.dz-phv img{width:72px;height:72px;object-fit:cover;border-radius:10px}' +
+    '.dz-ck{display:flex;gap:10px;align-items:flex-start;margin-top:10px;font-size:14px;line-height:1.4;cursor:pointer}.dz-ck input{width:20px;height:20px;flex:none;margin-top:1px;accent-color:var(--gold)}';
+  document.head.appendChild(st);
+})();
 
 
 /* ===== ВОЛНА 4 · 93-u45.js ===== */

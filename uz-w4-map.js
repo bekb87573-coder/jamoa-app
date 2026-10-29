@@ -1,0 +1,28 @@
+/* 92x — «Карта сотрудников» (точки в момент действий): узбекский (латиница). Строки, уже переведённые в других словарях, здесь не повторяются. */
+Object.assign(window.MLX_UZ_EXTRA = window.MLX_UZ_EXTRA || {}, {
+  "Задача": "Vazifa",
+  "Заявка на ремонт": "Taʼmirlash arizasi",
+  "Потерянная вещь": "Yoʻqolgan buyum",
+  "Все на смене — последнее место": "Smenadagilar — oxirgi joy",
+  "Все за день": "Kun boʻyi hammasi",
+  "Все точки за день": "Kun davomidagi barcha nuqtalar",
+  "На смене — последнее место": "Smenada — oxirgi joy",
+  "Последнее место": "Oxirgi joy",
+  "За этот день точек нет.": "Bu kunda nuqtalar yoʻq.",
+  "Сейчас на смене никого с точкой. Выберите «Все за день».": "Hozir smenada nuqtasi bor hech kim yoʻq. «Kun boʻyi hammasi»ni tanlang.",
+  "Точек пока нет. Точка появляется, когда сотрудник отмечает приход или уход, сдаёт задачу, передаёт смену или подаёт заявку.": "Hozircha nuqtalar yoʻq. Nuqta xodim kelish yoki ketishni belgilaganda, vazifani topshirganda, smenani topshirganda yoki ariza berganda paydo boʻladi.",
+  "В этот день точек не было.": "Bu kunda nuqtalar boʻlmagan.",
+  "путь по времени": "vaqt boʻyicha yoʻl",
+  "Задайте точку заведения, чтобы видеть круг зоны": "Hudud doirasini koʻrish uchun muassasa nuqtasini belgilang",
+  "Точка и радиус — в «Пульт → Настройки отметки». Без точки на карте видны места сотрудников, но не видно, в зоне они или нет.": "Nuqta va radius — «Pult → Belgilash sozlamalari»da. Nuqtasiz xaritada xodimlarning joyi koʻrinadi, lekin ular hududdami yoki yoʻqmi — koʻrinmaydi.",
+  "Точку и радиус задаёт владелец в «Пульт → Настройки отметки».": "Nuqta va radiusni egasi «Pult → Belgilash sozlamalari»da belgilaydi.",
+  "Задать точку заведения": "Muassasa nuqtasini belgilash",
+  "Точки — только в момент действий: приход, уход, задача, передача смены, заявка. Постоянного слежения нет.": "Nuqtalar — faqat harakat paytida: kelish, ketish, vazifa, smena topshirish, ariza. Doimiy kuzatuv yoʻq.",
+  "В демо точки условные.": "Demoda nuqtalar shartli.",
+  "Карта не загрузилась — проверьте интернет": "Xarita yuklanmadi — internetni tekshiring",
+  "Пришёл на смену": "Smenaga keldi",
+  "Пришла на смену": "Smenaga keldi",
+  "Ушёл со смены": "Smenadan ketdi",
+  "Ушла со смены": "Smenadan ketdi",
+  "точки": "nuqtalar"
+});

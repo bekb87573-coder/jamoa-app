@@ -1643,3 +1643,107 @@
   }
 })(typeof window !== 'undefined' ? window : globalThis);
 /* === end 92w === */
+/* === 92x map === */
+/* Часть dx (92x-map, 0027_mappts.sql): «Карта сотрудников» — точки только в момент действий (без слежения). Блок не трогает код выше:
+   как 92u/92w — оборачивает SVAdapter.make / supabase.createClient и дополняет SV.rpcMap.
+   rpc: map_point_add (одна точка в момент «Готово» / передачи смены / заявки), map_points (точки дня: приход/уход + действия;
+   владелец — все, руководитель — своя команда). member_id сервера = employee_id приложения. */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dx) return; A.__dx = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dx) return cl; SV.__dx = true;
+    var real = SV.real, R = SV.rpcMap; if (!R) return cl;
+    R.map_point_add = async function (a) {
+      a = a || {};
+      return real.rpc('map_point_add', { p_kind: a.p_kind, p_ref: a.p_ref == null ? null : String(a.p_ref), p_lat: a.p_lat, p_lng: a.p_lng, p_acc: a.p_acc == null ? null : Math.round(+a.p_acc) });
+    };
+    R.map_points = async function (a) {
+      a = a || {};
+      var r = await real.rpc('map_points', { p_day: a.p_day || null, p_member: a.p_member || null }); if (r.error) return r;
+      var d = r.data || {}, P = (d.points || []).map(function (p) { return Object.assign({ employee_id: p.member_id }, p); });
+      return { data: { day: d.day, venue: d.venue || null, points: P }, error: null };
+    };
+    return cl;
+  }
+  A.dxExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92x === */
+/* === 92y perms === */
+/* Часть dy (92y-perms, 0028_perms.sql): «Полномочия» — владелец даёт любому сотруднику отдельные права (охват «Своя служба» /
+   «Всё заведение»). Блок не трогает код выше: как 92u/92w/92x — оборачивает SVAdapter.make / supabase.createClient и дополняет SV.rpcMap.
+   rpc: perm_set (переключатель в карточке; журнал и уведомление пишет сервер — после перечитать уведомления), perm_list, my_perms
+   (мои права + ids людей охвата — по ним телефон строит Пульт и «Разделы»). Строки людей охвата сервер отдаёт по RLS (0028). */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dy) return; A.__dy = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dy) return cl; SV.__dy = true;
+    var real = SV.real, R = SV.rpcMap; if (!R) return cl;
+    R.perm_set = async function (a) {
+      a = a || {};
+      var r = await real.rpc('perm_set', { p_member: a.p_member, p_perm: a.p_perm, p_scope: a.p_scope || null }); if (r.error) return r;
+      try { SV.stale('notif'); } catch (e) {}
+      return r;
+    };
+    R.perm_list = async function (a) { return real.rpc('perm_list', { p_member: (a && a.p_member) || null }); };
+    R.my_perms = async function () {
+      var r = await real.rpc('my_perms'); if (r.error) return r;
+      var L = (r.data || []).map(function (p) { return { perm: p.perm, scope: p.scope, title: p.title, ids: p.ids || [], depts: (p.depts || []).map(function (d) { return SV.dep.toLoc[d] || ('d' + d); }) }; });
+      return { data: L, error: null };
+    };
+    return cl;
+  }
+  A.dyExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92y === */
+/* === 92z support === */
+/* Часть dz (92z-support, 0029_support.sql): «Помощь и предложения» — обращения в команду Jamoa и доска пожеланий. Блок не трогает код выше:
+   как 92u/92w/92x — оборачивает SVAdapter.make / supabase.createClient и дополняет SV.rpcMap.
+   rpc автора: support_send (снимок — путь в своей папке, загружает SV.upload(…, 'support')), support_my, support_reply, support_seen;
+   доска: wish_board, wish_vote. rpc основателя (founder_support_*) кабинет 92p вызывает напрямую через SV.real — здесь только на всякий случай.
+   Уведомления «Ответ команды Jamoa» шлёт сервер (jamoa.notify, ссылка support:<номер>) — с телефона не дублируются. */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dz) return; A.__dz = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dz) return cl; SV.__dz = true;
+    var real = SV.real, R = SV.rpcMap; if (!R) return cl;
+    function pass(n, keys) {
+      return async function (a) {
+        a = a || {}; var b = {};
+        keys.forEach(function (k) { if (a[k] !== undefined) b[k] = a[k]; });
+        return real.rpc(n, b);
+      };
+    }
+    R.support_send = pass('support_send', ['p_kind', 'p_text', 'p_photo', 'p_meta', 'p_board']);
+    R.support_my = pass('support_my', []);
+    R.support_reply = pass('support_reply', ['p_id', 'p_text', 'p_photo']);
+    R.support_seen = pass('support_seen', ['p_id']);
+    R.wish_board = pass('wish_board', ['p_sort']);
+    R.wish_vote = pass('wish_vote', ['p_id', 'p_on']);
+    R.founder_support_list = pass('founder_support_list', ['p_kind', 'p_status', 'p_venue']);
+    R.founder_support_counts = pass('founder_support_counts', []);
+    R.founder_support_get = pass('founder_support_get', ['p_id']);
+    R.founder_support_reply = pass('founder_support_reply', ['p_id', 'p_text', 'p_status']);
+    R.founder_support_set = pass('founder_support_set', ['p_id', 'p_status', 'p_fixed_in', 'p_wish_status', 'p_hide']);
+    return cl;
+  }
+  A.dzExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92z === */
