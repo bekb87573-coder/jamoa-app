@@ -8,7 +8,7 @@ window.JAMOA_SERVER = {
   key: 'sb_publishable_qIUfJQ-qTgJ3L1wGrR6img_iPJhg9pA',     // publishable-ключ (публичный)
   staffDomain: 'staff.jamoa.uz',                            // почта входа сотрудника = <логин>@staff.jamoa.uz (как в staff-auth)
   bucket: 'jamoa-photos',                                   // фото: приватный бакет, путь <venue_id>/<member_id>/...
-  vapidPublic: 'VAPID_PUBLIC_KEY_HERE',                    // публичный VAPID-ключ (push); пока не настроено
+  vapidPublic: 'BFZfGUYLSs0SDK51YbBsfuzzbrIIHKI9U7eliqkSRLS823mSREdnwVEQ39qd6gk4GCMOUZHwIilJZN-FqdnvA_M',                    // публичный VAPID-ключ (push); пока не настроено
   lib: 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js'
 };
 (function () {
