@@ -45053,6 +45053,7 @@ async function dm_map(box, team) {
   try {
     var c = D.v ? [D.v.lat, D.v.lng] : D.P[0] ? [D.P[0].lat, D.P[0].lng] : [41.2906, 69.2781];
     el.innerHTML = ''; var map = L.map(el, { zoomControl: true, attributionControl: true }).setView(c, 17);
+    try { map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>'); } catch (z) {}   /* без флага по умолчанию из Leaflet 1.9 */
     var tl = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
     var bad = 0; tl.on('tileerror', function () { if (++bad === 6 && el.isConnected) { try { map.remove(); } catch (z) {} el.innerHTML = dm_svgMap(D); } });
     var css = getComputedStyle(document.documentElement), okc = (css.getPropertyValue('--dj-okf') || '#12A06C').trim(), badc = (css.getPropertyValue('--dj-badf') || '#E0342E').trim(), gold = (css.getPropertyValue('--gold') || '#A57F35').trim();
@@ -45143,6 +45144,11 @@ setTimeout(function () {
   } catch (e) { console.warn('dm track', e); }
 })();
 window.__dm = { st: dm_st, lateList: dm_lateList, attCounts: dm_attCounts, mapData: dm_mapData, remind: dm_remind };
+
+/* Leaflet 1.9 по умолчанию ставит флаг в подпись карты — убираем на всех картах приложения (подпись «Leaflet | © OpenStreetMap» остаётся) */
+function dm_noFlag() { try { if (window.L && L.Control && L.Control.Attribution) L.Control.Attribution.prototype.options.prefix = '<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>'; } catch (e) {} }
+dm_noFlag();
+if (typeof loadLeaflet === 'function') { (function () { var ll0 = loadLeaflet; loadLeaflet = function () { var p = ll0.apply(this, arguments); try { if (p && p.then) p.then(dm_noFlag, function () {}); } catch (e) {} dm_noFlag(); return p; }; })(); }
 
 
 /* ===== ВОЛНА 4 · 92n-parity.js ===== */
