@@ -43,6 +43,7 @@
 if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/script><script src="demo-mock.js"><\/script><script src="mock-w7-core.js"><\/script><script src="mock-front-desk.js"><\/script><script src="mock-ops-fnb.js"><\/script><script src="mock-ops-maint.js"><\/script><script src="mock-front-home.js"><\/script><script src="mock-ops-security.js"><\/script><script src="mock-front-access.js"><\/script><script src="mock-w4-now.js"><\/script><script src="mock-w4-analytics.js"><\/script><script src="mock-w4-guard.js"><\/script><script src="mock-w7-rooms.js"><\/script><script src="mock-w7-ops.js"><\/script><script src="mock-w7-data.js"><\/script><script src="mock-w8-tails.js"><\/script><script src="mock-w9-swap.js"><\/script><script src="mock-w12-shiftswap.js"><\/script><script src="mock-w12-payslip.js"><\/script><script src="mock-w12-emergency.js"><\/script>');
 </script>
 <script src="saas-uz.js"></script>
+<script src="uz-w4-ai.js"></script>
 <script src="uz-w4-card.js"></script>
 <script src="uz-w4-clock.js"></script>
 <script src="uz-w4-core.js"></script>
@@ -37984,6 +37985,405 @@ async function ca_overtime(e, ym) {
 async function ca_dayMin(e, day) { var M = await ca_monthData(e.id, day.slice(0, 7)); return ca_rowsMin(M.byDay[day] || [], Date.now()); }
 /* ---------- отладка (проверочные скрипты) ---------- */
 window.ca_dbg = function () { return { S: S, earnToday: earnToday, ca_month: ca_month, ca_psLines: ca_psLines, ca_syncPs: ca_syncPs, ca_syncAll: ca_syncAll, psTotals: psTotals, earnRule: earnRule, emp: emp, today: today, w3SavePref: w3SavePref, ca_fineOpen: ca_fineOpen, ca_advOpen: ca_advOpen, go: go, taskSheet: function () { return taskSheet.apply(this, arguments); }, ca_monthPay: ca_monthPay, ca_advAll: ca_advAll, ca_advDecide: ca_advDecide, ca_overtime: ca_overtime, ca_fix: ca_fix }; };
+
+
+/* ===== ВОЛНА 4 · 92ai-support.js ===== */
+/* ===== 92ai — ИИ-помощник поддержки в «Помощь и предложения» (префикс dai_). Журнал w4/log/dai.md =====
+   Решение владельца 30.10: ИСКЛЮЧЕНИЕ из «без ИИ» — только помощник поддержки (Claude Haiku 5.5, edge-функция support-ai,
+   ключ — секрет Supabase). Помощник отвечает на вопросы по приложению и помогает составить обращение команде; ничего не делает
+   в приложении за человека. В работе сотрудников ИИ нет.
+   Сервер: 0031_support_ai.sql (support_ai_my / support_ai_handoff / founder_ai_stats; support_ai_begin и _finish вызывает функция),
+   server/supabase/functions/support-ai (база знаний — server/content/support_kb.md); переходник — блок «92ai» в конце sv-adapter.js.
+   1. «Помощь и предложения» → «Спросить помощника» (экран daiask, чат): вопрос RU / UZ (латиница, кириллица) → короткий ответ шагами.
+      Сверху пометка «Отвечает ИИ-помощник Jamoa. Может ошибаться…». «Передать команде» — обычное обращение (support_send, форма 92z
+      со снимком) с перепиской; если помощник сам понял, что это ошибка или ответа нет — кнопка в ответе и готовый текст обращения.
+      Нет ключа API — «Помощник пока не подключён — напишите команде» и форма обращения.
+   2. «Справка» — кнопка «Спросить помощника» над «Не нашли ответ?».
+   3. Кабинет основателя → «Обращения» (сервер 92p и демо 98 — оба рисуют dz_fBox): карточка «ИИ-помощник» — вопросы сегодня / 30 дней,
+      передано команде, токены, примерная стоимость, последние вопросы, переданные команде.
+   4. Демо: без настоящего вызова — ответы по ключевым словам из справки, пометка «в демо ответы условные»;
+      учебное хранилище этого браузера localStorage jamoa-dai-v1 (общее для учебных входов и демо-кабинета основателя). */
+var DAI = { dialog: null, items: [], busy: false, from: 'home', pending: null, arming: false, loaded: false, fresh: false };
+var DAI_K = 'jamoa-dai-v1';
+var DAI_PRICE = { in: 0.10, out: 0.50, cache_read: 0.01, cache_write: 0.125 };
+
+function dai_t(s, o) {
+  var X = window.DAI_UZ || {}, r;
+  try { r = (dz_uz() && X[s] != null) ? X[s] : dz_t(s); } catch (e) { r = s; }
+  if (o) Object.keys(o).forEach(function (k) { r = String(r).split('{' + k + '}').join(o[k]); });
+  return r;
+}
+function dai_e(s, o) { return h(dai_t(s, o)); }
+function dai_lang() { try { if (typeof cy_on === 'function' && cy_on()) return 'uzc'; } catch (e) {} return dz_uz() ? 'uz' : 'ru'; }
+function dai_uuid() {
+  try { if (crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+  var b = new Uint8Array(16); try { crypto.getRandomValues(b); } catch (e) { for (var i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256); }
+  b[6] = (b[6] & 15) | 64; b[8] = (b[8] & 63) | 128;
+  var x = Array.prototype.map.call(b, function (v) { return (v < 16 ? '0' : '') + v.toString(16); }).join('');
+  return x.slice(0, 8) + '-' + x.slice(8, 12) + '-' + x.slice(12, 16) + '-' + x.slice(16, 20) + '-' + x.slice(20);
+}
+function dai_lead() { try { return !!S.me && (isDirector() || S.me.role === 'manager' || myTeam().length > 0); } catch (e) { return false; } }
+function dai_scr(v) { var t = ''; try { t = (typeof W3T !== 'undefined' && W3T[v]) || ''; } catch (e) {} return (v || 'home') + (t ? ' · ' + t : ''); }
+
+/* =====================================================================================
+   Демо: ответы по ключевым словам из справки (без настоящего ИИ) и учебный журнал вопросов
+   ===================================================================================== */
+var DAI_KB = [
+  { k: /опублик|кист|состав\w* график|постав\w* смен|график команд|jadval tuz|eʼlon qil|жадвал туз/i, lead: 1,
+    ru: 'Внизу нажмите «График» → выберите службу и неделю → сверху выберите кисть (например «Утро», «Выходной») → нажимайте на дни сотрудников или ведите пальцем по строке → внизу «Опубликовать изменения». До публикации сотрудники изменений не видят.',
+    uz: 'Pastda «Jadval»ni bosing → xizmat va haftani tanlang → yuqoridan moʻyqalamni tanlang (masalan, «Ertalab», «Dam olish») → xodimlar kunlarini bosing yoki qator boʻylab barmoq bilan torting → pastda «Oʻzgarishlarni eʼlon qilish». Eʼlon qilinmaguncha xodimlar oʻzgarishlarni koʻrmaydi.' },
+  { k: /выходн|отпуск|больнич|отгул|dam ol|taʼtil|ta'til|kasal|дам ол|таътил|касал/i,
+    ru: 'Внизу нажмите «График» → «Запрос руководителю» → выберите «Выходной», «Отпуск» или «Больничный» → «Дата с» и «Дата по», причину → «Отправить руководителю». Ответ придёт уведомлением.',
+    uz: 'Pastda «Jadval»ni bosing → «Rahbarga soʻrov» → «Dam olish», «Taʼtil» yoki «Kasallik»ni tanlang → sanalar va sababni kiriting → «Rahbarga yuborish». Javob bildirishnoma bilan keladi.' },
+  { k: /поменят|обмен\w* смен|almash|алмаш/i,
+    ru: 'Внизу нажмите «График» → «Обмен сменами» → «Поменяться»: выберите коллегу и его смену. Коллега соглашается, руководитель подтверждает — график обновится сам.',
+    uz: 'Pastda «Jadval» → «Smena almashinuvi» → «Almashish»: hamkasb va uning smenasini tanlang. Hamkasb rozi boʻladi, rahbar tasdiqlaydi — jadval oʻzi yangilanadi.' },
+  { k: /без геолок|geolokatsiyasiz|геолокациясиз/i,
+    ru: 'Это включает владелец или руководитель: «Команда» → нажмите сотрудника → «Профиль» → карточка «Отметка» → «Отмечаться без геолокации». После этого «Пришёл» и «Ушёл» не спрашивают место.',
+    uz: 'Buni egasi yoki rahbar yoqadi: «Jamoa» → xodimni bosing → «Profil» → «Belgilash» kartasi → «Geolokatsiyasiz belgilanish». Shundan keyin «Keldim» va «Ketdim» joyni soʻramaydi.' },
+  { k: /отмет|пришёл|пришел|приход|геолок|gps|keldim|ketdim|belgi|geolok|келдим|белги/i,
+    ru: 'На главной нажмите «Пришёл», уходя — «Ушёл». Отметка открывается за 15 минут до смены. Не прошла — приложение покажет причину и кнопку «Отправить с пояснением». Забыли — «Забыл отметиться?» на главной.',
+    uz: 'Bosh sahifada «Keldim»ni, ketayotganda «Ketdim»ni bosing. Belgilash smenadan 15 daqiqa oldin ochiladi. Oʻtmasa — ilova sababini va «Izoh bilan yuborish» tugmasini koʻrsatadi.' },
+  { k: /уведомл|push|пуш|iphone|айфон|колокол|bildirishnoma|билдиришнома/i,
+    ru: '«Профиль» → «Уведомления на телефон» → «Включить» и разрешите в окне браузера. На iPhone сначала добавьте приложение на экран «Домой»: Safari → «Поделиться» → «На экран Домой», откройте Jamoa с иконки и включите уведомления.',
+    uz: '«Profil» → «Telefonga bildirishnomalar» → «Yoqish» va brauzer oynasida ruxsat bering. iPhone’da avval ilovani «Uy» ekraniga qoʻshing: Safari → «Ulashish» → «Uy ekraniga», Jamoa’ni belgidan oching va bildirishnomalarni yoqing.' },
+  { k: /задач|vazifa|вазифа/i,
+    ru: 'Внизу нажмите «Задачи». Выполнили — «Готово» (если нужно фото — «Сфотографировать»). Себе — «+ Добавить себе задачу». Руководителю: «+ Поставить задачу» → кому, срок, нужно ли фото → «Поставить».',
+    uz: 'Pastda «Vazifalar»ni bosing. Bajardingiz — «Tayyor» (surat kerak boʻlsa — «Suratga olish»). Rahbarga: «+ Vazifa berish» → kimga, muddat, surat kerakmi → «Vazifa berish».' },
+  { k: /ремонт|сломал|полом|taʼmir|ta'mir|buzil|таъмир|бузил/i,
+    ru: '«Разделы» → «Заявки на ремонт» → «Что сломалось — сообщить»: оборудование, где и что случилось, фото. Срочное отметьте «Срочно».',
+    uz: '«Boʻlimlar» → «Taʼmirlash arizalari» → «Nima buzildi — xabar berish»: jihoz, qayerda va nima boʻldi, surat.' },
+  { k: /находк|нашл|потерял|topil|топил/i,
+    ru: '«Разделы» → «Находки» → «Нашли вещь — записать»: что нашли, где, фото. Вещь хранится, пока руководитель не отметит «Выдано».',
+    uz: '«Boʻlimlar» → «Topilmalar» → «Buyum topildi — yozib qoʻyish»: nima, qayerda, surat.' },
+  { k: /закуп|купить|xarid|харид/i,
+    ru: '«Разделы» → «Закупки»: что, сколько, зачем и примерная сумма. Владелец одобряет; после покупки отметьте «Куплено» с суммой и фото чека.',
+    uz: '«Boʻlimlar» → «Xaridlar»: nima, qancha, nima uchun va taxminiy summa. Egasi tasdiqlaydi; xariddan keyin summa va chek surati bilan belgilang.' },
+  { k: /передач\w* смен|передать смен|smenani topshir|сменани топшир/i,
+    ru: '«Разделы» → «Передача смены»: кому, наличные в кассе, незакрытые дела, задачи, заметки и фото. Коллега нажимает «Принять смену» — вам придёт уведомление.',
+    uz: '«Boʻlimlar» → «Smenani topshirish»: kimga, kassadagi naqd pul, tugallanmagan ishlar, vazifalar, eslatmalar va suratlar. Hamkasb «Smenani qabul qilish»ni bosadi.' },
+  { k: /полномоч|права|доступ|vakolat|ваколат/i,
+    ru: 'Это делает владелец: «Команда» → нажмите сотрудника → «Профиль» → «Полномочия» → включите нужное и выберите «Своя служба» или «Всё заведение». Сотрудник получит уведомление.',
+    uz: 'Buni egasi qiladi: «Jamoa» → xodimni bosing → «Profil» → «Vakolatlar» → keraklisini yoqing va doirasini tanlang. Xodim bildirishnoma oladi.' },
+  { k: /карт[аеуы]|xarita|харита/i,
+    ru: '«Пульт» → «Карта сотрудников» (руководителю — «Разделы» → «Карта сотрудников»). Точки — только в момент действий: приход, уход, задача, передача смены, заявка. Постоянного слежения нет.',
+    uz: '«Pult» → «Xodimlar xaritasi». Nuqtalar — faqat harakat paytida: kelish, ketish, vazifa, smena topshirish, ariza. Doimiy kuzatuv yoʻq.' },
+  { k: /расч[её]т|зарплат|заработ|аванс|штраф|прем|hisob|ish haqi|maosh|ҳисоб|маош/i,
+    ru: '«Профиль» → «Мой расчёт» — расчётный лист за месяц: начислено, штрафы, премии, аванс, к выплате. Там же вопрос бухгалтеру. Владельцу — «Разделы» → «Расчётные листы».',
+    uz: '«Profil» → «Mening hisobim» — oylik hisob varaqasi: hisoblangan, jarimalar, mukofotlar, avans, toʻlanadigan. Egasiga — «Boʻlimlar» → «Hisob varaqalari».' },
+  { k: /спасибо|рейтинг|балл|почёт|rahmat|reyting|ball|раҳмат|рейтинг/i,
+    ru: '«Разделы» → «„Спасибо“ коллеге»: выберите коллегу и коротко за что (до 3 в день). Свой рейтинг — «Разделы» → «Рейтинг и тест дня»; не согласны с баллами — «Разбор баллов» → «Оспорить».',
+    uz: '«Boʻlimlar» → «Hamkasbga «Rahmat»»: hamkasbni tanlang va qisqacha nima uchun (kuniga 3 tagacha). Reyting — «Reyting va kun testi»; ballarga rozi boʻlmasangiz — «Ballar tahlili» → «Eʼtiroz bildirish».' },
+  { k: /допуск|навык|стаж[её]р|наставник|ruxsat|ко'?nikma|руxсат|рухсат/i,
+    ru: '«Профиль» → «Мои допуски» → навык → урок → «Пройти тест» (нужно 8 из 10) → руководитель проверяет на практике → «допущен». Руководителю — «Команда» → «Кто что умеет» → «Засчитать» или «Ещё рано».',
+    uz: '«Profil» → «Mening ruxsatlarim» → koʻnikma → dars → «Testni topshirish» (10 tadan 8) → rahbar amalda tekshiradi. Rahbarga — «Jamoa» → «Kim nimani biladi» → «Tasdiqlash» yoki «Hali erta».' },
+  { k: /язык|узбек|русск|til\b|тил\b|lotin|kirill/i,
+    ru: '«Профиль» → «Язык / Til» → «Русский», «Oʻzbekcha» (латиница) или «Ўзбекча» (кириллица).',
+    uz: '«Profil» → «Til / Язык» → «Русский», «Oʻzbekcha» (lotin) yoki «Ўзбекча» (kirill).' },
+  { k: /тем[аунойы]\b|т[её]мн|светл|qorongʻi|qorong'i|yorugʻ|tema|қоронғи/i,
+    ru: '«Профиль» → «Оформление» → «Тёмное» или «Светлое».',
+    uz: '«Profil» → «Bezak» → «Qorongʻi» yoki «Yorugʻ».' },
+  { k: /обновл|верси|yangila|янгила/i,
+    ru: 'Появилась строка «Есть обновление» — нажмите «Обновить». Строки нет, а у коллег уже новое — закройте приложение и откройте снова.',
+    uz: '«Есть обновление» qatori chiqsa — «Yangilash»ni bosing. Qator boʻlmasa — ilovani yopib, qayta oching.' },
+  { k: /парол|логин|parol|пароль/i,
+    ru: 'Свой пароль: «Профиль» → «Сменить пароль». Забыли — попросите владельца: карточка сотрудника → «Сбросить пароль». Пароль никому не пишите, в том числе помощнику.',
+    uz: 'Oʻz parolingiz: «Profil» → «Parolni almashtirish». Unutdingizmi — egasidan soʻrang: xodim kartasi → «Parolni tiklash». Parolni hech kimga yozmang.' },
+  { k: /фото открыт|фото закрыт|фото смен|smena surat/i,
+    ru: 'Включает владелец: «Пульт» → «Настройки приложения» → «Фото-проверки открытия и закрытия». Сотрудник после «Пришёл» видит «Фото открытия смены»: «Снять» → «Готово» (или «Сдам позже»).',
+    uz: 'Egasi yoqadi: «Pult» → «Ilova sozlamalari» → ochilish va yopilish surat tekshiruvi. Xodim «Keldim»dan keyin smena ochilish suratini oladi.' },
+  { k: /пригласи|добавить сотрудник|новый сотрудник|taklif|xodim qoʻsh|ходим қўш/i,
+    ru: 'Владелец: «Команда» → «+ Пригласить»: имя, должность, руководитель → приложение покажет логин и временный пароль. Сотрудник входит и меняет пароль.',
+    uz: 'Egasi: «Jamoa» → «+ Taklif qilish»: ism, lavozim, rahbar → ilova login va vaqtinchalik parolni koʻrsatadi.' }
+];
+var DAI_BUG = /не работа|не нажима|ошибк|завис|пропал|не открыва|не сохраня|белый экран|пустой экран|ishlamay|xato|ochilmay|bosilmay|ишламай|хато/i;
+function dai_demoAnswer(q, lg) {
+  var uz = lg !== 'ru';
+  if (DAI_BUG.test(q)) return { answer: uz ? 'Bu ilova xatosiga oʻxshaydi. «Jamoaga topshirish»ni bosing — biz koʻrib chiqamiz.' : 'Похоже на ошибку приложения. Нажмите «Передать команде» — команда Jamoa разберётся.',
+    handoff: true, kind: 'bug', draft: (uz ? 'Xato: ' : 'Ошибка: ') + q };
+  var hit = null;
+  for (var i = 0; i < DAI_KB.length; i++) { var x = DAI_KB[i]; if (x.lead && !dai_lead()) continue; if (x.k.test(q)) { hit = x; break; } }
+  if (!hit) return { answer: uz ? 'Maʼlumotnomada bunga javob topmadim. «Jamoaga topshirish»ni bosing — savolni jamoaga yuboraman.' : 'В справке ответа на это не нашёл. Нажмите «Передать команде» — вопрос уйдёт команде Jamoa.',
+    handoff: true, kind: 'question', draft: (uz ? 'Savol: ' : 'Вопрос: ') + q };
+  return { answer: uz ? hit.uz : hit.ru, handoff: false };
+}
+function dai_ld() { try { var o = JSON.parse(localStorage.getItem(DAI_K) || 'null'); if (o && o.v === 1 && Array.isArray(o.L)) return o; } catch (e) {} return { v: 1, seq: 100, L: [] }; }
+function dai_put(o) { try { if (o.L.length > 400) o.L = o.L.slice(-400); localStorage.setItem(DAI_K, JSON.stringify(o)); return true; } catch (e) { return false; } }
+function dai_db() {
+  var o = dai_ld();
+  if (!o.seeded && typeof FD_V0 !== 'undefined' && FD_V0) {
+    var S0 = [[0, 'Как поставить смену сотруднику на завтра?', 'Внизу нажмите «График» → выберите кисть → нажмите на день → «Опубликовать изменения».', 0, 0, 'sched'],
+      [2, 'Не приходят уведомления на iPhone', 'Добавьте приложение на экран «Домой»: Safari → «Поделиться» → «На экран Домой», затем «Профиль» → «Уведомления на телефон» → «Включить».', 0, 1, 'profile'],
+      [1, 'Нажимаю «Пришёл» — крутится и ничего не происходит', 'Похоже на ошибку приложения. Нажмите «Передать команде».', 1, 1, 'home'],
+      [3, 'Можно выгрузить табель в 1С?', 'В справке ответа на это не нашёл. Нажмите «Передать команде».', 1, 2, 'desk'],
+      [4, 'Qanday qilib dam olish soʻrayman?', 'Pastda «Jadval» → «Rahbarga soʻrov» → «Dam olish» → «Rahbarga yuborish».', 0, 3, 'sched'],
+      [5, 'Как дать администратору доступ к графику?', '«Команда» → сотрудник → «Профиль» → «Полномочия» → «График».', 0, 6, 'team']];
+    S0.forEach(function (s, i) {
+      var v = FD_V0[s[0]] || FD_V0[0], at = new Date(Date.now() - (s[4] * 864e5 + (i + 1) * 37 * 6e4)).toISOString();
+      o.L.push({ id: ++o.seq, seed: 1, who: 'seed', dialog: 'seed-' + i, q: s[1], a: s[2], lang: /[ʻ]/.test(s[1]) ? 'uz' : 'ru', screen: s[5], status: 'ok', suggest: !!s[3], handed: !!s[3],
+        ticket_id: null, in: 380 + s[1].length, out: Math.round(s[2].length / 2.6), cr: 6900, cw: i === 0 ? 6900 : 0, ms: 1800 + i * 210, at: at, venue_name: v[0], venue_type: v[1], role: i % 2 ? 'staff' : 'owner' });
+    });
+    o.seeded = 1; dai_put(o);
+  }
+  return o;
+}
+function dai_E(m, c) { return { data: null, error: { message: dai_t(m), details: c || 'bad_input', code: c || 'bad_input' } }; }
+var DAI_DEMO = {
+  ask: async function (b) {
+    if (!S.me) return { ok: false, reason: 'auth', message: dai_t('Войдите в приложение заново и повторите вопрос.') };
+    var o = dai_db(), who = dz_who(), q = String(b.q || '').trim(), now = Date.now(), lg = b.lang || 'ru';
+    if (!q || q.length > 1000) return { ok: false, reason: 'bad_input', message: dai_t('Напишите вопрос (до 1000 знаков).') };
+    var mine = o.L.filter(function (x) { return x.who === who; });
+    var day0 = new Date(); day0.setHours(0, 0, 0, 0);
+    if (mine.filter(function (x) { return now - Date.parse(x.at) < 36e5; }).length >= 30) return { ok: false, reason: 'limit', scope: 'hour', message: dai_t('Слишком много вопросов за час. Попробуйте позже или нажмите «Передать команде».') };
+    if (mine.filter(function (x) { return Date.parse(x.at) >= +day0; }).length >= 100) return { ok: false, reason: 'limit', scope: 'day', message: dai_t('На сегодня вопросы помощнику закончились. Завтра можно снова, а сейчас — «Передать команде».') };
+    await new Promise(function (res) { setTimeout(res, 450); });
+    var A = dai_demoAnswer(q, lg), vn = dz_myVenue();
+    var row = { id: ++o.seq, who: who, dialog: b.dialog, q: q, a: A.answer, lang: lg, screen: b.screen || null, status: 'ok', suggest: !!A.handoff, handed: false, ticket_id: null,
+      in: 380 + q.length, out: Math.round(A.answer.length / 2.6), cr: 6900, cw: 0, ms: 450, at: new Date().toISOString(), venue_name: vn.name, venue_type: vn.type, role: S.me.role === 'director' ? 'owner' : S.me.role };
+    o.L.push(row); dai_put(o);
+    var det = (lg === 'ru' ? 'Экран: ' : 'Ekran: ') + (b.screen || '—') + (lg === 'ru' ? ' · Версия приложения: ' : ' · Ilova versiyasi: ') + (b.ver || '—');
+    return { ok: true, id: row.id, dialog: b.dialog, answer: A.answer, handoff: !!A.handoff, kind: A.kind || 'question', ticket: A.handoff ? A.draft + '\n\n' + det : null, demo: true };
+  },
+  support_ai_my: async function (a) {
+    if (!S.me) return dai_E('Нужно войти', 'no_auth');
+    var o = dai_db(), who = dz_who(), d = a && a.p_dialog;
+    if (!d) { var last = o.L.filter(function (x) { return x.who === who && Date.now() - Date.parse(x.at) < 864e5; }).pop(); d = last ? last.dialog : null; }
+    if (!d) return { data: { dialog: null, items: [] }, error: null };
+    return { data: { dialog: d, items: o.L.filter(function (x) { return x.who === who && x.dialog === d; }).map(function (x) {
+      return { id: x.id, q: x.q, a: x.a, status: x.status, suggest: x.suggest, handed: x.handed, ticket_id: x.ticket_id, created_at: x.at };
+    }) }, error: null };
+  },
+  support_ai_handoff: async function (a) {
+    var o = dai_db(), who = dz_who(), n = 0;
+    o.L.forEach(function (x) { if (x.who === who && x.dialog === a.p_dialog) { x.handed = true; if (a.p_ticket) x.ticket_id = a.p_ticket; n++; } });
+    dai_put(o); return { data: n, error: null };
+  },
+  founder_ai_stats: async function () {
+    if (!dz_fd()) return dai_E('Только для основателя Jamoa', 'no_rights');
+    var o = dai_db(), now = Date.now(), d0 = new Date(); d0.setHours(0, 0, 0, 0);
+    var L = o.L.filter(function (x) { return now - Date.parse(x.at) < 30 * 864e5; }), T = L.filter(function (x) { return Date.parse(x.at) >= +d0; });
+    var sum = function (A, k) { return A.reduce(function (s, x) { return s + (+x[k] || 0); }, 0); };
+    var cost = function (A) { return Math.round((sum(A, 'in') * DAI_PRICE.in + sum(A, 'out') * DAI_PRICE.out + sum(A, 'cr') * DAI_PRICE.cache_read + sum(A, 'cw') * DAI_PRICE.cache_write) / 1e6 * 1e4) / 1e4; };
+    var ok = L.filter(function (x) { return x.status === 'ok'; });
+    return { data: { today: T.length, d30: L.length, ok30: ok.length, err30: L.length - ok.length, handed_today: T.filter(function (x) { return x.handed; }).length,
+      handed30: L.filter(function (x) { return x.handed; }).length, suggest30: L.filter(function (x) { return x.suggest; }).length,
+      dialogs30: Object.keys(L.reduce(function (m, x) { m[x.dialog] = 1; return m; }, {})).length, people30: Object.keys(L.reduce(function (m, x) { m[x.who] = 1; return m; }, {})).length,
+      in30: sum(L, 'in'), out30: sum(L, 'out'), cr30: sum(L, 'cr'), cw30: sum(L, 'cw'), cost30: cost(L), cost_today: cost(T),
+      ms_avg: ok.length ? Math.round(sum(ok, 'ms') / ok.length) : 0, price: Object.assign({ model: 'claude-haiku-5-5' }, DAI_PRICE), limits: { hour: 30, day: 100, all_day: 3000 },
+      recent: L.filter(function (x) { return x.handed || x.suggest || x.status === 'error'; }).slice(-20).reverse().map(function (x) {
+        return { id: x.id, q: x.q, a: x.a, handed: x.handed, suggest: x.suggest, ticket_id: x.ticket_id, status: x.status, lang: x.lang, screen: x.screen, created_at: x.at, venue_name: x.venue_name, venue_type: x.venue_type, role: x.role, seed: x.seed };
+      }), demo: true }, error: null };
+  }
+};
+async function dai_rpc(n, a) {
+  try {
+    if (dz_srvF()) { var SVx = dz_SV(); return await SVx.real.rpc(n, a || {}); }
+    if (dz_sv()) { var r = await sb.rpc(n, a || {}); return r || dai_E('Нет ответа', 'server'); }
+    if (!DAI_DEMO[n]) return dai_E('Нет ответа', 'server');
+    return await DAI_DEMO[n](a || {});
+  } catch (e) { return { data: null, error: e }; }
+}
+/* вопрос помощнику: сервер — edge-функция support-ai (JWT пользователя и x-venue-id ставит клиент), демо — ключевые слова */
+async function dai_ask(body) {
+  if (!dz_sv()) return DAI_DEMO.ask(body);
+  try {
+    var r = await sb.functions.invoke('support-ai', { body: body });
+    if (r && r.data) return r.data;
+    var e = r && r.error, j = null;
+    try { if (e && e.context && typeof e.context.json === 'function') j = await e.context.json(); } catch (x) {}
+    if (j && j.reason) return j;
+    return { ok: false, reason: 'error', message: dai_t('Помощник сейчас не ответил. Попробуйте ещё раз или нажмите «Передать команде».') };
+  } catch (e) {
+    return { ok: false, reason: navigator.onLine === false ? 'offline' : 'error', message: dai_t(navigator.onLine === false ? 'Нет связи — проверьте интернет и попробуйте ещё раз.' : 'Помощник сейчас не ответил. Попробуйте ещё раз или нажмите «Передать команде».') };
+  }
+}
+
+/* =====================================================================================
+   Экран «Спросить помощника»
+   ===================================================================================== */
+(function () {
+  try { if (CM_VIEWS.indexOf('daiask') < 0) CM_VIEWS.push('daiask'); } catch (e) {}
+  try { W3T.daiask = 'Спросить помощника'; W3V.daiask = function () { vDaiAsk(); }; } catch (e) {}
+  /* экран не в «Разделах» — открыт для любого вошедшего (как «Помощь и предложения») */
+  if (typeof canView === 'function') { var cv0 = canView; canView = function (v) { if (v === 'daiask') return !!S.me; return cv0.apply(this, arguments); }; }
+  if (/[?&]w4dbg/.test(location.search)) window.__dai = { DAI: DAI, K: DAI_K, rpc: function (n, a) { return dai_rpc(n, a); }, ask: function (b) { return dai_ask(b); }, open: function (f) { return dai_open(f); },
+    store: dai_ld, demoAnswer: dai_demoAnswer, lang: dai_lang };
+})();
+function dai_open(from) {
+  DAI.from = from || (S.view === 'dzsup' ? (DZ.from || 'dzsup') : S.view) || 'home';
+  go('daiask');
+}
+function dai_ex() {
+  return dai_lead() ? ['Как опубликовать график на неделю?', 'Как дать сотруднику доступ к графику?', 'Сотрудник не может отметиться — нет геолокации', 'Не приходят уведомления на iPhone']
+    : ['Как взять выходной?', 'Как поменяться сменой с коллегой?', 'Не получается отметиться', 'Где мой расчётный лист?'];
+}
+function dai_bubble(x, i) {
+  var o = '<div class="dz-m"><div class="meta" style="margin:0"><b>' + dai_e('Вы') + '</b>' + (x.at ? ' · ' + h(dz_ago(x.at)) : '') + '</div><div class="dz-tx">' + h(x.q) + '</div></div>';
+  if (x.wait) return o + '<div class="dz-m dz-mj" aria-live="polite"><div class="meta" style="margin:0"><b>' + dai_e('Помощник Jamoa') + '</b></div><div class="dz-tx meta">' + dai_e('Помощник отвечает…') + '</div></div>';
+  if (x.err) {
+    return o + '<div class="dz-m" style="border-style:dashed"><div class="meta" style="margin:0"><b>' + dai_e('Помощник Jamoa') + '</b></div><div class="dz-tx">' + h(x.err) + '</div>' +
+      '<div class="fd-acts" style="margin-top:8px">' + (x.reason === 'not_configured' || x.reason === 'limit' ? '' : '<button type="button" class="btn ghost sm" data-dair="' + i + '">' + icon('refresh', 16) + '<span>' + dai_e('Ещё раз') + '</span></button>') +
+      '<button type="button" class="btn gold sm" data-daih="' + i + '">' + icon('send', 16) + '<span>' + dai_e(x.reason === 'not_configured' ? 'Написать команде' : 'Передать команде') + '</span></button></div></div>';
+  }
+  return o + '<div class="dz-m dz-mj"><div class="meta" style="margin:0"><b>' + dai_e('Помощник Jamoa') + '</b> · ' + dai_e('ИИ') + '</div><div class="dz-tx">' + h(x.a || '') + '</div>' +
+    (x.handed ? '<div class="fd-tags" style="margin-top:6px"><span class="chip t-ok">' + (x.ticket_id ? dai_e('Передано команде · №{n}', { n: x.ticket_id }) : dai_e('Передано команде')) + '</span></div>'
+      : x.handoff ? '<button type="button" class="btn gold full sm" data-daih="' + i + '" style="margin-top:8px;min-height:40px">' + icon('send', 16) + '<span>' + dai_e('Передать команде') + '</span></button>' : '') + '</div>';
+}
+async function vDaiAsk() {
+  var m = $('main'); if (!m || S.view !== 'daiask') return;
+  var who = dz_who(); if (DAI.who !== who) { DAI.who = who; DAI.items = []; DAI.dialog = null; DAI.loaded = false; DAI.fresh = false; DAI.busy = false; DAI.pending = null; }
+  try { var bk = document.querySelector('.top .iconbtn[data-go]'); if (bk && bk.getAttribute('data-go') !== 'notif') bk.setAttribute('data-go', 'dzsup'); } catch (e) {}
+  if (!DAI.loaded && !DAI.fresh) {
+    DAI.loaded = true;
+    var r = await dai_rpc('support_ai_my', { p_dialog: null });
+    if (r && !r.error && r.data && r.data.dialog && !DAI.items.length) {
+      DAI.dialog = r.data.dialog;
+      DAI.items = (r.data.items || []).map(function (x) { return { id: x.id, q: x.q, a: x.a, at: x.created_at, handoff: !!x.suggest, handed: !!x.handed, ticket_id: x.ticket_id, err: x.status === 'error' ? dai_t('Помощник сейчас не ответил. Попробуйте ещё раз или нажмите «Передать команде».') : null }; });
+    }
+    if (S.view !== 'daiask') return;
+  }
+  if (!DAI.dialog) DAI.dialog = dai_uuid();
+  var demo = !dz_sv();
+  m.innerHTML = '<div class="note" style="white-space:normal"><span>' + dai_e('Отвечает ИИ-помощник Jamoa. Может ошибаться — если не помогло, нажмите «Передать команде».') + '</span>' +
+      (demo ? '<br><span class="meta">' + dai_e('В демо ответы условные — по ключевым словам из справки.') + '</span>' : '') + '</div>' +
+    '<div class="card"><div class="dz-th" id="daiTh" style="margin-top:0">' +
+      (DAI.items.length ? DAI.items.map(dai_bubble).join('') :
+        '<div class="meta" style="white-space:normal">' + dai_e('Спросите, как что-то сделать в Jamoa: где кнопка, почему не получается. Отвечу на вашем языке, коротко и по шагам.') + '</div>' +
+        '<div class="chips" style="margin-top:6px">' + dai_ex().map(function (q) { return '<button type="button" class="pick" data-daiq="' + h(dai_t(q)) + '">' + dai_e(q) + '</button>'; }).join('') + '</div>') +
+    '</div>' +
+    '<label class="f" style="margin-top:10px">' + dai_e('Ваш вопрос') + '<textarea class="in" id="daiQ" rows="3" maxlength="1000" placeholder="' + dai_e('Например: как взять выходной на пятницу?') + '"></textarea></label>' +
+    '<div class="meta" style="display:flex;justify-content:flex-end"><span class="mono" id="daiN">0/1000</span></div>' +
+    '<button type="button" class="btn gold full" id="daiSend" style="margin-top:6px;min-height:44px"' + (DAI.busy ? ' disabled' : '') + '>' + icon('send', 18) + '<span>' + dai_e('Спросить') + '</span></button>' +
+    '<div class="fd-acts" style="margin-top:8px"><button type="button" class="btn ghost" id="daiTeam">' + dai_e('Передать команде') + '</button>' +
+      '<button type="button" class="btn ghost" id="daiNew"' + (DAI.items.length ? '' : ' disabled') + '>' + dai_e('Новый диалог') + '</button></div></div>';
+  var ta = $('daiQ');
+  ta.oninput = function () { $('daiN').textContent = this.value.length + '/1000'; };
+  ta.onkeydown = function (e) { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); dai_send(); } };
+  $('daiSend').onclick = function () { dai_send(); };
+  $('daiTeam').onclick = function () { dai_handoff(DAI.items.length - 1); };
+  $('daiNew').onclick = function () { DAI.items = []; DAI.dialog = dai_uuid(); DAI.fresh = true; vDaiAsk(); };
+  m.querySelectorAll('[data-daiq]').forEach(function (b) { b.onclick = function () { ta.value = b.getAttribute('data-daiq'); ta.oninput(); ta.focus(); }; });
+  m.querySelectorAll('[data-daih]').forEach(function (b) { b.onclick = function () { dai_handoff(+b.getAttribute('data-daih')); }; });
+  m.querySelectorAll('[data-dair]').forEach(function (b) { b.onclick = function () { var x = DAI.items[+b.getAttribute('data-dair')]; if (!x) return; DAI.items.splice(+b.getAttribute('data-dair'), 1); dai_send(x.q); }; });
+  if (DAI.items.length) { var th = $('daiTh'), last = th && th.lastElementChild; if (last && last.scrollIntoView) try { last.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
+}
+async function dai_send(qq) {
+  if (DAI.busy) return;
+  var ta = $('daiQ'), q = String(qq != null ? qq : (ta ? ta.value : '')).trim();
+  if (!q) return toast(dai_t('Напишите вопрос'));
+  if (q.length > 1000) return toast(dai_t('Вопрос — не больше 1000 знаков'));
+  var it = { q: q, at: new Date().toISOString(), wait: true };
+  DAI.items.push(it); DAI.busy = true; DAI.fresh = false;
+  vDaiAsk();
+  var r = await dai_ask({ q: q, dialog: DAI.dialog, lang: dai_lang(), screen: dai_scr(DAI.from), ver: String(window.JAMOA_VERSION || '') });
+  DAI.busy = false; it.wait = false;
+  if (r && r.ok) { it.id = r.id; it.a = r.answer; it.handoff = !!r.handoff; it.kind = r.kind || 'question'; it.ticket = r.ticket || null; }
+  else { it.err = (r && r.message) || dai_t('Помощник сейчас не ответил. Попробуйте ещё раз или нажмите «Передать команде».'); it.reason = r && r.reason; }
+  if (S.view === 'daiask') vDaiAsk();
+}
+/* «Передать команде»: форма обращения 92z (вид, снимок, сведения о приложении) с готовым текстом и перепиской */
+function dai_ticketText(i) {
+  var L = DAI.items.filter(function (x) { return !x.wait; }), x = DAI.items[i] || L[L.length - 1] || null;
+  var head = x && x.ticket ? x.ticket : (x ? dai_t('Вопрос помощнику: {q}', { q: x.q }) + (x.err ? '\n' + dai_t('Помощник не ответил.') : '\n' + dai_t('Ответ помощника не помог.')) : '');
+  var tr = L.slice(-5).map(function (y) { return dai_t('— Вопрос: {q}', { q: y.q }) + '\n' + dai_t('— Ответ: {a}', { a: y.a || dai_t('нет ответа') }); }).join('\n');
+  var t = head + (tr ? '\n\n' + dai_t('Переписка с помощником:') + '\n' + tr : '');
+  return t.length > 2000 ? t.slice(0, 1999) + '…' : t;
+}
+function dai_handoff(i) {
+  var x = DAI.items[i] || null, kind = x && x.kind === 'bug' ? 'bug' : 'question';
+  var txt = dai_ticketText(i);
+  DAI.pending = { dialog: DAI.dialog, at: Date.now(), idx: i };
+  DAI.arming = true;
+  try { dz_new(kind); } finally { DAI.arming = false; }
+  var t = $('dzTx'); if (t) { t.value = txt; if ($('dzTn')) $('dzTn').textContent = txt.length + '/2000'; }
+}
+(function () {
+  /* форма 92z открыта не из помощника — привязка к диалогу снимается; смена вида внутри формы — сохраняется */
+  if (typeof dz_new === 'function') {
+    var n0 = dz_new;
+    dz_new = function () { var L = $('layer'); if (!DAI.arming && !(L && L.querySelector('#dzTx'))) DAI.pending = null; return n0.apply(this, arguments); };
+  }
+  /* экран в сведениях обращения — тот, откуда открыли помощника */
+  if (typeof dz_meta === 'function') {
+    var m0 = dz_meta;
+    dz_meta = function () { var o = m0.apply(this, arguments); if (S.view === 'daiask' && o) o.screen = String(dai_scr(DAI.from) + ' · ' + dai_t('через помощника')).slice(0, 120); return o; };
+  }
+  /* отправлено обращение из помощника → отметить диалог «передано команде» с номером обращения */
+  if (typeof dz_rpc === 'function') {
+    var r0 = dz_rpc;
+    dz_rpc = async function (n, a) {
+      var r = await r0.apply(this, arguments);
+      if (n === 'support_send' && r && !r.error && DAI.pending && r.data && r.data.id) {
+        var p = DAI.pending; DAI.pending = null;
+        var hr = await dai_rpc('support_ai_handoff', { p_dialog: p.dialog, p_ticket: r.data.id });
+        if (!hr.error && p.dialog === DAI.dialog) DAI.items.forEach(function (x) { if (!x.wait) { x.handed = true; x.ticket_id = r.data.id; } });
+      }
+      return r;
+    };
+  }
+  /* вход: «Помощь и предложения» — первая строка карточки; «Справка» — кнопка над «Не нашли ответ?» */
+  if (typeof vDzSup === 'function') {
+    var v0 = vDzSup;
+    vDzSup = async function () {
+      var p = await v0.apply(this, arguments);
+      var m = $('main'), card = m && m.querySelector('.card.ob-pc'), first = card && card.querySelector('[data-dzn]');
+      if (S.view === 'dzsup' && card && !$('daiGo')) {
+        var html = '<button type="button" class="ob-pr" id="daiGo"><span class="ob-pi">' + icon('spark', 19) + '</span><span class="ob-sx"><b>' + dai_e('Спросить помощника') + '</b><span>' +
+          dai_e('Ответ за несколько секунд. Отвечает ИИ-помощник Jamoa') + '</span></span>' + icon('chev', 16) + '</button>';
+        if (first) first.insertAdjacentHTML('beforebegin', html); else card.insertAdjacentHTML('beforeend', html);
+        $('daiGo').onclick = function () { dai_open(); };
+      }
+      return p;
+    };
+  }
+  if (typeof obHelp === 'function') {
+    var h0 = obHelp;
+    obHelp = function () {
+      var r = h0.apply(this, arguments), L = $('layer'), a = L && ($('dzHelp') || $('obHelpTour'));
+      if (a && S.me && !$('daiHelp')) {
+        a.insertAdjacentHTML('beforebegin', '<button type="button" class="btn ghost full" id="daiHelp" style="margin-bottom:8px">' + icon('spark', 18) + '<span>' + dai_e('Спросить помощника') + '</span></button>');
+        $('daiHelp').onclick = function () { var f = S.view; closeLayer(); dai_open(f); };
+      }
+      return r;
+    };
+  }
+})();
+
+/* =====================================================================================
+   Кабинет основателя → «Обращения»: карточка «ИИ-помощник» (сервер 92p и демо 98)
+   ===================================================================================== */
+function dai_usd(x) { x = +x || 0; return '$' + (x >= 1 ? x.toFixed(2) : x >= 0.01 ? x.toFixed(3) : x.toFixed(4)); }
+function dai_num(x) { x = +x || 0; return x >= 1e6 ? (Math.round(x / 1e5) / 10) + ' ' + dai_t('млн') : x >= 1e4 ? Math.round(x / 1e3) + ' ' + dai_t('тыс.') : String(x); }
+async function dai_fFill() {
+  var box = $('daiF'); if (!box) return;
+  var r = await dai_rpc('founder_ai_stats'); box = $('daiF'); if (!box) return;
+  if (r.error) { box.innerHTML = '<div class="card"><h2>' + dai_e('ИИ-помощник') + '</h2><div class="meta">' + h(dz_err(r.error)) + '</div></div>'; return; }
+  var D = r.data || {}, P = D.price || DAI_PRICE, R = D.recent || [];
+  box.innerHTML = '<div class="card"><h2>' + dai_e('ИИ-помощник') + '</h2>' +
+    '<div class="meta" style="white-space:normal;margin:-4px 0 6px">' + dai_e('Вопросы пользователей помощнику в «Помощь и предложения». Модель {m}; лимиты: {h} в час и {d} в день на человека, {a} в день на всех.', { m: P.model || 'claude-haiku-5-5', h: (D.limits || {}).hour || 30, d: (D.limits || {}).day || 100, a: (D.limits || {}).all_day || 3000 }) +
+      (D.demo ? ' ' + dai_e('В демо цифры условные.') : '') + '</div>' +
+    '<div class="an-sts" style="margin-bottom:8px"><div class="an-st"><b>' + (+D.today || 0) + '</b><span>' + dai_e('вопросов сегодня') + '</span></div><div class="an-st"><b>' + (+D.d30 || 0) + '</b><span>' + dai_e('за 30 дней') + '</span></div>' +
+      '<div class="an-st"><b>' + (+D.handed30 || 0) + '</b><span>' + dai_e('передано команде') + '</span></div><div class="an-st"><b>' + h(dai_usd(D.cost30)) + '</b><span>' + dai_e('расход за 30 дней') + '</span></div></div>' +
+    '<div class="an-sh-rows">' +
+      [['Сегодня: передано команде', String(+D.handed_today || 0)], ['Помощник сам предложил передать', String(+D.suggest30 || 0)], ['Не ответил (ошибка)', String(+D.err30 || 0)],
+       ['Диалогов / людей', (+D.dialogs30 || 0) + ' / ' + (+D.people30 || 0)], ['Токены: вход / выход', dai_num(D.in30) + ' / ' + dai_num(D.out30)],
+       ['Токены: из кэша / в кэш', dai_num(D.cr30) + ' / ' + dai_num(D.cw30)], ['Расход сегодня', dai_usd(D.cost_today)], ['Среднее время ответа', (Math.round((+D.ms_avg || 0) / 100) / 10) + ' ' + dai_t('с')]]
+      .map(function (x) { return '<div class="an-sr"><span>' + dai_e(x[0]) + '</span><b>' + h(x[1]) + '</b></div>'; }).join('') + '</div>' +
+    '<div class="meta" style="white-space:normal;margin-top:6px">' + dai_e('Цена за 1 млн токенов: вход ${i}, выход ${o}, из кэша ${c}. Стоимость примерная.', { i: P.in, o: P.out, c: P.cache_read }) + '</div>' +
+    '<h3 style="margin-top:12px">' + dai_e('Передано команде и без ответа') + '</h3>' +
+    (R.length ? R.map(function (x) {
+      return '<button type="button" class="fd-v" ' + (x.ticket_id ? 'data-daift="' + x.ticket_id + '"' : 'style="cursor:default"') + '><div class="fd-vm"><div class="fd-tags" style="margin:0 0 4px">' +
+        (x.handed ? dz_chip('t-info', 'Передано команде') : '') + (x.suggest && !x.handed ? dz_chip('t-warn', 'Предложил передать') : '') + (x.status === 'error' ? dz_chip('t-bad', 'Не ответил') : '') +
+        (x.ticket_id ? '<span class="chip t-mute">' + dai_e('обращение №{n}', { n: x.ticket_id }) + '</span>' : '') + '</div>' +
+        '<div class="dz-tx">' + h(dz_cut(x.seed ? dai_t(x.q) : x.q, 200)) + '</div>' + (x.a ? '<div class="meta" style="white-space:normal">' + dai_e('Помощник') + ': ' + h(dz_cut(x.seed ? dai_t(x.a) : x.a, 140)) + '</div>' : '') +
+        '<div class="meta" style="white-space:normal">' + h(x.venue_name || '—') + (x.role ? ' · ' + dz_e(DZ_ROLE[x.role] || x.role) : '') + (x.screen ? ' · ' + h(x.screen) : '') + ' · ' + h(dz_ago(x.created_at)) + '</div></div>' + (x.ticket_id ? icon('chev', 16) : '') + '</button>';
+    }).join('') : '<div class="empty">' + dai_e('Пока нет — помощник справляется сам') + '</div>') + '</div>';
+  box.querySelectorAll('[data-daift]').forEach(function (b) { b.onclick = function () { dz_fCard(+b.getAttribute('data-daift')); }; });
+}
+(function () {
+  try { if (typeof dz_fBox === 'function') { var b0 = dz_fBox; dz_fBox = function () { setTimeout(dai_fFill, 0); return b0.apply(this, arguments) + '<div id="daiF"></div>'; }; } } catch (e) {}
+})();
 
 
 /* ===== ВОЛНА 4 · 92b-clock.js ===== */

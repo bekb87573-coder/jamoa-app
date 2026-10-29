@@ -1769,3 +1769,40 @@
   }
 })(typeof window !== 'undefined' ? window : globalThis);
 /* === end 92zt === */
+/* === 92ai === */
+/* Часть dai (92ai-support, 0031_support_ai.sql, edge-функция support-ai): ИИ-помощник поддержки. Блок не трогает код выше:
+   как 92z — оборачивает SVAdapter.make / supabase.createClient, дополняет SV.rpcMap и functions.invoke.
+   functions.invoke('support-ai') → настоящая функция (JWT пользователя и x-venue-id ставит клиент сервера);
+   rpc: support_ai_my, support_ai_handoff; founder_ai_stats — кабинет 92p вызывает через SV.real, здесь на всякий случай.
+   support_ai_begin / support_ai_finish вызывает только edge-функция. */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dai) return; A.__dai = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dai) return cl; SV.__dai = true;
+    var real = SV.real, R = SV.rpcMap; if (!R) return cl;
+    R.support_ai_my = async function (a) { a = a || {}; return real.rpc('support_ai_my', { p_dialog: a.p_dialog == null ? null : a.p_dialog }); };
+    R.support_ai_handoff = async function (a) { a = a || {}; return real.rpc('support_ai_handoff', { p_dialog: a.p_dialog, p_ticket: a.p_ticket == null ? null : a.p_ticket }); };
+    R.founder_ai_stats = async function () { return real.rpc('founder_ai_stats', {}); };
+    if (cl.functions && typeof cl.functions.invoke === 'function') {
+      var inv0 = cl.functions.invoke;
+      cl.functions.invoke = async function (n, o) {
+        if (n === 'support-ai') {
+          var b = (o && o.body) || {}; if (typeof b === 'string') { try { b = JSON.parse(b); } catch (e) { b = {}; } }
+          var x = { q: b.q, dialog: b.dialog, lang: b.lang, screen: b.screen, ver: b.ver };   /* только поля, которые ждёт функция */
+          try { return await real.functions.invoke('support-ai', { body: x }); }
+          catch (e) { return { data: null, error: e }; }
+        }
+        return inv0.apply(this, arguments);
+      };
+    }
+    return cl;
+  }
+  A.daiExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92ai === */
