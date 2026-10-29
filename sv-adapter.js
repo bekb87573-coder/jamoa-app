@@ -280,7 +280,8 @@
       return { id: m.id, user_id: m.user_id, first_name: m.first_name, last_name: m.last_name || '', gender: m.gender, login: m.login, phone: m.phone, photo: m.photo_path, photo_path: m.photo_path,
         dept_id: dl(m.dept_id), position_id: m.position_id, manager_id: m.manager_id, role: role(m.role), jrole: m.role, hire_date: m.hire_date, lang: m.lang,
         active: !m.archived_at, archived_at: m.archived_at, must_change_password: !!m.must_change_password, lead_dept: (heads || {})[m.id] || null, default_preset_id: m.default_preset_id,
-        birth_date: m.birth_date || null, tg_username: m.tg_username || null };   /* dn: 0018 — день рождения и ник Telegram */
+        birth_date: m.birth_date || null, tg_username: m.tg_username || null,   /* dn: 0018 — день рождения и ник Telegram */
+        geo_free: !!m.geo_free };   /* 92w: 0026 — «Отмечаться без геолокации» */
     }
     function schKind(s) {
       if (s.kind === 'work') return s.preset_id ? 'p' + s.preset_id : 'u';
@@ -299,7 +300,8 @@
         out_zone: a.zone_status !== 'ok', zone_status: a.zone_status, zone_ok: a.zone_status === 'approved', zone_no: a.zone_status === 'rejected', zone_m: a.in_dist_m,
         cb_zone: a.zone_status !== 'ok' ? { dist: a.in_dist_m, lat: a.in_lat, lng: a.in_lng, why: a.in_zone === 'nogps' ? 'nogps' : 'far' } : null,
         in_lat: a.in_lat, in_lng: a.in_lng, in_zone: a.in_zone, in_dist_m: a.in_dist_m, out_lat: a.out_lat, out_lng: a.out_lng, out_zone: a.out_zone, out_dist_m: a.out_dist_m, /* 92m: точки отметок для карты */
-        in_photo: a.in_photo_path, out_photo: a.out_photo_path, in_source: a.in_source, in_device: a.in_source === 'kiosk' ? 'kiosk' : 'phone', cb_kiosk: a.in_source === 'kiosk', face_flag: false };
+        in_photo: a.in_photo_path, out_photo: a.out_photo_path, in_source: a.in_source, in_device: a.in_source === 'kiosk' ? 'kiosk' : 'phone', cb_kiosk: a.in_source === 'kiosk', face_flag: false,
+        geo_free: !!a.geo_free };   /* 92w: 0026 — отметка без геолокации (разрешено) */
     }
     /* ссылки уведомлений: на сервере «swap» — обмен сменами (в демо — xchg), «sub» — замена заболевшего (в демо — swap) */
     var REFT = { swap: 'xchg', sub: 'swap' };
@@ -1610,3 +1612,34 @@
   }
 })(typeof window !== 'undefined' ? window : globalThis);
 /* === end 92u === */
+/* === 92w geofree === */
+/* Часть dw (92w-geofree, 0026_geofree.sql): «Отмечаться без геолокации» для конкретного сотрудника. Блок не трогает код выше
+   (кроме одного поля geo_free в memRow / attRow): как 92s/92u — оборачивает SVAdapter.make / supabase.createClient и дополняет SV.rpcMap.
+   rpc: member_geo_free (переключатель в карточке; после — перечитать сотрудников и уведомления), my_geo_free (спрашивать ли геолокацию).
+   Журнал (audit_log) и уведомление сотруднику пишет сервер (триггер members_dw_geo) — с телефона не дублируются. */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dw) return; A.__dw = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dw) return cl; SV.__dw = true;
+    var real = SV.real, R = SV.rpcMap; if (!R) return cl;
+    R.member_geo_free = async function (a) {
+      var r = await real.rpc('member_geo_free', { p_member: a && (a.p_member || a.p_id), p_on: !!(a && a.p_on) }); if (r.error) return r;
+      var e = (SV.T.employees || []).filter(function (x) { return x.id === (a.p_member || a.p_id); })[0]; if (e) e.geo_free = !!(r.data && r.data.geo_free);
+      SV.stale('base', 'notif'); return r;
+    };
+    R.my_geo_free = async function () {
+      var r = await real.rpc('my_geo_free'); if (r.error) return r;
+      if (SV.me) SV.me.geo_free = r.data === true; var e = SV.me && (SV.T.employees || []).filter(function (x) { return x.id === SV.me.id; })[0]; if (e) e.geo_free = r.data === true;
+      return r;
+    };
+    return cl;
+  }
+  A.dwExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92w === */

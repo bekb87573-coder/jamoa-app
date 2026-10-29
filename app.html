@@ -55,6 +55,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-fixes.js"></script>
 <script src="uz-w4-founder-live.js"></script>
 <script src="uz-w4-founder.js"></script>
+<script src="uz-w4-geofree.js"></script>
 <script src="uz-w4-glossary.js"></script>
 <script src="uz-w4-home2.js"></script>
 <script src="uz-w4-integ.js"></script>
@@ -48577,6 +48578,148 @@ function dv_setCard() {
     '.dvp-m{font-size:13pt;color:#555;margin-top:5mm}.dvp-sig{display:flex;gap:30mm;margin-top:14mm;font-family:Arial,sans-serif;font-size:11pt}.dvp-sig div{display:flex;flex-direction:column;align-items:center;gap:1mm}.dvp-sig i{display:block;width:60mm;border-bottom:.3mm solid #333;height:10mm}.dvp-sig span{color:#666}}';
   document.head.appendChild(st);
 })();
+
+
+/* ===== ВОЛНА 4 · 92w-geofree.js ===== */
+/* ===== 92w — «Отмечаться без геолокации» для конкретного сотрудника (префикс dw_). Журнал w4/log/dw.md, сервер 0026_geofree.sql,
+   переходник — блок «92w geofree» в sv-adapter.js. Как в Mir Luxe One.
+   1. Карточка сотрудника → «Профиль»: переключатель «Отмечаться без геолокации» (владелец — любому, руководитель — своей команде).
+      Включение и выключение — в «Историю изменений» карточки и уведомление сотруднику.
+   2. У такого сотрудника «Пришёл» / «Ушёл» не спрашивают геолокацию (даже если она запрещена в браузере), место и Wi-Fi не проверяются;
+      «Подсказка о приходе» (проверка места при открытии) для него не запускается.
+   3. «Пульт → Приход и уход»: спокойная метка «без геолокации (разрешено)».
+   Демо: флаг — DB.employees[].geo_free (+ localStorage dw-geo, чтобы пережить вход другим логином); отметка помечается в DB.attendance. */
+function dw_sv() { return typeof sv_on === 'function' && sv_on(); }
+function dw_demo() { return !dw_sv() && !!window.__DB; }
+function dw_t(s) { try { return trUi(s); } catch (e) { return s; } }
+function dw_h(s) { return h(dw_t(s)); }
+var DW = { press: 0 };
+var DW_LS = 'dw-geo';
+function dw_ls() { try { var o = JSON.parse(localStorage.getItem(DW_LS) || 'null'); return o && typeof o === 'object' ? { on: o.on || {}, log: o.log || [] } : { on: {}, log: [] }; } catch (e) { return { on: {}, log: [] }; } }
+function dw_lsSet(o) { try { localStorage.setItem(DW_LS, JSON.stringify(o)); } catch (e) {} }
+function dw_dbEmp(id) { var DB = window.__DB; return DB && Array.isArray(DB.employees) ? DB.employees.filter(function (x) { return x.id === id; })[0] : null; }
+/* демо: флаги и записи журнала после перезагрузки (вход другим логином) */
+(function () {
+  if (!dw_demo()) return;
+  var o = dw_ls(), DB = window.__DB;
+  Object.keys(o.on).forEach(function (id) { var e = dw_dbEmp(id); if (e) e.geo_free = !!o.on[id]; });
+  if (o.log.length) { if (!Array.isArray(DB.audit_log)) DB.audit_log = []; o.log.forEach(function (x) { if (!DB.audit_log.some(function (y) { return y.id === x.id; })) DB.audit_log.push(x); }); }
+})();
+function dw_free(e) { if (!e) return false; if (dw_demo()) { var d = dw_dbEmp(e.id); if (d) return !!d.geo_free; } return !!e.geo_free; }
+/* перед отметкой: сервер — my_geo_free (флаг мог включиться минуту назад); без сети — последнее известное */
+async function dw_meFree() {
+  if (!S.me) return false;
+  if (!dw_sv()) return dw_free(S.me);
+  try {
+    var r = await Promise.race([sb.rpc('my_geo_free'), new Promise(function (res) { setTimeout(function () { res(null); }, 3000); })]);
+    if (r && !r.error) { S.me.geo_free = r.data === true; var e = typeof emp === 'function' ? emp(S.me.id) : null; if (e) e.geo_free = S.me.geo_free; }
+  } catch (e) {}
+  return !!S.me.geo_free;
+}
+
+/* ---------- 2. Отметка без геолокации ---------- */
+(function () {
+  if (typeof cb_geo === 'function') { var g0 = cb_geo; cb_geo = function () { if (DW.press > 0) return Promise.resolve({ free: true }); return g0.apply(this, arguments); }; }
+  if (typeof cb_venue === 'function') { var v0 = cb_venue; cb_venue = async function () { if (DW.press > 0) return null; return v0.apply(this, arguments); }; }
+  if (typeof cb_press !== 'function') return;
+  var p0 = cb_press;
+  cb_press = async function (action, btn) {
+    if (typeof CB !== 'undefined' && CB.busy && Date.now() - CB.busy < 20000) return;
+    var free = false; try { free = await dw_meFree(); } catch (e) {}
+    if (!free) return p0.apply(this, arguments);
+    DW.press++; var t0 = Date.now();
+    try {
+      var pr = p0.apply(this, arguments);
+      try { if (btn && btn.disabled) { var sp = btn.querySelector('span'); if (sp) sp.textContent = dw_t('Отмечаю…'); } } catch (e) {}
+      return await pr;
+    } finally { DW.press--; if (dw_demo()) dw_markDemo(action, t0); }
+  };
+})();
+/* демо: пометка «без геолокации (разрешено)» на отметке (на сервере ставит rpc clock) */
+function dw_markDemo(action, t0) {
+  try {
+    var DB = window.__DB, since = new Date(t0 - 2000).toISOString(), k = action === 'out' ? 'clock_out' : 'clock_in', n = 0;
+    (DB.attendance || []).forEach(function (a) { if (a.employee_id === S.me.id && a[k] && String(a[k]) >= since) { a.geo_free = true; n++; } });
+    if (n && typeof cb_save === 'function') cb_save();
+  } catch (e) {}
+}
+/* «Подсказка о приходе» спрашивает место при открытии приложения — у сотрудника без геолокации не запускаем */
+(function () {
+  if (typeof autoClock !== 'function') return;
+  var a0 = autoClock;
+  autoClock = async function () { if (S.me && dw_free(S.me)) return; return a0.apply(this, arguments); };
+})();
+
+/* ---------- 1. Карточка сотрудника: переключатель ---------- */
+function dw_cardHtml(e) {
+  var on = dw_free(e);
+  return '<h2>' + dw_h('Отметка') + ' <small>' + (on ? '<span class="chip t-mute">' + dw_h('без геолокации') + '</span>' : '') + '</small></h2>' +
+    '<label style="display:flex;gap:10px;align-items:center;min-height:44px;font-size:15px"><input type="checkbox" class="ios-sw" role="switch" id="dwGeoOn"' + (on ? ' checked' : '') +
+    ' style="width:22px;height:22px;accent-color:var(--gold);flex:none"><span>' + dw_h('Отмечаться без геолокации') + '</span></label>' +
+    '<div class="meta" style="white-space:normal">' + dw_h('Для тех, у кого телефон не даёт геолокацию; каждая отметка пишется в журнал.') + '</div>';
+}
+async function dw_set(e, on) {
+  if (dw_sv()) {
+    var r = await sb.rpc('member_geo_free', { p_member: e.id, p_on: on });
+    if (r.error) { toast(err(r.error), 4000); return false; }
+  } else if (dw_demo()) {
+    var DB = window.__DB, d = dw_dbEmp(e.id); if (d) d.geo_free = on;
+    var o = dw_ls(); o.on[e.id] = on;
+    var x = { id: 9e8 + Date.now() % 1e8, at: new Date().toISOString(), actor_id: S.me.id, target_id: e.id, action: 'geo_free', details: { on: on } };
+    if (!Array.isArray(DB.audit_log)) DB.audit_log = []; DB.audit_log.push(x); o.log.push(x); o.log = o.log.slice(-40); dw_lsSet(o);
+    if (typeof w3Notify === 'function') await w3Notify(e.id, on ? 'Отметка без геолокации' : 'Отметка снова с проверкой места',
+      on ? 'Вам разрешено отмечаться без геолокации: приход и уход не проверяют место и Wi-Fi. Каждая отметка пишется в журнал.' : 'Приход и уход снова проверяют место заведения (и Wi-Fi, если он включён).', 'clock', null, false);
+    if (typeof cb_save === 'function') cb_save();
+  }
+  e.geo_free = on;
+  toast(dw_t(on ? 'Разрешено отмечаться без геолокации' : 'Отметка снова с проверкой места'));
+  return true;
+}
+(function () {
+  if (typeof dg_pr !== 'function') return;
+  var p0 = dg_pr;
+  dg_pr = async function (e, seq) {
+    var r = await p0.apply(this, arguments);
+    try {
+      var b = $('dgBody');
+      if (!b || !e || e.active === false || $('dwGeo') || (typeof DG !== 'undefined' && seq != null && seq !== DG.seq)) return r;
+      if (!(typeof dg_can === 'function' ? dg_can(e) : isDirector())) return r;
+      var c = document.createElement('div'); c.className = 'card'; c.id = 'dwGeo'; c.innerHTML = dw_cardHtml(e);
+      var first = b.querySelector(':scope > .card'); if (first && first.nextSibling) b.insertBefore(c, first.nextSibling); else b.appendChild(c);
+      $('dwGeoOn').onchange = async function () {
+        var v = this.checked; this.disabled = true;
+        var ok = await dw_set(e, v);
+        if (!ok) { var i = $('dwGeoOn'); if (i) { i.checked = !v; i.disabled = false; } return; }
+        if (S.view === 'emp') vEmp();
+      };
+    } catch (x) { console.warn('dw card', x); }
+    return r;
+  };
+})();
+/* демо (92c jc_notify): неизвестный вид уходит в «Прочее», которое по умолчанию выключено — уведомление о разрешении идёт группой «График и заявки» */
+var DW_TTL = ['Отметка без геолокации', 'Отметка снова с проверкой места'];
+(function () { if (typeof jc_kindOf !== 'function') return; var k0 = jc_kindOf; jc_kindOf = function (rt, title) { if (rt === 'clock' && DW_TTL.indexOf(String(title || '')) >= 0) return 'sched'; return k0.apply(this, arguments); }; })();
+/* «История изменений» (92s): понятный текст записи */
+(function () {
+  if (typeof ds_audTxt !== 'function') return;
+  var t0 = ds_audTxt;
+  ds_audTxt = function (x) {
+    if (x && x.action === 'geo_free') return dw_t(x.details && x.details.on ? 'Разрешено отмечаться без геолокации' : 'Отметка снова с проверкой места');
+    return t0.apply(this, arguments);
+  };
+})();
+
+/* ---------- 3. «Пульт → Приход и уход»: спокойная метка ---------- */
+(function () {
+  if (typeof attExtra !== 'function') return;
+  var a0 = attExtra;
+  attExtra = function (a) {
+    var r = a0.apply(this, arguments);
+    if (a && a.geo_free) r = ' <span class="chip t-mute"><span>' + dw_h('без геолокации (разрешено)') + '</span></span>' + (r || '');
+    return r;
+  };
+})();
+if (/[?&]w4dbg/.test(location.search)) window.__dw = { S: S, sb: sb, DW: DW, free: function (e) { return dw_free(e); }, meFree: function () { return dw_meFree(); }, go: function (v) { return go(v); } };
 
 
 /* ===== ВОЛНА 4 · 93-u45.js ===== */
