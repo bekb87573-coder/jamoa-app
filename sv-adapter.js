@@ -123,8 +123,9 @@
         SV.presets = {}; pr.forEach(function (p) { SV.presets[p.id] = p; });
         SV.T.shift_types = pr.map(function (p) { return { id: p.id, dept_id: dl(p.dept_id), code: 'p' + p.id, name: p.name, name_uz: p.name_uz, start_time: t8(p.t_start), end_time: t8(p.t_end), active: p.active !== false, sort: p.sort, is_night: p.is_night }; });
         var pf = Object.assign({}, ven.prefs || {});
+        var vpx = dnVenueProfile(ven, pf, mem, dep, pos);   /* dn (п. 3 аудита): анкета заведения — люди по службам и «веду сам» из членов заведения */
         SV.T.hotel_settings = [{ id: 1, lat: ven.lat, lng: ven.lng, radius_m: ven.radius_m, late_grace_min: ven.late_grace_min, require_geo: ven.geo_mode !== 'off', require_wifi: false,
-          prefs: Object.assign(pf, { org_name: ven.name, org_type: ven.type, venue_profile: Object.assign({ type: ven.type, svc: dep.filter(function (d) { return d.code && d.code !== 'dir'; }).map(function (d) { return d.code; }) }, pf.venue_profile && pf.venue_profile.type === ven.type ? pf.venue_profile : {}),
+          prefs: Object.assign(pf, { org_name: ven.name, org_type: ven.type, venue_profile: vpx,
             geo_mode: ven.geo_mode, photo_in: ven.photo_in, early_clock_min: ven.early_clock_min, auto_close_h: ven.auto_close_h, health_log: ven.health_log, kiosk_on: ven.kiosk_on, adv_limit_pct: ven.adv_limit_pct,
             mgr_sees_earn: ven.mgr_sees_earn, forgot_days: ven.forgot_days, noshow_min: ven.noshow_min, foreign_reg_h: ven.foreign_reg_h, offline_max_min: ven.offline_max_min, adj_max: ven.adj_max, mgr_bonus_max: ven.mgr_bonus_max, has_point: ven.has_point != null ? ven.has_point : ven.lat != null,
             cb_radius: ven.radius_m, cb_early_min: ven.early_clock_min, cb_auto_h: ven.auto_close_h, cb_health: ven.health_log, cb_kiosk: ven.kiosk_on, late_grace_min: ven.late_grace_min }) }];
@@ -210,7 +211,26 @@
         var L = await q('payslips', function (b) { return b.order('ym', { ascending: false }).limit(400); });
         var ids = L.map(function (p) { return p.id; }), ln = ids.length ? await q('payslip_lines', function (b) { return b.in('payslip_id', ids).order('sort'); }) : [];
         SV.T.payslips = L.map(function (p) { return Object.assign({}, p, { employee_id: p.member_id, accrued: +p.accrued, deducted: +p.deducted, to_pay: +p.to_pay, oklad: +p.oklad }); });
-        SV.T.payslip_lines = ln.map(function (l) { return Object.assign({}, l, { employee_id: l.member_id, amount: +l.amount * (l.sign < 0 && ['fine', 'advance', 'other_minus', 'debt_out', 'debt_in'].indexOf(l.kind) < 0 ? -1 : 1) }); });
+        var ymOf = {}; L.forEach(function (p) { ymOf[p.id] = p.ym; });
+        /* dn: вопросы к расчётному листу (сотрудник — свои, владелец/бухгалтер — все; статус new → open, как в демо) */
+        /* dn: закрытые месяцы (кнопка «Закрыть месяц» в «Расчётных листах»; читают владелец и бухгалтер) */
+        try { SV.T.month_closes = await q('month_closes'); } catch (e) { SV.T.month_closes = []; }
+        var QS = []; try { QS = await q('payslip_questions', function (b) { return b.order('created_at', { ascending: false }).limit(300); }); } catch (e) { QS = []; }
+        SV.T.payslip_questions = QS.map(function (x) { return { id: x.id, payslip_id: x.payslip_id, employee_id: x.member_id, ym: ymOf[x.payslip_id] || null, line_kind: x.line_kind, text: x.text,
+          status: x.status === 'new' ? 'open' : x.status, sv_status: x.status, answer: x.answer, answered_by: x.answered_by, answered_at: x.answered_at, created_at: x.created_at }; });
+        SV.T.payslip_lines = ln.map(function (l) { return Object.assign({ ym: ymOf[l.payslip_id] }, l, { employee_id: l.member_id, amount: +l.amount * (l.sign < 0 && ['fine', 'advance', 'other_minus', 'debt_out', 'debt_in'].indexOf(l.kind) < 0 ? -1 : 1) }); });
+      },
+      /* dn: банк вопросов теста (карточка «Банк вопросов» у владельца); сотруднику таблица закрыта — пусто */
+      qbank: async function () {
+        if (!SV.me || (SV.me.role !== 'owner' && SV.me.role !== 'manager')) { SV.T.quiz_questions = []; return; }
+        var L = await q('quiz_questions', function (b) { return b.order('id').limit(5000); });
+        SV.T.quiz_questions = L.filter(function (x) { return x.skill_qid == null; }).map(function (x) { return { id: x.id, cat: x.cat, dept_id: dl(x.dept_id), q_ru: x.q_ru, q_uz: x.q_uz, opts_ru: x.opts_ru, opts_uz: x.opts_uz, correct: x.correct, expl_ru: x.expl_ru, expl_uz: x.expl_uz, active: x.active !== false }; });
+      },
+      /* dn (п. 7): телефоны сотрудников — rpc devices_list (0018), хэш телефона не приходит никогда */
+      dev: async function () {
+        if (!SV.me || (SV.me.role !== 'owner' && SV.me.role !== 'manager')) { SV.T.staff_devices = []; return; }
+        var r = await real.rpc('devices_list'); if (r.error) throw r.error;
+        SV.T.staff_devices = (r.data || []).map(function (d) { return { id: d.id, employee_id: d.member_id, label: d.label, first_seen: d.first_seen, last_seen: d.last_seen, blocked: !!d.blocked, revoked_at: null }; });
       },
       prefs: async function () {
         var L = await q('notify_prefs');
@@ -224,12 +244,34 @@
         (r.data || []).forEach(function (x, i) { if (x && x.signedUrl) L[i].thumb = x.signedUrl; });
       } catch (e) {}
     }
+    /* dn (п. 3): venue_profile на сервере. Приложение считает по анкете людей (vTotal: «Карта сотрудников» от 5 человек, «Сотрудников N»)
+       и «веду сам» (vp.self: 'acc' — владелец сам готовит расчётные листы). На сервере анкета берётся из настоящих людей заведения:
+       staff[код службы] = [[должность, сколько]]; если бухгалтера нет — self += 'acc'. Сохранённые владельцем поля анкеты остаются. */
+    function dnVenueProfile(ven, pf, mem, dep, pos) {
+      var saved = pf.venue_profile && pf.venue_profile.type === ven.type ? pf.venue_profile : {};
+      var vp = Object.assign({ type: ven.type, svc: dep.filter(function (d) { return d.code && d.code !== 'dir'; }).map(function (d) { return dl(d.id); }) }, saved);
+      vp.svc = (vp.svc || []).slice();
+      var pn = {}; pos.forEach(function (p) { pn[p.id] = p.name; });
+      var act = mem.filter(function (m) { return !m.archived_at && m.role !== 'owner'; }), st = {};
+      act.forEach(function (m) {
+        var c = m.dept_id != null ? dl(m.dept_id) : 'other'; if (c === 'dir') c = 'adm';
+        if (vp.svc.indexOf(c) < 0) vp.svc.push(c);
+        var n = pn[m.position_id] || 'Сотрудник', L = st[c] = st[c] || [], row = L.filter(function (x) { return x[0] === n; })[0];
+        if (row) row[1]++; else L.push([n, 1]);
+      });
+      if (act.length) vp.staff = st; else vp.staff = saved.staff || {};
+      var hasAcc = act.some(function (m) { return m.role === 'accountant' || /бухгалтер/i.test(pn[m.position_id] || ''); });
+      vp.self = Array.isArray(saved.self) ? saved.self.slice() : [];
+      if (!hasAcc && vp.self.indexOf('acc') < 0) vp.self.push('acc');
+      return vp;
+    }
     /* 0012: select('*') по venues запрещён (lat/lng скрыты) — только перечень колонок */
     var VCOLS = 'id,name,type,lang,tz,radius_m,geo_mode,photo_in,late_grace_min,early_clock_min,auto_close_h,forgot_days,noshow_min,health_log,health_dept_ids,kiosk_on,adv_limit_pct,mgr_sees_earn,foreign_reg_h,prefs,district,is_demo,active';
     var TD = { employees: 'base', departments: 'base', positions: 'base', shift_types: 'base', hotel_settings: 'base', schedule: 'sched', attendance: 'att', notifications: 'notif',
       tasks: 'tasks', task_items: 'tasks', task_photos: 'tasks', task_events: 'tasks', task_templates: 'tasks', task_submits: 'tasks', cd_ck: 'tasks', cd_ph: 'tasks',
       announcements: 'ann', announcement_reads: 'ann', leave_requests: 'req', schedule_requests: 'req', shift_exchanges: 'req', cb_forgot: 'req', ca_advances: 'req', ca_adj: 'req',
-      health_checks: 'req', quiz_attempts: 'quiz', shift_swaps: 'subs', shift_swap_offers: 'subs', payslips: 'pay', payslip_lines: 'pay', jc_nprefs: 'prefs' };
+      health_checks: 'req', quiz_attempts: 'quiz', shift_swaps: 'subs', shift_swap_offers: 'subs', payslips: 'pay', payslip_lines: 'pay', jc_nprefs: 'prefs',
+      payslip_questions: 'pay', quiz_questions: 'qbank', staff_devices: 'dev' };   /* dn: вопросы к листу, банк теста, телефоны */
     /* таблицы только на этом телефоне (серверу не нужны: сервер сам делает напоминания, сводки, дубли уведомлений) */
     var LOCAL = { jc_remind: 1, late_warns: 1, template_skips: 1, shift_photos: 1, __jc: 1, __w3: 1, __w4fx: 1, __w4i: 1, __w4r: 1, cb_pins: 1, problem_reports: 1 };
     SV.TD = TD;
@@ -237,7 +279,8 @@
     function memRow(m, heads) {
       return { id: m.id, user_id: m.user_id, first_name: m.first_name, last_name: m.last_name || '', gender: m.gender, login: m.login, phone: m.phone, photo: m.photo_path, photo_path: m.photo_path,
         dept_id: dl(m.dept_id), position_id: m.position_id, manager_id: m.manager_id, role: role(m.role), jrole: m.role, hire_date: m.hire_date, lang: m.lang,
-        active: !m.archived_at, archived_at: m.archived_at, must_change_password: !!m.must_change_password, lead_dept: (heads || {})[m.id] || null, default_preset_id: m.default_preset_id };
+        active: !m.archived_at, archived_at: m.archived_at, must_change_password: !!m.must_change_password, lead_dept: (heads || {})[m.id] || null, default_preset_id: m.default_preset_id,
+        birth_date: m.birth_date || null, tg_username: m.tg_username || null };   /* dn: 0018 — день рождения и ник Telegram */
     }
     function schKind(s) {
       if (s.kind === 'work') return s.preset_id ? 'p' + s.preset_id : 'u';
@@ -251,7 +294,7 @@
     function attRow(a, kind) {
       return { id: a.id, employee_id: a.member_id, day: a.day, clock_in: a.clock_in, clock_out: a.clock_out, is_late: (a.late_min || 0) > 0, late_min: a.late_min || 0,
         shift_start: hms(a.plan_start), shift_end: hms(a.plan_end), shift_kind: kind || (a.plan_start ? 'u' : null), worked_min: a.worked_min, early_min: a.early_min || 0, left_early: (a.early_min || 0) > 0,
-        overtime_min: a.overtime_min || 0, night_min: a.night_min || 0, late_why: a.late_why, explain_text: a.late_note, explain_at: a.late_why || a.late_note ? (a.updated_at || a.clock_in) : null,
+        overtime_min: a.overtime_min || 0, night_min: a.night_min || 0, late_why: a.late_why, explain_text: a.late_note, explain_at: a.late_explained_at || (a.late_why || a.late_note ? (a.updated_at || a.clock_in) : null), mgr_ok_at: a.late_ok_at || null, mgr_ok_by: a.late_ok_by || null, mgr_ok_note: a.late_ok_note || null, /* 92m: 0017 */
         cb_auto: !!a.auto_closed, cb_off: !!a.offline, offline: !!a.offline, time_status: a.time_status || 'ok', delayed: a.time_status === 'pending', in_tap_at: a.in_tap_at, in_sent_at: a.in_sent_at,
         out_zone: a.zone_status !== 'ok', zone_status: a.zone_status, zone_ok: a.zone_status === 'approved', zone_no: a.zone_status === 'rejected', zone_m: a.in_dist_m,
         cb_zone: a.zone_status !== 'ok' ? { dist: a.in_dist_m, lat: a.in_lat, lng: a.in_lng, why: a.in_zone === 'nogps' ? 'nogps' : 'far' } : null,
@@ -343,12 +386,22 @@
 
     /* ----- переводчики записи: учебная таблица → rpc / таблица сервера ----- */
     var KIND2 = { o: 'off', h: 'vacation', b: 'sick' };
-    async function schPut(r) {
+    async function schPut(r) { return call('schedule_set', schP(r)); }
+    /* dn (п. 9): вся неделя одной rpc schedule_set_many (0018); если её ещё нет на сервере — по одной клетке, как раньше */
+    async function schPutMany(L) {
+      if (L.length < 2) { for (var i = 0; i < L.length; i++) await schPut(L[i]); return; }
+      var rowsP = L.map(function (r) { var p = schP(r); return { member: p.p_member, day: p.p_day, kind: p.p_kind, preset: p.p_preset, start: p.p_start, end: p.p_end }; });
+      var x = await real.rpc('schedule_set_many', { p_rows: rowsP });
+      if (!x.error) return;
+      if (x.error.code === 'PGRST202' || /schedule_set_many/.test(x.error.message || '')) { miss('rpc', 'schedule_set_many', 'нет на сервере — клетки по одной'); for (var j = 0; j < L.length; j++) await schPut(L[j]); return; }
+      throw x.error;
+    }
+    function schP(r) {
       var k = r.kind, p = { p_member: r.employee_id, p_day: r.day, p_kind: 'work', p_preset: null, p_start: r.t_start ? String(r.t_start).slice(0, 5) : null, p_end: r.t_end ? String(r.t_end).slice(0, 5) : null, p_week: false };
       if (KIND2[k]) { p.p_kind = KIND2[k]; p.p_start = p.p_end = null; }
       else if (/^p\d+$/.test(k)) p.p_preset = +k.slice(1);
       else if (!p.p_start) { var e = (SV.T.employees || []).filter(function (x) { return x.id === r.employee_id; })[0]; var st = (SV.T.shift_types || []).filter(function (s) { return e && s.dept_id === e.dept_id && s.active; }); if (st.length) p.p_preset = st[0].id; }
-      return call('schedule_set', p);
+      return p;
     }
     var WR = {
       schedule: async function (qq) {
@@ -357,9 +410,9 @@
           var p0 = qq.payload, L = target(qq, 'schedule');
           if (p0.confirmed && Object.keys(p0).every(function (k) { return k === 'confirmed' || k === 'confirmed_at'; })) { miss('write', 'schedule.confirmed', 'подтверждение смены идёт через notify_answer'); return {}; }
           if (!L.length && qq.val('employee_id') && qq.val('day')) L = [{ employee_id: qq.val('employee_id'), day: qq.val('day'), kind: 'u' }];
-          for (var i = 0; i < L.length; i++) await schPut(Object.assign({}, L[i], p0)); return {};
+          await schPutMany(L.map(function (x) { return Object.assign({}, x, p0); })); return {};
         }
-        for (var j = 0; j < qq.payload.length; j++) await schPut(qq.payload[j]); return {};
+        await schPutMany(qq.payload); return {};
       },
       shift_types: async function (qq) {
         if (qq.op === 'delete') { var L0 = target(qq, 'shift_types'); for (var a = 0; a < L0.length; a++) await call('preset_delete', { p_id: L0[a].id, p_force: false }); return {}; }
@@ -378,7 +431,7 @@
         await load('base', true); return { rows: rows('shift_types', ids) };
       },
       notifications: async function (qq) {
-        if (qq.op === 'insert') { miss('write', 'notifications.insert', 'уведомления создаёт сервер внутри rpc (jamoa.notify)'); return { rows: qq.payload.map(function (p, i) { return Object.assign({ id: -(Date.now() + i), at: new Date().toISOString() }, p); }) }; }
+        if (qq.op === 'insert') return notifySend(qq.payload);
         if (qq.op === 'update') {
           var p = qq.payload, L = target(qq, 'notifications'), ids = L.map(function (n) { return n.id; });
           if (p.ans || p.answer) { for (var i = 0; i < ids.length; i++) await call('notify_answer', { p_id: ids[i], p_answer: (p.ans || p.answer) === 'late' ? 'late' : 'coming', p_minutes: p.minutes || null }); return {}; }
@@ -508,6 +561,8 @@
       attendance: async function (qq) {
         /* отметки пишет только сервер (rpc clock / clock_request_decide / zone_decide / late_explain); прямые правки демо — без действия */
         var p = qq.payload || {}, L = qq.op === 'update' ? target(qq, 'attendance') : [];
+        /* 92m: «Подтвердить / причина принята» (mgr_ok_at) — rpc late_accept (0017); у отметки вне зоны дальше идёт zone_decide */
+        if (qq.op === 'update' && p.mgr_ok_at !== undefined) { for (var k = 0; k < L.length; k++) if ((L[k].late_min || 0) > 0) await call('late_accept', { p_att: L[k].id, p_yes: !!p.mgr_ok_at, p_note: p.mgr_ok_note || null }); if (!p.zone_ok && !p.zone_no) return {}; }
         if (qq.op === 'update' && (p.zone_ok || p.zone_no)) { for (var i = 0; i < L.length; i++) await call('zone_decide', { p_att: L[i].id, p_yes: !!p.zone_ok, p_note: p.zone_note || null }); return {}; }
         if (qq.op === 'update' && (p.explain_text || p.late_why)) { for (var j = 0; j < L.length; j++) await call('late_explain', { p_att: L[j].id, p_why: lateWhy(p.late_why), p_note: p.explain_text || null }); return {}; }
         miss('write', 'attendance.' + qq.op, 'отметки меняет только сервер'); return {};
@@ -521,11 +576,40 @@
       quiz_attempts: async function () { miss('write', 'quiz_attempts', 'тест пишет rpc quiz_submit'); return {}; },
       payslips: async function () { miss('write', 'payslips', 'листы — rpc payslip_*'); return {}; },
       payslip_lines: async function () { miss('write', 'payslip_lines', 'строки листа считает сервер'); return {}; },
+      staff_devices: async function (qq) {
+        if (qq.op !== 'update') { miss('write', 'staff_devices.' + qq.op, 'телефон привязывает отметка'); return {}; }
+        var L = target(qq, 'staff_devices'), bl = !!qq.payload.blocked;
+        for (var i = 0; i < L.length; i++) await call(bl ? 'device_block' : 'device_reset', bl ? { p_id: L[i].id, p_on: true } : { p_id: L[i].id });
+        return { rows: L };
+      },
       employees: async function (qq) {
         if (qq.op === 'update') { var L = target(qq, 'employees'); for (var i = 0; i < L.length; i++) { var o = pick(qq.payload, ['first_name', 'last_name', 'phone', 'hire_date', 'gender', 'lang']); if (qq.payload.photo !== undefined) o.photo_path = qq.payload.photo; if (Object.keys(o).length) await call('member_update', { p_id: L[i].id, p: o }); } await load('base', true); return {}; }
         miss('write', 'employees.' + qq.op, 'сотрудника добавляет staff-admin → member_invite'); return {};
       }
     };
+    /* dn (п. 4): уведомление с телефона → rpc notify_send (0018: права — владелец всем, руководитель своей команде, сотрудник своему руководителю).
+       «Прочитайте объявление» → ann_remind (сервер сам находит непрочитавших; один вызов на объявление за 10 с). */
+    var SREFT = { xchg: 'swap', swap: 'sub' }, annRem = {};
+    async function notifySend(L) {
+      var out = [], err0 = null, mine = false;
+      for (var i = 0; i < L.length; i++) {
+        var p = L[i], to = p.employee_id || p.member_id, fake = Object.assign({ id: -(Date.now() + i), at: new Date().toISOString() }, p);
+        if (!to) continue;
+        if (p.kind === 'ann_rem' && p.ref_type === 'ann' && p.ref_id != null) {
+          var k = String(p.ref_id); if (!annRem[k] || Date.now() - annRem[k] > 10000) { annRem[k] = Date.now(); var a = await real.rpc('ann_remind', { p_id: +p.ref_id }); if (a.error) { err0 = a.error; continue; } }
+          out.push(fake); continue;
+        }
+        var rt = p.ref_type ? (SREFT[p.ref_type] || String(p.ref_type)).toLowerCase() : null; if (rt && !/^[a-z_]{1,32}$/.test(rt)) rt = null;
+        var r = await real.rpc('notify_send', { p_to: [to], p_kind: p.kind || 'info', p_title: String(p.title || '').slice(0, 200) || 'Jamoa', p_body: p.body ? String(p.body).slice(0, 2000) : null,
+          p_ref_type: rt, p_ref_id: p.ref_id == null ? null : String(p.ref_id).slice(0, 64), p_urgent: !!p.urgent });
+        if (r.error) { if (r.error.code === 'PGRST202') miss('rpc', 'notify_send', 'нет на сервере (0018 не загружена)'); err0 = r.error; continue; }
+        var ids = (r.data && r.data.sent) || []; if (SV.me && to === SV.me.id) mine = true;
+        out.push(ids.length ? Object.assign(fake, { id: ids[0] }) : fake);
+      }
+      if (mine) SV.stale('notif');
+      if (!out.length && err0) return { error: err0 };
+      return { rows: out };
+    }
     function pick(o, ks) { var r = {}; ks.forEach(function (k) { if (o[k] !== undefined) r[k] = o[k]; }); return r; }
     function lateWhy(w) { return ['transport', 'family', 'warned', 'other'].indexOf(w) >= 0 ? w : 'other'; }
     async function adjAdd(r) {
@@ -558,13 +642,15 @@
         if (a === null) { top.geo_mode = v ? 'soft' : 'off'; return; }
         if (a) { if (a === 'radius_m') v = Math.max(25, Math.min(500, +v || 150)); top[a] = v; pf[k] = v; return; }
         if (KEYS[k]) { if (k === 'radius_m') v = Math.max(25, Math.min(500, +v || 150)); top[k] = v; return; }
-        if (k === 'venue_profile' && v && typeof v === 'object') { v = Object.assign({}, v); delete v.staff; }
+        if (k === 'venue_profile' && v && typeof v === 'object') { v = Object.assign({}, v); }   /* dn: анкету сохраняем целиком (staff нужен «Карте» и счётчикам) */
         pf[k] = v;
       });
       if (Object.keys(pf).length) top.prefs = pf;
       if (!Object.keys(top).length) return {};
-      if (!SV.me || SV.me.role !== 'owner') { miss('rpc', 'venue_settings_save(не владелец)', 'настройки сохраняет только владелец'); return {}; }
-      var d = await call('venue_settings_save', { p: top }); await load('base', true); return { data: d };
+      if (!SV.me || SV.me.role !== 'owner') { miss('rpc', 'venue_settings_save(не владелец)', 'настройки сохраняет только владелец'); return { error: E('Настройки заведения меняет владелец', 'no_rights') }; }   /* dn: не молча */
+      var d = await call('venue_settings_save', { p: top }); await load('base', true);
+      if (pf.earn_rules && SV.hooks.paySync) { try { await SV.hooks.paySync(pf.earn_rules); } catch (e) { SV.log.push({ t: 'pay_sync', e: e && e.message }); } }   /* dn (п. 2) */
+      return { data: d };
     }
     SV.settingsSave = settingsSave;
 
@@ -576,20 +662,21 @@
       clock: 1, clock_request: 1, clock_request_decide: 1, zone_decide: 1, health_decide: 1, pin_set: 1, kiosk_pair: 1, kiosk_unpair: 1, kiosk_mark: 1, delay_decide: 1, adj_decide: 1, checklist_save: 1, quiz_question_save: 1,
       notify_read: 1, notify_answer: 1, ann_create: 1, ann_unread: 1, ann_remind: 1, venue_settings_save: 1, member_invite: 1, invite_accept: 1, member_update: 1, member_transfer: 1, member_archive: 1, pay_rule_set: 1, my_profile: 1,
       venue_create: 1, colleagues: 1, quiz_reset: 1, founder_summary: 1, founder_venues: 1,
-      task_update: 1, task_reopen: 1, swap_cancel: 1, founder_report: 1, notify_me: 1, sub_candidates: 1, sub_request: 1, sub_offer_more: 1, sub_take: 1, sub_cancel: 1 };
+      pay_sync: 1, notify_send: 1, devices_list: 1, device_reset: 1, device_block: 1, schedule_set_many: 1, set_my_birth_date: 1, set_my_contact: 1,   /* dn: 0018 */
+      task_update: 1, task_reopen: 1, swap_cancel: 1, founder_report: 1, notify_me: 1, sub_candidates: 1, sub_request: 1, sub_offer_more: 1, sub_take: 1, sub_cancel: 1, late_accept: 1, late_remind: 1 /* 92m: 0017 */ };
     var AFTER = { leave_decide: ['req', 'sched'], ann_ack: ['ann'], swap_answer: ['req'], swap_decide: ['req', 'sched'], payslip_publish: ['pay'], payslip_paid: ['pay'], payslip_prepare: ['pay'], adj_add: ['req'], adj_cancel: ['req'],
-      advance_request: ['req'], advance_decide: ['req'], adj_decide: ['req'], delay_decide: ['att'], kiosk_mark: ['att'], advance_paid: ['req'], clock: ['att'], clock_request_decide: ['req', 'att'], zone_decide: ['att'], late_explain: ['att'], schedule_set: ['sched'], schedule_clear: ['sched'],
+      advance_request: ['req'], advance_decide: ['req'], adj_decide: ['req'], delay_decide: ['att'], kiosk_mark: ['att'], advance_paid: ['req'], clock: ['att'], clock_request_decide: ['req', 'att'], zone_decide: ['att'], late_explain: ['att'], late_accept: ['att'], schedule_set: ['sched'], schedule_clear: ['sched'],
       notify_read: ['notif'], notify_answer: ['notif', 'sched'], task_take: ['tasks'], task_submit: ['tasks'], task_review: ['tasks'], task_cancel: ['tasks'], task_item_done: ['tasks'], task_photo_add: ['tasks'], tasks_generate_daily: ['tasks'],
       preset_save: ['base'], preset_delete: ['base'], presets_reset: ['base'], member_update: ['base'], member_transfer: ['base'], member_archive: ['base'], venue_settings_save: ['base'], quiz_submit: ['quiz'], password_changed: ['base'],
       task_update: ['tasks'], task_reopen: ['tasks'], swap_request: ['req'], swap_cancel: ['req'], sub_request: ['subs', 'sched'], sub_offer_more: ['subs'], sub_take: ['subs', 'sched'], sub_cancel: ['subs', 'sched'],
-      kiosk_pair: ['base'], kiosk_unpair: ['base'], pin_set: ['base'] };
+      kiosk_pair: ['base'], kiosk_unpair: ['base'], pin_set: ['base'], device_reset: ['dev'], device_block: ['dev'], month_close: ['pay'], month_reopen: ['pay'], pay_sync: ['pay'], quiz_question_save: ['qbank'], quiz_import: ['qbank'] };
     function ok(d) { return { data: d === undefined ? null : d, error: null }; }
     async function rr(n, a) { var r = await real.rpc(n, a || {}); if (!r.error && AFTER[n]) SV.stale.apply(null, AFTER[n]); return r; }
     var RPC = {
       task_status: async function (a) { await load('tasks'); var t = rows('tasks', a.p_id)[0]; if (!t) return { data: null, error: E('Задача не найдена', 'not_found') }; await taskStatus(t, a.p_status, a); await load('tasks', true); return ok(rows('tasks', a.p_id)[0] || null); },
       generate_daily_tasks: async function () { if (!SV.me || SV.me.role === 'staff' || SV.me.role === 'accountant') return ok(0); var r = await real.rpc('tasks_generate_daily', { p_day: tday() }); SV.stale('tasks'); return r.error ? ok(0) : r; },
       late_explain: async function (a) { var LW = { 'Транспорт, пробка': 'transport', 'Семейные обстоятельства': 'family', 'Предупредил руководителя': 'warned' }, w = a.p_why || LW[a.p_text] || null; /* 92m: готовая причина из 92b приходит текстом — сохраняем кодом, без дубля в late_note */ return rr('late_explain', { p_att: a.p_att, p_why: lateWhy(w), p_note: w && w !== 'other' ? null : (a.p_text || a.p_note || null) }); },
-      prefs_save: async function (a) { try { var r = await settingsSave(a.p || {}); var hs = (SV.T.hotel_settings || [])[0] || {}; return ok(Object.assign({ radius_m: hs.radius_m, late_grace_min: hs.late_grace_min, require_geo: hs.require_geo }, hs.prefs || {}, r && r.data ? {} : {})); } catch (e) { return { data: null, error: e }; } },
+      prefs_save: async function (a) { try { var r = await settingsSave(a.p || {}); if (r && r.error) return { data: null, error: r.error }; var hs = (SV.T.hotel_settings || [])[0] || {}; return ok(Object.assign({ radius_m: hs.radius_m, late_grace_min: hs.late_grace_min, require_geo: hs.require_geo }, hs.prefs || {}, r && r.data ? {} : {})); } catch (e) { return { data: null, error: e }; } },
       quiz_today: async function (a) {
         var hs = (SV.T.hotel_settings || [])[0] || {}, n = Math.max(1, Math.min(20, +(a && a.p_count) || +((hs.prefs || {}).quiz_count) || 10));
         var r = await real.rpc('quiz_today', { p_count: n }); if (r.error) return r;
@@ -638,6 +725,15 @@
       mgr_brief: async function () { await load('base'); var r = await real.rpc('mgr_brief'); if (r.error) return r; var d = r.data || {}; d.swap = briefSwap(d.swap); return ok(d); },
       team_rating: async function (a) { await load('base'); var r = await real.rpc('team_rating', { p_from: a.p_from, p_to: a.p_to }); if (r.error) return r; return ok((r.data || []).map(function (x) { return Object.assign({}, x, { dept_id: dl(x.dept_id) }); })); },
       payslip_prepare: async function (a) { return rr('payslip_prepare', { p_ym: a.p_ym, p_member: a.p_member || null }); },
+      /* dn: демо шлёт p_line, сервер ждёт p_line_kind */
+      /* «Фонд оплаты» считается в приложении по строкам листов (payslip_lines.ym) — отдельной rpc не нужно */
+      payroll_fund: async function () { return ok(null); },
+      payslip_ask: async function (a) { var r = await rr('payslip_ask', { p_payslip: a.p_payslip, p_line_kind: a.p_line_kind || a.p_line || null, p_text: a.p_text }); SV.stale('pay'); return r; },
+      payslip_answer: async function (a) { var r = await rr('payslip_answer', { p_id: a.p_id, p_text: a.p_text }); SV.stale('pay'); return r; },
+      /* dn (п. 9): публикация недели — отдел демо → id сервера */
+      schedule_publish: async function (a) { var r = await rr('schedule_publish', { p_week_start: a.p_week_start, p_dept: a.p_dept == null || a.p_dept === 'all' ? null : ds(a.p_dept), p_confirm_holes: a.p_confirm_holes !== false }); SV.stale('notif'); return r; },
+      /* dn (п. 7): «Попросить руководителя сбросить телефон» — хэш как у отметки */
+      device_ask: async function (a) { var dev = a.p_device_id ? await sha256('jamoa|' + a.p_device_id) : null; return rr('device_ask', { p_device: dev }); },
       register_push: async function (a) { if (!SV.me) return ok(null); var r = await real.from('push_subscriptions').upsert({ venue_id: V(), member_id: SV.me.id, endpoint: a.p_endpoint, p256dh: a.p_p256dh, auth_key: a.p_auth, ua: a.p_ua || null }, { onConflict: 'member_id,endpoint' }); return r.error ? r : ok(true); },
       brief_to_me: async function () { miss('rpc', 'brief_to_me', 'сводку в Telegram сервер не шлёт — кнопка скрыта в режиме сервера'); return ok(null); },
       native_token_forget: async function () { return ok(null); },
@@ -678,10 +774,13 @@
       async function fd(r) { if (r.error) { var m = r.error.message; try { var j = r.error.context && r.error.context.json ? await r.error.context.json() : null; if (j && j.message) m = j.message; } catch (e) {} return { ok: false, error: m, message: m }; } return r.data; }
       if (b.action === 'create') {
         var p = rows('positions', b.position_id)[0] || null, rl = b.role === 'manager' || (p && p.access === 'manager') ? 'manager' : b.role === 'accountant' ? 'accountant' : 'staff';
-        var r = await real.rpc('member_invite', { p_first: b.first_name, p_last: b.last_name || '', p_gender: b.gender || null, p_phone: b.phone || null, p_dept: p ? ds(p.dept_id) : ds(b.dept_id), p_position: b.position_id || null, p_role: rl, p_manager: b.manager_id || null, p_preset: b.preset_id || null, p_rate: b.rate || null, p_scheme: b.scheme || null });
+        var r = await real.rpc('member_invite', { p_first: b.first_name, p_last: b.last_name || '', p_gender: b.gender || null, p_phone: b.phone || null, p_dept: p ? ds(p.dept_id) : ds(b.dept_id), p_position: b.position_id || null, p_role: rl, p_manager: b.manager_id || null, p_preset: b.preset_id || null,
+          p_rate: SV.me && (SV.me.role === 'owner' || SV.me.role === 'accountant') ? (+b.rate || +b.cf_salary || null) : null,   /* dn (п. 2): оклад из приглашения (cf_salary) */
+          p_scheme: b.scheme || (SV.hooks.schemeFor ? SV.hooks.schemeFor(b.position_id) : null) || 'month' });
         if (r.error) return { data: { ok: false, error: r.error.message, message: r.error.message }, error: null };
         var mid = r.data && r.data.member_id, a = await fd(await A({ action: 'create', member_id: mid }));
         await load('base', true);
+        if (SV.hooks.paySync) { try { await SV.hooks.paySync(); } catch (e) {} }   /* dn: правило должности новичку (если оклад не указан) */
         if (!a || !a.ok) return { data: { ok: false, id: mid, login: r.data.login, error: (a && a.message) || 'Вход не создан — нажмите «Сбросить пароль» в карточке', message: (a && a.message) || '' }, error: null };
         return { data: { ok: true, id: mid, login: a.login || r.data.login, password: a.password, code: r.data.code, warn_phone: r.data.warn_phone }, error: null };
       }
@@ -872,3 +971,164 @@
     } });
   }
 })(typeof window !== 'undefined' ? window : globalThis);
+
+/* === 92o features === */
+/* Часть do (92o-features, 0019_features.sql): «Экстренно», «Сообщить о проблеме», «Инструкции», переписка в задаче, «Отчёты», проверочный push.
+   Блок не трогает код выше: оборачивает SVAdapter.make и supabase.createClient и дополняет объект SV —
+   exec (свои таблицы раньше общего кода), rpcMap (свои rpc), store (анонимное фото, тип файла без «;codecs=…»). */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__do) return; A.__do = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__do) return cl; SV.__do = true;
+    var real = SV.real, TTL = 4000, C = { ev: null, evAt: 0 };
+    function V() { return SV.venueId; }
+    function E(m, c) { return { message: m, details: c || 'sv', code: c || 'sv' }; }
+    function ok(d) { return { data: d === undefined ? null : d, error: null }; }
+    function dl(id) { return id == null ? null : SV.dep.toLoc[id] || ('d' + id); }
+    function ds(loc) { if (loc == null || loc === '') return null; if (SV.dep.toSrv[loc] != null) return SV.dep.toSrv[loc]; return /^d?\d+$/.test(String(loc)) ? +String(loc).replace(/^d/, '') : null; }
+    function iso(t) { return t ? new Date(t).toISOString() : t; }
+    function many(qq, rows) { var r = qq.pick(rows); return r; }
+    async function rpc(n, a) { var r = await real.rpc(n, a || {}); return r; }
+    function fpath(bucket, p) { if (!p) return null; return SV.pmap[bucket + '|' + p] || SV.spath(bucket, p); }
+    function noWrite(t) { return { data: null, error: E('Запись «' + t + '» идёт через сервер', 'bad_input') }; }
+
+    /* ----- «Экстренно»: события и отметки ----- */
+    function evRow(e) { return Object.assign({}, e, { started_at: iso(e.started_at), ended_at: iso(e.ended_at) }); }
+    async function evLoad(force) {
+      if (!V()) return [];
+      if (!force && C.ev && Date.now() - C.evAt < TTL && C.evV === V()) return C.ev;
+      var r = await real.from('emergency_events').select('*').eq('venue_id', V()).gte('started_at', new Date(Date.now() - 400 * 864e5).toISOString()).order('started_at', { ascending: false }).limit(200);
+      if (r.error) throw r.error;
+      C.ev = (r.data || []).map(evRow); C.evAt = Date.now(); C.evV = V(); return C.ev;
+    }
+    function evStale() { C.evAt = 0; }
+    var TBL = {
+      emergency_events: async function (qq) { if (qq.op !== 'select') return noWrite('emergency_events'); return many(qq, await evLoad(qq.val('id') !== undefined)); },
+      emergency_marks: async function (qq) {
+        if (qq.op !== 'select') return noWrite('emergency_marks');
+        var id = qq.val('event_id'); if (id === undefined || !V()) return many(qq, []);
+        var r = await real.from('emergency_marks').select('*').eq('venue_id', V()).eq('event_id', +id).order('at').limit(1000); if (r.error) throw r.error;
+        return many(qq, (r.data || []).map(function (m) { return { id: m.id, event_id: m.event_id, kind: m.kind, ref: m.ref, text: m.text, at: iso(m.at), by: m.by_member, on: m.is_on !== false }; }));
+      },
+      /* «Сообщить о проблеме»: чтение — rpc list_problems (анонимность), запись — problem_create */
+      problem_reports: async function (qq) {
+        if (qq.op === 'insert') {
+          var out = [];
+          for (var i = 0; i < qq.payload.length; i++) {
+            var p = qq.payload[i];
+            var r = await rpc('problem_create', { p_category: p.category || 'Другое', p_text: p.text, p_place: p.place || null, p_anonymous: !!p.anonymous, p_photo_path: fpath('task-photos', p.photo_path) });
+            if (r.error) return { data: null, error: r.error };
+            out.push(Object.assign({}, p, { id: r.data, status: 'new', created_at: new Date().toISOString() }));
+          }
+          return { data: qq.one ? out[0] || null : out, error: null };
+        }
+        if (qq.op !== 'select') return noWrite('problem_reports');
+        var x = await rpc('list_problems'); if (x.error) throw x.error;
+        return many(qq, (x.data || []).map(probRow));
+      },
+      /* «Инструкции»: чтение — таблица (RLS: своё заведение), запись — guide_save / guide_delete */
+      guides: async function (qq) {
+        if (qq.op === 'select') {
+          if (!V()) return many(qq, []);
+          var r = await real.from('guides').select('*').eq('venue_id', V()).eq('active', true).order('sort').order('id').limit(500); if (r.error) throw r.error;
+          return many(qq, (r.data || []).map(function (g) { return Object.assign({}, g, { dept_id: dl(g.dept_id) }); }));
+        }
+        var L = qq.op === 'insert' || qq.op === 'upsert' ? qq.payload.map(function (x) { return Object.assign({ id: qq.op === 'upsert' ? x.id : null }, x); }) : [Object.assign({ id: qq.val('id') }, qq.payload || {})];
+        var ids = [];
+        for (var j = 0; j < L.length; j++) {
+          var g = L[j], rr;
+          if (qq.op === 'delete' || g.active === false) rr = await rpc('guide_delete', { p_id: g.id });
+          else {
+            if (g.id != null && (g.title === undefined || g.body === undefined)) {
+              var cur = await real.from('guides').select('*').eq('id', g.id).maybeSingle(); if (cur.error) return { data: null, error: cur.error };
+              g = Object.assign({}, cur.data || {}, { dept_id: dl(cur.data && cur.data.dept_id) }, g);
+            }
+            rr = await rpc('guide_save', { p_id: g.id || null, p_title: g.title, p_body: g.body, p_position: g.position_id || null, p_dept: g.position_id ? null : ds(g.dept_id),
+              p_title_uz: g.title_uz || null, p_body_uz: g.body_uz || null, p_sort: g.sort != null ? g.sort : null, p_active: true });
+          }
+          if (rr.error) return { data: null, error: rr.error };
+          ids.push(rr.data === true ? g.id : rr.data);
+        }
+        var rows = ids.map(function (id, k) { return Object.assign({}, L[k], { id: id }); });
+        return { data: qq.one ? rows[0] || null : rows, error: null };
+      },
+      /* старые «отчёты дня» демо: на сервере их заменяют reports_month / reports_daily (92o) — пусто, без «не покрыто» */
+      daily_reports: async function (qq) { return qq.op === 'select' ? many(qq, []) : noWrite('daily_reports'); },
+      /* переписка в задаче (таблица демо messages, scope = task); чат руководителей и прочее — общим кодом */
+      messages: async function (qq, ex0) {
+        if (qq.op === 'select') {
+          if (qq.val('scope') !== 'task' || qq.val('ref_id') === undefined) return ex0(qq);
+          var r = await rpc('task_messages', { p_task: +qq.val('ref_id') }); if (r.error) throw r.error;
+          return many(qq, (r.data || []).map(function (m) { return Object.assign({ scope: 'task', ref_id: m.task_id }, m); }));
+        }
+        if (qq.op !== 'insert' || !qq.payload.every(function (m) { return m.scope === 'task'; })) return ex0(qq);
+        var out = [];
+        for (var i = 0; i < qq.payload.length; i++) {
+          var m = qq.payload[i];
+          var x = await rpc('task_message_add', { p_task: +m.ref_id, p_text: m.text || null, p_file_path: fpath('media', m.file_path), p_file_type: m.file_type || null, p_file_name: m.file_name || null, p_voice_sec: m.voice_sec != null ? Math.round(m.voice_sec) : null });
+          if (x.error) return { data: null, error: x.error };
+          out.push(Object.assign({}, m, { id: x.data, created_at: new Date().toISOString() }));
+        }
+        return { data: qq.one ? out[0] || null : out, error: null };
+      }
+    };
+    function probRow(p) { return Object.assign({}, p, { dept_id: dl(p.dept_id) }); }
+    SV.doTables = TBL;
+    var ex0 = SV.exec;
+    SV.exec = async function (qq) {
+      var h = TBL[qq.t]; if (!h) return ex0.call(SV, qq);
+      try { return await h(qq, function (q) { return ex0.call(SV, q); }); } catch (e) { return { data: null, error: e && e.message ? e : E(String(e)) }; }
+    };
+
+    /* ----- rpc демо → rpc сервера ----- */
+    var R = SV.rpcMap;
+    function pass(n, after) { return async function (a) { var r = await rpc(n, a); if (after) after(r); return r; }; }
+    R.emergency_start = async function (a) {
+      var r = await rpc('emergency_raise', { p_kind: a.p_kind, p_note: a.p_note || null, p_lat: a.p_lat == null ? null : +a.p_lat, p_lng: a.p_lng == null ? null : +a.p_lng, p_drill: !!a.p_drill, p_place: a.p_place || null });
+      evStale(); SV.stale('notif'); return r;
+    };
+    R.emergency_raise = R.emergency_start;
+    R.emergency_onshift = async function () { var r = await rpc('emergency_onshift'); if (r.error) return r; return ok((r.data || []).map(function (x) { return { employee_id: x.member_id, clock_in: x.clock_in }; })); };
+    R.emergency_rooms = async function () { return ok([]); };                       /* доски номеров в ядре нет */
+    R.emergency_alert = async function (a) { var r = await rpc('emergency_alert', { p_event: a.p_event, p_members: a.p_emps || a.p_members || [] }); return r; };
+    ['emergency_place', 'emergency_mark', 'emergency_log'].forEach(function (n) { R[n] = pass(n); });
+    R.emergency_ack = pass('emergency_ack', function () { SV.stale('notif'); });
+    R.emergency_end = pass('emergency_end', function () { evStale(); SV.stale('notif'); });
+    R.emergency_close = R.emergency_end;
+    R.list_problems = async function () { var r = await rpc('list_problems'); if (r.error) return r; return ok((r.data || []).map(probRow)); };
+    R.problem_reply = pass('problem_reply');
+    R.task_messages = pass('task_messages');
+    R.task_message_add = pass('task_message_add');
+    R.guide_save = pass('guide_save');
+    R.guide_delete = pass('guide_delete');
+    function repDep(d) { return Object.assign({}, d, { dept_id: dl(d.dept_id) }); }
+    R.reports_month = async function (a) { var r = await rpc('reports_month', { p_ym: (a && a.p_ym) || null }); if (r.error) return r; var d = Object.assign({}, r.data || {}); d.depts = (d.depts || []).map(repDep); return ok(d); };
+    R.reports_daily = async function (a) { var r = await rpc('reports_daily', { p_days: (a && a.p_days) || 14, p_to: (a && a.p_to) || null }); if (r.error) return r; return ok((r.data || []).map(function (x) { return Object.assign({}, x, { depts: (x.depts || []).map(repDep) }); })); };
+    R.test_push = pass('test_push', function () { SV.stale('notif'); });
+
+    /* ----- файлы: анонимное фото проблемы — в <заведение>/anon/ (без id автора); тип файла без параметров (audio/webm;codecs=opus → audio/webm) ----- */
+    var st0 = SV.store;
+    SV.store = function (bucket) {
+      var s = st0.call(SV, bucket), up0 = s.upload;
+      s.upload = async function (p, body, o) {
+        o = Object.assign({}, o || {}); if (o.contentType) o.contentType = String(o.contentType).split(';')[0].trim();
+        if (/^anon\//.test(String(p)) && V()) {
+          var np = V() + '/anon/' + String(p).slice(5).replace(/[^A-Za-z0-9._-]/g, '_').slice(-120);
+          var r = await real.storage.from(SV.bucket).upload(np, body, o); if (r.error) return r;
+          SV.pmap[bucket + '|' + p] = np; return { data: Object.assign({}, r.data, { path: p, fullPath: np, svPath: np }), error: null };
+        }
+        return up0.call(s, p, body, o);
+      };
+      return s;
+    };
+    return cl;
+  }
+  A.doExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92o === */

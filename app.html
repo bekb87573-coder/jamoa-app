@@ -49,7 +49,10 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-coremode.js"></script>
 <script src="uz-w4-cyr.js"></script>
 <script src="uz-w4-earn.js"></script>
+<script src="uz-w4-explain.js"></script>
+<script src="uz-w4-features.js"></script>
 <script src="uz-w4-fixes.js"></script>
+<script src="uz-w4-founder-live.js"></script>
 <script src="uz-w4-founder.js"></script>
 <script src="uz-w4-glossary.js"></script>
 <script src="uz-w4-home2.js"></script>
@@ -59,6 +62,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-nav.js"></script>
 <script src="uz-w4-owner.js"></script>
 <script src="uz-w4-paint.js"></script>
+<script src="uz-w4-parity.js"></script>
 <script src="uz-w4-polish.js"></script>
 <script src="uz-w4-server.js"></script>
 <script src="uz-w4-shift.js"></script>
@@ -44603,6 +44607,1426 @@ setTimeout(function () {
 
 /* отладка (только ?w4dbg) */
 if (/[?&]w4dbg/.test(location.search)) window.__dl = { go: function (v) { go(v); }, S: function () { return S; }, brush: function () { return dl_brush(); } };
+
+
+/* ===== ВОЛНА 4 · 92m-explain.js ===== */
+/* ===== Часть M · объяснительная при опоздании — видна владельцу и руководителям (29.10) =====
+   Жалоба владельца: «человек опоздал, а я не вижу — написал он объяснительную или нет; в Mir Luxe One было видно».
+   Сотрудник пишет причину в 92b (explainSheet: transport | family | warned | other) → attendance.late_why / explain_text / explain_at
+   (на сервере: rpc late_explain → attendance.late_why + late_note; sv-adapter → late_why, explain_text = late_note, explain_at).
+   Здесь — одна метка состояния везде, где виден опоздавший:
+     «Объяснил: транспорт, пробка» (сапфир; «Другое» — текст, обрезанный, по нажатию — целиком),
+     «Ждём объяснения» (янтарь, первые 30 минут после прихода), «Без объяснительной» (рубин).
+   Плюс счётчик «Опоздали: N · без объяснительной: M» → список с «Напомнить» и «Штраф» (штраф — только по нажатию владельца).
+   Вдобавок (по образцу Mir Luxe One): «Пульт → Сегодня» — раскрывающаяся карточка «Приход и уход» с цифрами по статусам,
+   «Задачи» и «Карта сотрудников»; карта — только точки отметок прихода и ухода (без слежения), во всех типах заведений.
+   Префикс dm_. Узбекский — w4/uz/explain.js. */
+
+var DM = { reg: {}, regN: 0, lists: {}, rem: {}, nowD: null, mapLeaf: null };
+var DM_WHY = { transport: 'Транспорт, пробка', family: 'Семейные обстоятельства', warned: 'Предупредил руководителя', other: 'Другое' };
+var DM_WAIT_MIN = 30; /* «Ждём объяснения» — первые 30 минут после прихода, потом «Без объяснительной» */
+function dm_t(s) { return trUi(s); }
+function dm_e(s) { return h(trUi(s)); }
+function dm_g(e, m, f) { return typeof jc_g === 'function' ? jc_g(e, m, f) : m; }
+function dm_demo() { return !!window.__DB; }
+async function dm_q(p) { try { var r = await p; return r && !r.error ? r : null; } catch (e) { return null; } }
+function dm_cut(s, n) { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+function dm_short(e) { return e ? e.first_name + ' ' + (e.last_name || '').charAt(0) + '.' : ''; }
+
+/* опоздание в минутах (повторный приход за день не считается) */
+function dm_lateMin(a) { return a && a.is_late && !a.repeat && (+a.late_min || 0) > 0 ? +a.late_min : 0; }
+/* состояние объяснительной: null — не опоздал; ok — объяснил; wait — ждём (до 30 мин); none — без объяснительной; free — по настройке не требуется */
+function dm_st(a) {
+  var lm = dm_lateMin(a); if (!lm) return null;
+  var code = a.late_why, txt = a.explain_text;
+  if (a.explain_at || txt || code || a.explain_voice) {
+    var coded = code && code !== 'other' && DM_WHY[code];
+    var full = coded ? dm_t(DM_WHY[code]) : (txt ? String(txt) : a.explain_voice ? dm_t('голосовое сообщение') : dm_t('Другое'));
+    return { k: 'ok', lm: lm, full: full, coded: !!coded, at: a.explain_at || null };
+  }
+  if (lm <= Pn('explain_after_min', 0)) return { k: 'free', lm: lm };
+  var since = a.clock_in ? (Date.now() - Date.parse(a.clock_in)) / 6e4 : 999;
+  if (a.day === today() && since >= 0 && since < DM_WAIT_MIN) return { k: 'wait', lm: lm };
+  return { k: 'none', lm: lm };
+}
+function dm_key(e, a) { var k = 'm' + (++DM.regN); DM.reg[k] = { e: e, a: a }; return k; }
+/* метка состояния (кнопка — по нажатию подробности) */
+function dm_pill(e, a, st) {
+  st = st || dm_st(a); if (!st || st.k === 'free') return '';
+  var k = dm_key(e, a);
+  if (st.k === 'ok') return '<button type="button" class="chip t-info dm-pill" data-dmp="' + k + '" title="' + h(st.full) + '"><span>' + dm_e(dm_g(e, 'Объяснил', 'Объяснила')) + ':</span> <span class="dm-tx">' + h(st.coded ? st.full.charAt(0).toLowerCase() + st.full.slice(1) : dm_cut(st.full, 60)) + '</span>' + (a.mgr_ok_at ? '<span>· ' + dm_e('принята') + '</span>' : '') + '</button>';
+  if (st.k === 'wait') return '<button type="button" class="chip t-warn dm-pill" data-dmp="' + k + '"><span>Ждём объяснения</span></button>';
+  return '<button type="button" class="chip t-bad dm-pill" data-dmp="' + k + '"><span>Без объяснительной</span></button>';
+}
+/* «без объяснительной» в счётчике — и «ждём», и «нет» */
+function dm_noExpl(st) { return !!st && (st.k === 'none' || st.k === 'wait'); }
+
+/* ---------- данные: опоздавшие за день / за месяц (люди владельца или команды руководителя) ---------- */
+function dm_people() {
+  if (isDirector()) return (S.emps || []).filter(function (e) { return e.active !== false && e.role !== 'director'; });
+  return (typeof myTeam === 'function' ? myTeam() : []).filter(function (e) { return e.role !== 'director'; });
+}
+async function dm_lateList(from, to, people) {
+  people = people || dm_people(); var ids = {}; people.forEach(function (e) { ids[e.id] = e; });
+  var q = from === to ? sb.from('attendance').select('*').eq('day', from) : sb.from('attendance').select('*').gte('day', from).lte('day', to);
+  var r = await dm_q(q), seen = {}, out = [];
+  ((r && r.data) || []).slice().sort(function (x, y) { return String(x.clock_in).localeCompare(String(y.clock_in)); }).forEach(function (a) {
+    var e = ids[a.employee_id]; if (!e || !a.clock_in) return;
+    var key = a.employee_id + '|' + a.day; if (seen[key]) return; seen[key] = 1; /* первый приход дня */
+    var st = dm_st(a); if (st) out.push({ e: e, a: a, st: st });
+  });
+  out.sort(function (x, y) { return String(y.a.day).localeCompare(String(x.a.day)) || dm_noExpl(y.st) - dm_noExpl(x.st) || y.st.lm - x.st.lm; });
+  return out;
+}
+function dm_cntOf(L) { return { n: L.length, m: L.filter(function (x) { return dm_noExpl(x.st); }).length }; }
+/* строка-счётчик «Опоздали: N · без объяснительной: M» — по нажатию список */
+function dm_cntHtml(L, title, cls) {
+  if (!L.length) return '';
+  var c = dm_cntOf(L), k = 'l' + (++DM.regN); DM.lists[k] = { L: L, title: title };
+  return '<button type="button" class="dm-cnt ' + (cls || '') + '" data-dml="' + k + '"><span class="dm-cl"><span>Опоздали</span>: <b class="num">' + c.n + '</b></span>' +
+    '<span class="dm-cl' + (c.m ? ' dm-bad' : '') + '"><span>без объяснительной</span>: <b class="num">' + c.m + '</b></span>' + icon('chev', 16) + '</button>';
+}
+
+/* ---------- напомнить сотруднику ---------- */
+function dm_canRemind(x) { return x && dm_noExpl(x.st) && x.a.day === today(); }
+async function dm_remind(e, a) {
+  var lm = dm_lateMin(a), title = 'Напишите объяснительную', body = 'Опоздание ' + fmtMin(lm) + ' · руководитель ждёт причину';
+  try {
+    if (dm_demo()) {
+      if (typeof jc_notify === 'function') await jc_notify(e.id, 'late', title, body, { type: 'clock', id: a.id });
+      else await w3Notify(e.id, title, body, 'clock', a.id, false);
+    } else {
+      /* сервер: rpc late_remind (0017) — уведомление опоздавшему; повтор за 10 минут сервер не шлёт */
+      var r = await sb.rpc('late_remind', { p_att: a.id });
+      if (r && r.error) { toast(err(r.error)); return false; }
+      if (r && r.data === false) { DM.rem[a.id] = Date.now(); toast(dm_t('Уже напомнили — повтор не раньше чем через 10 минут')); return true; }
+    }
+  } catch (x) { console.warn(x); toast(dm_t('Не удалось отправить')); return false; }
+  DM.rem[a.id] = Date.now(); toast(dm_t('Напоминание отправлено')); return true;
+}
+function dm_remBtn(x, k) {
+  if (!dm_canRemind(x)) return '';
+  var t = DM.rem[x.a.id];
+  return t ? '<button type="button" class="btn ghost sm" disabled><span>Напомнили в</span> <span class="num">' + hm(new Date(t).toISOString()) + '</span></button>'
+    : '<button type="button" class="btn gold sm" data-dmr="' + k + '">' + icon('bell', 16) + '<span>Напомнить</span></button>';
+}
+/* «Штраф» — форма части A с причиной «Опоздание» и комментарием; ставит только владелец/руководитель по нажатию */
+function dm_canFine(e) { return typeof ca_fineOpen === 'function' && (typeof ca_canMoney !== 'function' || ca_canMoney(e)); }
+function dm_fineNote(a, st) {
+  st = st || dm_st(a); var lm = st ? st.lm : dm_lateMin(a);
+  return dm_t('Опоздание') + ' ' + fmtMin(lm, uiLang()) + ', ' + (st && st.k === 'ok' ? dm_t('причина') + ': ' + dm_cut(st.full, 60) : dm_t('без объяснительной'));
+}
+function dm_fine(e, a, done) {
+  if (!dm_canFine(e)) return;
+  ca_fineOpen(e, { reason: 'late', kind: 'fine', src: 'late', day: a.day, att: a, late_min: dm_lateMin(a), note: dm_fineNote(a), done: done });
+}
+function dm_fineBtn(x, k) { return dm_canFine(x.e) ? '<button type="button" class="btn ghost sm" data-dmf="' + k + '"><span>Штраф</span></button>' : ''; }
+function dm_tel(e) { var d = e && e.phone ? String(e.phone).replace(/\D/g, '') : ''; return d.length >= 7 ? '+' + d : ''; }
+
+/* ---------- строки списка опоздавших (лист, сводка руководителю) ---------- */
+function dm_rowHtml(x, withDay) {
+  var e = x.e, a = x.a, k = dm_key(e, a), sh = a.shift_start ? t5(a.shift_start) + (a.shift_end ? '–' + t5(a.shift_end) : '') : '';
+  return '<div class="dm-row" data-dmrow="' + k + '"><span class="av sm">' + avIn(e) + '</span><div class="grow" style="min-width:0">' +
+    '<div class="dm-rh"><div class="name">' + h(fullName(e)) + '</div><span class="chip t-warn"><span>опоздание</span> <b class="num">' + h(fmtMin(x.st.lm)) + '</b></span></div>' +
+    '<div class="meta" style="white-space:normal">' + (withDay ? '<span class="num">' + dm(a.day) + '</span> · ' : '') + (sh ? '<span class="num">' + sh + '</span> · ' : '') + '<span>' + dm_e(dm_g(e, 'пришёл', 'пришла')) + '</span> <b class="num">' + hm(a.clock_in) + '</b></div>' +
+    '<div class="dm-pr">' + dm_pill(e, a, x.st) + '</div>' +
+    '<div class="dm-acts">' + dm_remBtn(x, k) + dm_fineBtn(x, k) + '</div></div></div>';
+}
+function dm_bindRows(root, after) {
+  if (!root) return;
+  root.querySelectorAll('[data-dmr]').forEach(function (b) { b.onclick = async function (ev) { ev.stopPropagation(); var x = DM.reg[b.getAttribute('data-dmr')]; if (!x) return; b.disabled = true; var ok = await dm_remind(x.e, x.a); if (!ok) { b.disabled = false; return; } b.className = 'btn ghost sm'; b.innerHTML = '<span>' + dm_e('Напомнили в') + '</span> <span class="num">' + nowHM() + '</span>'; }; });
+  root.querySelectorAll('[data-dmf]').forEach(function (b) { b.onclick = function (ev) { ev.stopPropagation(); var x = DM.reg[b.getAttribute('data-dmf')]; if (x) dm_fine(x.e, x.a, after); }; });
+}
+/* лист «Опоздали» */
+function dm_listSheet(o) {
+  var L = o.L, c = dm_cntOf(L), rem = L.filter(dm_canRemind).filter(function (x) { return !DM.rem[x.a.id]; });
+  var multi = L.some(function (x) { return x.a.day !== L[0].a.day; });
+  sheet(sheetHead('<span>' + dm_e(o.title || 'Опоздали') + '</span>', '<span>Опоздали</span>: <b class="num">' + c.n + '</b> · <span>без объяснительной</span>: <b class="num">' + c.m + '</b>') +
+    '<div class="dm-seg" role="group"><button type="button" class="pick on" data-dms="all"><span>Все</span> <b class="num">' + c.n + '</b></button><button type="button" class="pick" data-dms="no"><span>Без объяснительной</span> <b class="num">' + c.m + '</b></button></div>' +
+    (rem.length > 1 ? '<button type="button" class="btn ghost full" id="dmRemAll" style="min-height:44px;margin-bottom:8px">' + icon('bell', 18) + '<span>' + dm_e('Напомнить всем без объяснительной') + '</span> <b class="num">' + rem.length + '</b></button>' : '') +
+    '<div id="dmLs">' + L.map(function (x) { return dm_rowHtml(x, multi); }).join('') + '</div>' +
+    '<div class="meta" style="white-space:normal;margin-top:8px">' + dm_e('«Напомнить» — сотруднику придёт уведомление написать причину (только за сегодня). «Штраф» ставится только вручную.') + '</div>');
+  var box = $('layer'); dm_bindRows(box);
+  box.querySelectorAll('[data-dms]').forEach(function (b) { b.onclick = function () { var no = b.getAttribute('data-dms') === 'no'; box.querySelectorAll('[data-dms]').forEach(function (z) { z.classList.toggle('on', z === b); }); box.querySelectorAll('[data-dmrow]').forEach(function (r) { var x = DM.reg[r.getAttribute('data-dmrow')]; r.hidden = no && !(x && dm_noExpl(dm_st(x.a))); }); }; });
+  if ($('dmRemAll')) $('dmRemAll').onclick = async function () { this.disabled = true; var n = 0; for (var i = 0; i < rem.length; i++) { if (await dm_remind(rem[i].e, rem[i].a)) n++; } toast(dm_t('Напоминание отправлено') + ': ' + n); dm_listSheet(o); };
+}
+/* лист одного опоздания: причина целиком, когда написал, «Напомнить», «Штраф», «Позвонить» */
+function dm_sheet(e, a) {
+  var st = dm_st(a); if (!st) return;
+  var x = { e: e, a: a, st: st }, k = dm_key(e, a), tel = dm_tel(e);
+  var box = st.k === 'ok' ? '<div class="note t-info" style="white-space:normal;margin-top:8px"><b>' + dm_e('Объяснительная') + '</b>' + (st.at ? ' · <span>' + dm_e('написана в') + '</span> <span class="num">' + hm(st.at) + '</span>' : '') + '<div style="margin-top:4px;font-size:15px;line-height:1.45">' + h(st.full) + '</div>' + (st.coded && a.explain_text && a.explain_text !== DM_WHY[a.late_why] ? '<div class="meta" style="white-space:normal">' + h(a.explain_text) + '</div>' : '') + '</div>'
+    : st.k === 'wait' ? '<div class="note t-warn" style="white-space:normal;margin-top:8px">' + dm_e('Пришёл недавно — ждём объяснения. Через 30 минут после прихода метка станет «Без объяснительной».') + '</div>'
+    : '<div class="note t-bad" style="white-space:normal;margin-top:8px">' + dm_e('Объяснительной нет. Можно напомнить сотруднику или поставить штраф.') + '</div>';
+  var canOk = st.k === 'ok' && !a.mgr_ok_at && S.me && e.id !== S.me.id && (isDirector() || (typeof myTeam === 'function' && myTeam().some(function (z) { return z.id === e.id; })));
+  if (st.k === 'ok' && a.mgr_ok_at) box += '<div class="meta" style="white-space:normal"><span>' + dm_e('Причина принята') + '</span>' + (emp(a.mgr_ok_by) ? ' · ' + h(emp(a.mgr_ok_by).first_name) : '') + ' · <span class="num">' + hm(a.mgr_ok_at) + '</span></div>';
+  sheet(sheetHead(h(fullName(e)), '<span>' + h(posName(e.position_id)) + '</span> · <span class="num">' + dm(a.day) + '</span>') +
+    '<div class="chips" style="margin:4px 0;flex-wrap:wrap;overflow:visible"><span class="chip t-warn"><span>опоздание</span> <b class="num">' + h(fmtMin(st.lm)) + '</b></span>' +
+    (a.shift_start ? '<span class="chip t-mute"><span>смена с</span> <span class="num">' + t5(a.shift_start) + '</span></span>' : '') + '<span class="chip t-mute"><span>' + dm_e(dm_g(e, 'пришёл', 'пришла')) + '</span> <b class="num">' + hm(a.clock_in) + '</b></span></div>' + box +
+    '<div class="dm-acts" style="margin-top:12px">' + (canOk ? '<button type="button" class="btn gold sm" id="dmOk">' + icon('tick', 16) + '<span>Причина принята</span></button>' : '') + dm_remBtn(x, k) + dm_fineBtn(x, k) + (tel ? '<a class="btn ghost sm" href="tel:' + h(tel) + '">' + icon('phone', 16) + '<span>Позвонить</span></a>' : '') + '</div>');
+  dm_bindRows($('layer'));
+  if ($('dmOk')) $('dmOk').onclick = async function () {
+    this.disabled = true; var now = new Date().toISOString();
+    var r = await sb.from('attendance').update({ mgr_ok_at: now, mgr_ok_by: S.me.id }).eq('id', a.id);
+    if (r && r.error) { this.disabled = false; return toast(err(r.error)); }
+    a.mgr_ok_at = now; a.mgr_ok_by = S.me.id; if (typeof w3Save === 'function') w3Save();
+    if (dm_demo() && typeof jc_notify === 'function') jc_notify(e.id, 'late', 'Причина опоздания принята', fullName(S.me), { type: 'clock', id: a.id });
+    toast(dm_t('Причина принята')); dm_sheet(e, a);
+  };
+}
+/* одно нажатие на метку или счётчик — где бы они ни были */
+document.addEventListener('click', function (ev) {
+  var t = ev.target && ev.target.closest ? ev.target.closest('[data-dmp],[data-dml]') : null; if (!t) return;
+  ev.preventDefault(); ev.stopPropagation();
+  if (t.hasAttribute('data-dmp')) { var x = DM.reg[t.getAttribute('data-dmp')]; if (x) dm_sheet(x.e, x.a); }
+  else { var o = DM.lists[t.getAttribute('data-dml')]; if (o) dm_listSheet(o); }
+}, true);
+
+/* ---------- стили ---------- */
+(function () {
+  var st = document.createElement('style');
+  st.textContent =
+    '.dm-pill{border:0;font:inherit;font-size:12.5px;cursor:pointer;max-width:100%;min-height:28px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;-webkit-tap-highlight-color:transparent}' +
+    '.dm-pill .dm-tx{overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:210px}.dm-pr{margin-top:5px;display:flex;flex-wrap:wrap;gap:6px;min-width:0}' +
+    '.dm-cnt{display:flex;align-items:center;gap:6px 12px;flex-wrap:wrap;width:100%;min-height:44px;margin-top:8px;padding:8px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:inherit;font:inherit;font-size:14px;text-align:left;cursor:pointer}' +
+    '.dm-cnt>svg{margin-left:auto;color:var(--faint);flex:none}.dm-cnt .dm-cl b{font-weight:700}.dm-cnt .dm-bad,.dm-cnt .dm-bad b{color:var(--bad)}' +
+    '.dm-row{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line2)}.dm-row:last-child{border-bottom:0}.dm-rh{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}.dm-rh .name{min-width:0;overflow-wrap:anywhere}.dm-rh .chip{flex:none}' +
+    '.dm-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.dm-acts .btn{min-height:40px}.dm-acts:empty{display:none}.dm-seg{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px}' +
+    '.dm-fix{display:inline-flex;align-items:center;gap:4px;color:var(--goldink);font-size:13px}.dm-fix svg{width:14px;height:14px}' +
+    /* «Пульт → Сегодня»: раскрывающаяся карточка «Приход и уход» */
+    '.dm-pa .pl-ic.dm-gr{background:var(--dj-fok,#0B7A52);color:#fff}.dm-pa .pl-ic.dm-bl{background:var(--dj-finfo,#1F5FBF);color:#fff}.dm-pa .pl-ic.dm-rd{background:#C8553D;color:#fff}' +
+    '.dm-bdg{flex:none;min-width:24px;height:24px;padding:0 7px;border-radius:12px;background:var(--dj-fbad,#C62A25);color:#fff;font-size:13px;font-weight:700;display:inline-grid;place-items:center}.dm-bdg:empty,.dm-bdg[data-n="0"]{display:none}' +
+    '.dm-sub{background:color-mix(in srgb,var(--card) 92%,var(--ink) 3%)}.dm-sub .pl-row{padding-left:30px;min-height:46px}.dm-sub .pl-row+.pl-row::before{left:62px}' +
+    '.dm-dot{flex:none;width:12px;height:12px;border-radius:50%;margin:0 9px;background:#8E8E8E}.dm-dot.o{background:transparent;box-shadow:inset 0 0 0 2px #8E8E8E}.dm-dot.g{background:var(--dj-okf,#12A06C)}.dm-dot.a{background:var(--dj-warnf,#E08A00)}.dm-dot.r{background:var(--dj-badf,#E0342E)}.dm-dot.s{background:#4F5A66}' +
+    '.dm-chev{flex:none;color:var(--faint);display:flex;transition:transform .2s}.dm-chev svg{width:16px;height:16px}.dm-pa[aria-expanded="true"] .dm-chev{transform:rotate(-90deg)}.dm-pa[aria-expanded="false"] .dm-chev{transform:rotate(90deg)}' +
+    /* табель: опоздание без объяснительной — рубиновая точка в углу клетки */
+    '.cd-c.l.dm-nx{position:relative}.cd-c.l.dm-nx::after{content:"";position:absolute;top:-2px;right:-2px;width:7px;height:7px;border-radius:50%;background:var(--dj-badf,#E0342E);box-shadow:0 0 0 1.5px var(--card)}.cd-c.l[data-dmp]{cursor:pointer}' +
+    /* карта сотрудников */
+    '.dm-map{height:340px;border-radius:12px;overflow:hidden;background:var(--line2);position:relative}.dm-map svg{display:block;width:100%;height:100%}.dm-leg{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}' +
+    '.dm-mk{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}.dm-mk.in{background:var(--dj-okf,#12A06C)}.dm-mk.out{background:var(--dj-badf,#E0342E)}.dm-mk.v{background:transparent;box-shadow:inset 0 0 0 2px var(--gold)}' +
+    '.dm-mr{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line2)}.dm-mr:last-child{border-bottom:0}' +
+    'html[data-lx] .dg-st .dm-pill{background:var(--card)!important;box-shadow:none!important}html[data-lx] .dg-st .dm-pill.t-info{color:var(--info)!important}html[data-lx] .dg-st .dm-pill.t-warn{color:var(--warn)!important}html[data-lx] .dg-st .dm-pill.t-bad{color:var(--bad)!important}.dg-st .dm-pr{margin-top:6px}' +
+    '@media (max-width:360px){.dm-pill .dm-tx{max-width:150px}.dm-map{height:280px}}';
+  document.head.appendChild(st);
+})();
+
+/* ===================== 1. «Сейчас в заведении» (экран и карточка на главной) ===================== */
+(function () {
+  if (typeof jc_nowLoad !== 'function') return;
+  var nl0 = jc_nowLoad; jc_nowLoad = async function () { var D = await nl0.apply(this, arguments); DM.nowD = D; return D; };
+  /* строка: «Объяснение: …» → метка состояния под временем */
+  var rh0 = jc_rowHtml;
+  jc_rowHtml = function (x, i) {
+    var s = rh0.apply(this, arguments);
+    try {
+      var a = x.a; if (!a || !(x.late > 0) || !a.clock_in) return s;
+      var a2 = Object.assign({}, a, { is_late: true, late_min: x.late }), st = dm_st(a2); if (!st) return s;
+      if (a.explain_text) { var w = '<span>Объяснение</span>: ' + h(a.explain_text); s = s.replace(w + '<br>', '').replace('<br>' + w, '').replace(w, ''); s = s.replace('<div class="meta jc-why"></div>', ''); }
+      var p = s.indexOf('<div class="jc-tm">'); if (p < 0) return s; var q = s.indexOf('</div>', p); if (q < 0) return s;
+      return s.slice(0, q + 6) + '<div class="dm-pr">' + dm_pill(x.e, a2, st) + '</div>' + s.slice(q + 6);
+    } catch (z) { return s; }
+  };
+  var vn0 = jc_vNow;
+  jc_vNow = async function () {
+    var r = await vn0.apply(this, arguments);
+    try {
+      var m = $('main'), D = DM.nowD; if (!m || S.view !== 'jcnow' || !D) return r;
+      var L = D.L.filter(function (x) { return x.a && x.a.clock_in && x.late > 0; }).map(function (x) { var a2 = Object.assign({}, x.a, { is_late: true, late_min: x.late }); return { e: x.e, a: a2, st: dm_st(a2) }; }).filter(function (x) { return x.st; });
+      var c1 = m.querySelector('.card'); if (c1 && L.length && !$('dmNowCnt')) { var d = document.createElement('div'); d.id = 'dmNowCnt'; d.innerHTML = dm_cntHtml(L, 'Опоздали сегодня'); c1.appendChild(d); }
+      /* «Штраф» у пришедшего с опозданием — с комментарием «Опоздание N мин, без объяснительной» */
+      m.querySelectorAll('[data-jcfine]').forEach(function (b) {
+        var x = D.L[+b.getAttribute('data-jcfine')]; if (!x || !x.a || !x.a.clock_in || !(x.late > 0)) return;
+        b.onclick = function () { dm_fine(x.e, Object.assign({}, x.a, { is_late: true, late_min: x.late }), function () { jc_vNow(); }); };
+      });
+    } catch (z) { console.warn('dm now', z); }
+    return r;
+  };
+  if (W3V.jcnow) W3V.jcnow = jc_vNow; /* 92c записал в W3V ссылку на прежнюю функцию */
+  var hc0 = jc_homeCard;
+  jc_homeCard = async function () {
+    var r = await hc0.apply(this, arguments);
+    try {
+      var c = $('jcNowC'), D = DM.nowD; if (!c || !D || c.querySelector('.dm-cnt')) return r;
+      var L = D.L.filter(function (x) { return x.a && x.a.clock_in && x.late > 0; }).map(function (x) { var a2 = Object.assign({}, x.a, { is_late: true, late_min: x.late }); return { e: x.e, a: a2, st: dm_st(a2) }; }).filter(function (x) { return x.st; });
+      if (!L.length) return r;
+      var go = $('jcNowGo'), d = document.createElement('div'); d.innerHTML = dm_cntHtml(L, 'Опоздали сегодня');
+      c.insertBefore(d.firstChild, go || null);
+    } catch (z) { console.warn('dm home', z); }
+    return r;
+  };
+})();
+
+/* ===================== 2. «Приход и уход» (Пульт): метка вместо «нет объяснительной» / «📝 текст», счётчик, «Штраф» ===================== */
+(function () {
+  if (typeof dAtt !== 'function') return;
+  var da0 = dAtt;
+  dAtt = async function () {
+    var r = await da0.apply(this, arguments);
+    try {
+      var box = $('dk'); if (!box) return r;
+      var day = S.sub.attDay || today(), L = await dm_lateList(day, day, (S.emps || []).filter(function (e) { return e.active && e.role !== 'director'; }));
+      var q = await dm_q(sb.from('attendance').select('*').eq('day', day)), byName = {}, lateBy = {};
+      ((q && q.data) || []).forEach(function (a) { var e = emp(a.employee_id); if (!e) return; var o = byName[fullName(e)]; if (!o || !a.clock_out || (o.clock_out && a.clock_in > o.clock_in)) byName[fullName(e)] = a; });
+      L.forEach(function (x) { lateBy[fullName(x.e)] = x; });
+      var fix = function (host, nm) {
+        var x = lateBy[nm], a = byName[nm]; if (!host) return;
+        var old = host.querySelectorAll(':scope > div[style*="max-width:220px"], :scope > div[style*="color:var(--bad)"]');
+        if (x) {
+          var pill = '<div class="dm-pr">' + dm_pill(x.e, x.a, x.st) + '</div>';
+          if (old.length) { old[0].outerHTML = pill; for (var i = 1; i < old.length; i++) old[i].remove(); } else host.insertAdjacentHTML('afterbegin', pill);
+        }
+        if (a && a.cb_fix && !host.querySelector('.dm-fix')) host.insertAdjacentHTML('beforeend', '<div class="dm-fix" title="' + h(dm_t('Время поправил руководитель по запросу')) + '">' + icon('edit', 14) + '<span class="num">' + hm(a.clock_in) + '</span> <span class="meta" style="margin:0">' + dm_e('поправлено по запросу') + '</span></div>');
+        var b = host.querySelector('[data-calf]'); if (b && x) { b.textContent = dm_t('Штраф'); b.onclick = function () { dm_fine(x.e, x.a, function () { dAtt(); }); }; }
+      };
+      box.querySelectorAll('.attc-r').forEach(function (row) {
+        var nm = row.querySelector('.attc-h .grow > div'); if (!nm) return; nm = nm.textContent.trim();
+        var x = row.querySelector('.attc-x'); if (!x && (lateBy[nm] || (byName[nm] && byName[nm].cb_fix))) { x = document.createElement('div'); x.className = 'attc-x'; row.appendChild(x); }
+        fix(x, nm);
+      });
+      box.querySelectorAll('.att-t tbody tr').forEach(function (tr) { var td = tr.lastElementChild, nm = tr.querySelector('td div'); if (td && nm) fix(td, nm.textContent.trim()); });
+      var c1 = box.querySelector('.card'); if (c1 && L.length && !$('dmAttCnt')) { var d = document.createElement('div'); d.id = 'dmAttCnt'; d.style.cssText = 'flex-basis:100%'; d.innerHTML = dm_cntHtml(L, day === today() ? 'Опоздали сегодня' : 'Опоздали'); c1.appendChild(d); }
+    } catch (z) { console.warn('dm att', z); }
+    return r;
+  };
+})();
+
+/* ===================== 3. Карточка сотрудника: «На смене с 10:58 · опоздал 3 мин» + метка ===================== */
+(function () {
+  if (typeof dg_status !== 'function') return;
+  var ds0 = dg_status;
+  dg_status = function (e, T) {
+    var r = ds0.apply(this, arguments);
+    try {
+      var A = (T && T.att) || [], open = A.filter(function (a) { return !a.clock_out; })[0], late = A.filter(function (a) { return dm_lateMin(a) > 0; })[0];
+      if (!open || !late) return r;
+      if (late.explain_text) r = [String(r[0]).replace(' (' + late.explain_text + ')', ''), r[1]];
+      setTimeout(function () { var el = $('dgSt'); if (!el || el.querySelector('.dm-pill')) return; var p = dm_pill(e, late); if (p) el.insertAdjacentHTML('beforeend', '<div class="dm-pr">' + p + '</div>'); }, 0);
+    } catch (z) { console.warn('dm card', z); }
+    return r;
+  };
+})();
+
+/* ===================== 4. День в календаре (карточка сотрудника, «Мой расчёт»): метка, «Напомнить», «Штраф» с комментарием ===================== */
+(function () {
+  if (typeof ca_daySheet !== 'function') return;
+  var cs0 = ca_daySheet;
+  ca_daySheet = async function (X, d) {
+    var r = await cs0.apply(this, arguments);
+    try {
+      var rows = (X && X.M && X.M.byDay[d]) || [], late = rows.filter(function (a) { return dm_lateMin(a) > 0; })[0], box = document.querySelector('#layer .box') || document.querySelector('#sh .box');
+      if (!late || !box || box.querySelector('.dm-day')) return r;
+      var e = X.em, st = dm_st(late); if (!st) return r;
+      var x = { e: e, a: late, st: st }, k = dm_key(e, late), mine = S.me && e.id === S.me.id;
+      var el = document.createElement('div'); el.className = 'dm-day'; el.style.marginTop = '8px';
+      el.innerHTML = '<div class="meta" style="margin:0 0 4px;font-weight:700">' + dm_e('Объяснительная') + '</div><div class="dm-pr" style="margin-top:0">' + (st.k === 'free' ? '<span class="chip t-mute">' + dm_e('не требуется') + '</span>' : dm_pill(e, late, st)) + '</div>' + (mine ? '' : '<div class="dm-acts">' + dm_remBtn(x, k) + '</div>');
+      var tb = box.querySelector('.sx-tbl'); if (tb) tb.parentNode.insertBefore(el, tb.nextSibling); else box.appendChild(el);
+      dm_bindRows(el);
+      var fb = box.querySelector('[data-cafd="fine"]'); if (fb && !mine) fb.onclick = function () { dm_fine(e, late); };
+    } catch (z) { console.warn('dm day', z); }
+    return r;
+  };
+  if (typeof dg_day === 'function') {
+    var dd0 = dg_day;
+    dg_day = async function () {
+      var r = await dd0.apply(this, arguments);
+      try { var box = document.querySelector('#sh .box') || document.querySelector('#layer .box'); if (box && box.querySelector('.dm-day')) box.querySelectorAll('.note.t-warn').forEach(function (n) { if (/Причина опоздания|Kechikish sababi|Кечикиш сабаби/.test(n.textContent)) n.remove(); }); } catch (z) {}
+      return r;
+    };
+  }
+})();
+
+/* ===================== 5. Табель: нажатие на клетку «О» — подробности; счётчик месяца ===================== */
+(function () {
+  if (typeof cd_tabRender !== 'function') return;
+  var tr0 = cd_tabRender;
+  cd_tabRender = async function (host) {
+    var p = tr0.apply(this, arguments);
+    try {
+      for (var i = 0; i < 60; i++) { if (host && host.querySelector('.cd-tb') && typeof CD_TAB !== 'undefined' && CD_TAB && CD_TAB.D) break; await new Promise(function (res) { setTimeout(res, 50); }); }
+      var T = CD_TAB; if (!host || !T || !host.querySelector('.cd-tb') || host.querySelector('#dmTabCnt')) return await p;
+      var ym = T.ym, people = T.D.rows.map(function (R) { return R.e; });
+      var L = await dm_lateList(ym + '-01', lastDay(ym), people), by = {};
+      if (T !== CD_TAB) return await p;
+      L.forEach(function (x) { by[x.e.id + '|' + x.a.day] = x; });
+      host.querySelectorAll('.cd-tb tbody tr').forEach(function (tr, ri) {
+        var R = T.D.rows[ri]; if (!R) return;
+        tr.querySelectorAll('td').forEach(function (td, ci) {
+          if (!ci) return; var dd = R.d[ci - 1]; if (!dd || dd.c !== 'l') return;
+          var x = by[R.e.id + '|' + dd.day], c = td.querySelector('.cd-c'); if (!x || !c) return;
+          c.setAttribute('data-dmp', dm_key(x.e, x.a)); c.setAttribute('role', 'button');
+          if (dm_noExpl(x.st)) { c.classList.add('dm-nx'); c.title = c.title + ' · ' + dm_t('без объяснительной'); } else if (x.st.k === 'ok') c.title = c.title + ' · ' + x.st.full;
+        });
+      });
+      var sum = host.querySelector('.cd-sum');
+      if (sum && L.length) { var d = document.createElement('div'); d.id = 'dmTabCnt'; d.innerHTML = dm_cntHtml(L, 'Опоздали за месяц') + '<div class="meta" style="margin:4px 2px 8px;white-space:normal">' + dm_e('Нажмите на клетку «О» — причина опоздания. Красная точка — без объяснительной.') + '</div>'; sum.parentNode.insertBefore(d, sum.nextSibling); }
+    } catch (z) { console.warn('dm tab', z); }
+    return await p;
+  };
+})();
+
+/* ===================== 6. «Руководителю → Сводка»: кто опоздал сегодня и объяснил ли ===================== */
+(function () {
+  if (typeof lBrief !== 'function') return;
+  var lb0 = lBrief;
+  lBrief = async function () {
+    var r = await lb0.apply(this, arguments);
+    try {
+      var box = $('ld'); if (!box || box.querySelector('#dmBrief')) return r;
+      var L = await dm_lateList(today(), today()); if (!L.length || !$('ld') || box.querySelector('#dmBrief')) return r;
+      var c = document.createElement('div'); c.className = 'card'; c.id = 'dmBrief';
+      c.innerHTML = '<h2><span>Опоздали сегодня</span> <small class="num">' + L.length + '</small></h2>' + L.slice(0, 6).map(function (x) { return dm_rowHtml(x, false); }).join('') + (L.length > 6 ? dm_cntHtml(L, 'Опоздали сегодня') : '');
+      var first = box.querySelector('.card'); if (first) first.parentNode.insertBefore(c, first.nextSibling); else box.appendChild(c);
+      dm_bindRows(c, function () { lBrief(); });
+    } catch (z) { console.warn('dm brief', z); }
+    return r;
+  };
+})();
+
+/* ===================== 7. Карта сотрудников: только точки отметок прихода и ухода (без слежения) ===================== */
+function dm_mapMgrOn() { return P('dm_map_mgr', true) !== false; }
+function dm_mapOk() { return !!S.me && (isDirector() || (S.me.role === 'manager' && dm_mapMgrOn() && typeof myTeam === 'function' && myTeam().length > 0)); }
+function dm_dist(a, b) { var R = 6371000, r = Math.PI / 180, dLa = (b.lat - a.lat) * r, dLo = (b.lng - a.lng) * r, s = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLo / 2) * Math.sin(dLo / 2); return Math.round(2 * R * Math.asin(Math.sqrt(s))); }
+function dm_hash(s) { var x = 0; s = String(s); for (var i = 0; i < s.length; i++) x = (x * 31 + s.charCodeAt(i)) | 0; return Math.abs(x); }
+/* в демо у учебных отметок нет координат — ставим учебную точку рядом с заведением (в зоне), вне зоны — на расстоянии из отметки */
+function dm_demoPt(v, a, kind) {
+  var hs = dm_hash(a.id + kind), ang = (hs % 360) * Math.PI / 180, out = kind === 'in' ? !!(a.out_zone && !a.zone_ok) : false;
+  var d = out ? (+(a.zone_m || (a.cb_zone && a.cb_zone.dist)) || v.rad + 120) : 8 + (hs % Math.max(10, Math.round(v.rad * 0.7)));
+  return { lat: v.lat + d * Math.cos(ang) / 111320, lng: v.lng + d * Math.sin(ang) / (111320 * Math.cos(v.lat * Math.PI / 180)), demo: true };
+}
+async function dm_mapData(day, team) {
+  var hsR = await dm_q(sb.from('hotel_settings').select('*').eq('id', 1).maybeSingle()), hs = (hsR && hsR.data) || {};
+  var rad = +hs.radius_m || (typeof cb_setN === 'function' ? +cb_setN('cb_radius') : 0) || 150;
+  var v = hs.lat && hs.lng ? { lat: +hs.lat, lng: +hs.lng, rad: rad, set: true } : dm_demo() ? { lat: (typeof CB_DEMO_PT !== 'undefined' ? CB_DEMO_PT : { lat: 41.2906 }).lat, lng: (typeof CB_DEMO_PT !== 'undefined' ? CB_DEMO_PT : { lng: 69.2781 }).lng, rad: rad, set: false } : null;
+  var ids = {}; team.forEach(function (e) { ids[e.id] = e; });
+  var q = await dm_q(sb.from('attendance').select('*').eq('day', day)), by = {};
+  ((q && q.data) || []).forEach(function (a) { if (!ids[a.employee_id] || !a.clock_in) return; var o = by[a.employee_id]; if (!o || String(a.clock_in) > String(o.clock_in)) by[a.employee_id] = a; });
+  var P0 = [], demo = false;
+  Object.keys(by).forEach(function (id) {
+    var a = by[id], e = ids[id], pt = null, kind = a.clock_out ? 'out' : 'in', at = a.clock_out || a.clock_in;
+    if (kind === 'out' && a.out_lat != null) pt = { lat: +a.out_lat, lng: +a.out_lng };
+    else if (a.in_lat != null) { pt = { lat: +a.in_lat, lng: +a.in_lng }; if (kind === 'out') { kind = 'in'; at = a.clock_in; } }
+    else if (a.cb_zone && a.cb_zone.lat) { pt = { lat: +a.cb_zone.lat, lng: +a.cb_zone.lng }; kind = 'in'; at = a.clock_in; }
+    else if (dm_demo() && v) { pt = dm_demoPt(v, a, kind); demo = true; }
+    if (!pt) return;
+    var zoneTxt = kind === 'out' ? a.out_zone : a.in_zone, dist = kind === 'out' ? a.out_dist_m : (a.in_dist_m != null ? a.in_dist_m : a.zone_m != null ? a.zone_m : a.cb_zone && a.cb_zone.dist);
+    if (dist == null && v) dist = dm_dist(v, pt);
+    var out = zoneTxt ? zoneTxt === 'out' : kind === 'in' && a.out_zone ? !a.zone_ok : v ? dist > v.rad : false;
+    if (zoneTxt === 'nogps') out = true;
+    P0.push({ e: e, a: a, lat: pt.lat, lng: pt.lng, kind: kind, at: at, out: out, dist: dist, demo: !!pt.demo });
+  });
+  P0.sort(function (x, y) { return (y.out - x.out) || String(y.at).localeCompare(String(x.at)); });
+  return { v: v, P: P0, demo: demo };
+}
+function dm_svgMap(D) {
+  var v = D.v, P0 = D.P, c = v || (P0[0] ? { lat: P0[0].lat, lng: P0[0].lng, rad: 100 } : { lat: 41.29, lng: 69.27, rad: 100 });
+  var kx = 111320 * Math.cos(c.lat * Math.PI / 180), ky = 111320, maxd = (v ? v.rad : 60) * 1.35;
+  P0.forEach(function (p) { maxd = Math.max(maxd, Math.abs((p.lng - c.lng) * kx) * 1.15, Math.abs((p.lat - c.lat) * ky) * 1.15); });
+  var W = 400, H = 340, s = Math.min(W, H) / 2 / (maxd + 20), X = function (lng) { return W / 2 + (lng - c.lng) * kx * s; }, Y = function (lat) { return H / 2 - (lat - c.lat) * ky * s; };
+  var o = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + h(dm_t('Карта сотрудников')) + '" preserveAspectRatio="xMidYMid meet">';
+  for (var g = -4; g <= 4; g++) o += '<line x1="0" x2="' + W + '" y1="' + (H / 2 + g * 40) + '" y2="' + (H / 2 + g * 40) + '" stroke="var(--line)" stroke-width="1"/><line y1="0" y2="' + H + '" x1="' + (W / 2 + g * 50) + '" x2="' + (W / 2 + g * 50) + '" stroke="var(--line)" stroke-width="1"/>';
+  if (v) o += '<circle cx="' + W / 2 + '" cy="' + H / 2 + '" r="' + Math.max(8, v.rad * s) + '" fill="color-mix(in srgb,var(--gold) 12%,transparent)" stroke="var(--gold)" stroke-width="2"/><circle cx="' + W / 2 + '" cy="' + H / 2 + '" r="5" fill="var(--gold)"/>';
+  P0.forEach(function (p) { var x = X(p.lng), y = Y(p.lat), col = p.out ? 'var(--dj-badf,#E0342E)' : 'var(--dj-okf,#12A06C)'; o += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="7" fill="' + col + '" stroke="var(--card)" stroke-width="2"/>'; if (P0.length <= 14) o += '<text x="' + (x + 10).toFixed(1) + '" y="' + (y + 4).toFixed(1) + '" font-size="11" fill="var(--ink)" style="paint-order:stroke;stroke:var(--card);stroke-width:3px">' + h(p.e.first_name) + ' ' + hm(p.at) + '</text>'; });
+  return o + '</svg>';
+}
+function dm_leaflet() {
+  if (window.L && window.L.map) return Promise.resolve(true);
+  return Promise.race([typeof loadLeaflet === 'function' ? loadLeaflet().then(function () { return !!(window.L && window.L.map); }, function () { return false; }) : Promise.resolve(false), new Promise(function (res) { setTimeout(function () { res(false); }, 4000); })]);
+}
+async function dm_map(box, team) {
+  if (!box) return;
+  var day = S.sub.dmMapDay || today(), dir = isDirector(), people = dir && !team ? (S.emps || []).filter(function (e) { return e.active !== false && e.role !== 'director'; }) : (typeof myTeam === 'function' ? myTeam() : []).filter(function (e) { return e.role !== 'director'; });
+  box.innerHTML = '<div class="card empty">' + dm_e('Загрузка…') + '</div>';
+  var D = await dm_mapData(day, people); if (!box.isConnected) return;
+  var nIn = D.P.filter(function (p) { return !p.out; }).length, nOut = D.P.length - nIn;
+  var html = '<div class="card"><label class="f" style="margin:0">' + dm_e('День') + '<input class="in" type="date" id="dmMd" value="' + day + '" max="' + today() + '"></label>' +
+    '<div class="dm-leg"><span class="chip t-ok"><span class="dm-mk in"></span><span>в зоне</span> <b class="num">' + nIn + '</b></span><span class="chip t-bad"><span class="dm-mk out"></span><span>вне зоны</span> <b class="num">' + nOut + '</b></span><span class="chip t-mute"><span class="dm-mk v"></span><span>заведение и радиус</span>' + (D.v ? ' <b class="num">' + D.v.rad + ' м</b>' : '') + '</span></div></div>' +
+    '<div class="card" style="padding:6px"><div class="dm-map" id="dmMap"></div></div>' +
+    '<div class="card"><h2><span>Последняя отметка</span> <small class="num">' + D.P.length + '</small></h2>' +
+    (D.P.length ? D.P.map(function (p) { return '<div class="dm-mr"><span class="av sm">' + avIn(p.e) + '</span><div class="grow" style="min-width:0"><div class="name">' + h(fullName(p.e)) + '</div><div class="meta" style="white-space:normal"><span>' + dm_e(p.kind === 'out' ? dm_g(p.e, 'ушёл', 'ушла') : dm_g(p.e, 'пришёл', 'пришла')) + '</span> <b class="num">' + hm(p.at) + '</b>' + (p.dist != null ? ' · <span class="num">' + Math.round(p.dist) + ' м</span>' : '') + '</div></div><span class="chip ' + (p.out ? 't-bad' : 't-ok') + '"><span>' + (p.out ? 'вне зоны' : 'в зоне') + '</span></span></div>'; }).join('')
+      : '<div class="empty" style="white-space:normal">' + dm_e(day === today() ? 'Точек пока нет. Точка появляется, когда сотрудник нажимает «Пришёл» или «Ушёл».' : 'В этот день отметок не было.') + '</div>') + '</div>' +
+    '<div class="meta" style="white-space:normal;margin:0 2px 8px">' + dm_e('Только место в момент отметки прихода и ухода — постоянного слежения нет.') + (D.demo ? ' ' + dm_e('В демо у учебных отметок точки условные.') : '') + (!D.v ? ' ' + dm_e('Точка заведения не задана: Пульт → Настройки отметки.') : '') + '</div>' +
+    (dir ? '<div class="card"><label class="cb-sw" style="display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer"><input type="checkbox" id="dmMgr"' + (dm_mapMgrOn() ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--gold)"><span class="grow" style="white-space:normal">' + dm_e('Руководители видят карту своей команды (Разделы)') + '</span></label></div>' : '');
+  box.innerHTML = html;
+  $('dmMd').onchange = function () { S.sub.dmMapDay = this.value; dm_map(box, team); };
+  if ($('dmMgr')) $('dmMgr').onchange = function () { w3SavePref({ dm_map_mgr: !!this.checked }); toast(dm_t('Сохранено')); };
+  var el = $('dmMap'); el.innerHTML = dm_svgMap(D);
+  var ok = await dm_leaflet(); if (!ok || !el.isConnected) return;
+  try {
+    var c = D.v ? [D.v.lat, D.v.lng] : D.P[0] ? [D.P[0].lat, D.P[0].lng] : [41.2906, 69.2781];
+    el.innerHTML = ''; var map = L.map(el, { zoomControl: true, attributionControl: true }).setView(c, 17);
+    var tl = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+    var bad = 0; tl.on('tileerror', function () { if (++bad === 6 && el.isConnected) { try { map.remove(); } catch (z) {} el.innerHTML = dm_svgMap(D); } });
+    var css = getComputedStyle(document.documentElement), okc = (css.getPropertyValue('--dj-okf') || '#12A06C').trim(), badc = (css.getPropertyValue('--dj-badf') || '#E0342E').trim(), gold = (css.getPropertyValue('--gold') || '#A57F35').trim();
+    var ll = [];
+    if (D.v) { L.circle(c, { radius: D.v.rad, color: gold, weight: 2, fillOpacity: 0.08 }).addTo(map); L.circleMarker(c, { radius: 5, color: gold, fillColor: gold, fillOpacity: 1 }).addTo(map).bindTooltip(dm_t('Заведение')); ll.push(c); }
+    D.P.forEach(function (p) { ll.push([p.lat, p.lng]); L.circleMarker([p.lat, p.lng], { radius: 8, color: '#fff', weight: 2, fillColor: p.out ? badc : okc, fillOpacity: 1 }).addTo(map).bindTooltip(dm_short(p.e) + ' · ' + hm(p.at) + ' · ' + dm_t(p.out ? 'вне зоны' : 'в зоне'), { permanent: D.P.length <= 8, direction: 'top' }); });
+    if (ll.length > 1) map.fitBounds(L.latLngBounds(ll).pad(0.25), { maxZoom: 18 });
+    setTimeout(function () { try { map.invalidateSize(); } catch (z) {} }, 200);
+  } catch (z) { console.warn('dm map', z); el.innerHTML = dm_svgMap(D); }
+}
+/* руководитель: экран «Карта сотрудников» в «Разделах» (своя команда); владелец — «Пульт → Сегодня» */
+W3T.dmmap = 'Карта сотрудников';
+W3V.dmmap = function () { var m = $('main'); if (!dm_mapOk()) { go('home'); return; } m.innerHTML = '<div id="dmMapBox"></div>'; dm_map($('dmMapBox'), true); };
+if (typeof CM_VIEWS !== 'undefined' && CM_VIEWS.indexOf('dmmap') < 0) CM_VIEWS.push('dmmap');
+(function () {
+  var cv0 = canView; canView = function (v) { if (v === 'dmmap') return dm_mapOk(); return cv0.apply(this, arguments); };
+  var sa0 = sectionsAll;
+  sectionsAll = function () { var o = sa0.apply(this, arguments); try { if (dm_mapOk() && !isDirector() && Array.isArray(o) && !o.some(function (s) { return s[0] === 'dmmap'; })) o.push(['dmmap', 'Карта сотрудников', 'Где отметились сегодня: в зоне или вне', 'pin']); } catch (e) {} return o; };
+})();
+
+/* ===================== 8. «Пульт → Сегодня»: «Приход и уход» (раскрывается), «Задачи», «Карта сотрудников» — как в Mir Luxe One ===================== */
+var DM_AF = [['all', 'Весь список', 'o'], ['in', 'На месте', 'g'], ['late', 'Опоздали', 'a'], ['none', 'Нет отметки', 'r'], ['soon', 'Ещё не началась', ''], ['left', 'Ушли', 's'], ['off', 'Выходной/отпуск', ''], ['nosched', 'Не в графике', '']];
+/* те же цифры, что фильтры экрана «Приход и уход» (attPhase) */
+async function dm_attCounts(day) {
+  var r = await Promise.all([dm_q(sb.from('attendance').select('*').eq('day', day)), dm_q(sb.from('schedule').select('*').eq('day', day))]);
+  var att = {}, sch = {}, schT = {};
+  ((r[0] && r[0].data) || []).forEach(function (a) { var o = att[a.employee_id]; if (!o || !a.clock_out || (o.clock_out && a.clock_in > o.clock_in)) att[a.employee_id] = a; });
+  ((r[1] && r[1].data) || []).forEach(function (s) { sch[s.employee_id] = s.kind; if (s.t_start) schT[s.employee_id] = [s.t_start, s.t_end]; });
+  var list = (S.emps || []).filter(function (e) { return e.active && e.role !== 'director'; });
+  var cnt = { all: list.length, in: 0, late: 0, none: 0, soon: 0, left: 0, off: 0, nosched: 0 }, FST = { in: ['in', 'late'], late: ['late'], none: ['missing', 'absent'], soon: ['soon'], left: ['left'], off: ['off'], nosched: ['nosched'] };
+  list.forEach(function (e) { var p = attPhase(e, sch[e.id], schT[e.id], att[e.id], day); Object.keys(FST).forEach(function (c) { if (FST[c].indexOf(p.st) >= 0) cnt[c]++; }); });
+  return cnt;
+}
+function dm_pultOpen() { var v = null; try { v = localStorage.getItem('dm_pa'); } catch (e) {} return v !== '0'; }
+function dm_pultHtml() {
+  if (!isDirector()) return '';
+  var op = dm_pultOpen();
+  return '<div class="pl-gt">' + dm_e('Сегодня') + '</div><div class="pl-card pl-ics dm-pa" id="dmPA" aria-expanded="' + op + '">' +
+    '<button type="button" class="pl-row" id="dmPAh" aria-expanded="' + op + '"><span class="pl-ic dm-gr">' + icon('tick', 18) + '</span><span class="pl-t"><span class="pl-tt">' + dm_e('Приход и уход') + '</span></span><span class="dm-bdg num" id="dmPAb" data-n="0"></span><span class="pl-v" id="dmPAv"></span><span class="dm-chev">' + icon('chev', 16) + '</span></button>' +
+    '<div class="dm-sub" id="dmPAl"' + (op ? '' : ' hidden') + '>' + DM_AF.map(function (f) { return '<button type="button" class="pl-row" data-dmaf="' + f[0] + '"><span class="dm-dot ' + f[2] + '"></span><span class="pl-t"><span class="pl-tt">' + dm_e(f[1]) + '</span></span>' + (f[0] === 'none' ? '<span class="dm-bdg num" data-dmafb="none" data-n="0"></span>' : '') + '<span class="pl-v num" data-dmafn="' + f[0] + '"></span><span class="pl-ch">' + icon('chev', 16) + '</span></button>'; }).join('') + '</div>' +
+    '<button type="button" class="pl-row" data-pl="tasks"><span class="pl-ic dm-bl">' + icon('check', 18) + '</span><span class="pl-t"><span class="pl-tt">' + dm_e('Задачи') + '</span></span><span class="dm-bdg num" id="dmPTb" data-n="0"></span><span class="pl-v num" id="dmPTv"></span><span class="pl-ch">' + icon('chev', 16) + '</span></button>' +
+    (dm_mapOk() ? '<button type="button" class="pl-row" data-pl="map"><span class="pl-ic dm-rd">' + icon('pin', 18) + '</span><span class="pl-t"><span class="pl-tt">' + dm_e('Карта сотрудников') + '</span><span class="pl-st">' + dm_e('Где отметились сегодня') + '</span></span><span class="pl-ch">' + icon('chev', 16) + '</span></button>' : '') + '</div>';
+}
+async function dm_pultFill() {
+  if (!$('dmPA')) return;
+  try {
+    var c = await dm_attCounts(today()); if (!$('dmPA')) return;
+    var b = $('dmPAb'); b.textContent = c.none || ''; b.setAttribute('data-n', c.none);
+    $('dmPAv').innerHTML = '<b class="num">' + c.in + '</b> <span>' + dm_e('на месте') + '</span>';
+    DM_AF.forEach(function (f) { var el = document.querySelector('[data-dmafn="' + f[0] + '"]'); if (el) el.textContent = f[0] === 'none' && c.none ? '' : c[f[0]]; });
+    var nb = document.querySelector('[data-dmafb="none"]'); if (nb) { nb.textContent = c.none || ''; nb.setAttribute('data-n', c.none); }
+  } catch (e) { console.warn('dm pult', e); }
+  try {
+    var td = today(), now = nowHM(), r = await dm_q(sb.from('tasks').select('*').lte('day', td)), L = (r && r.data) || [], n = 0, ov = 0;
+    L.forEach(function (t) { if (t.status === 'cancelled' || t.deleted) return; if (t.day === td) n++; if (t.status !== 'done' && (t.day < td || (t.day === td && t.due_time && t5(t.due_time) < now))) ov++; });
+    if ($('dmPTv')) { $('dmPTv').textContent = n; var tb = $('dmPTb'); tb.textContent = ov || ''; tb.setAttribute('data-n', ov); }
+  } catch (e) {}
+}
+function dm_pultBind() {
+  var hd = $('dmPAh'); if (!hd) return;
+  hd.onclick = function () { var op = !dm_pultOpen(); try { localStorage.setItem('dm_pa', op ? '1' : '0'); } catch (e) {} $('dmPAl').hidden = !op; hd.setAttribute('aria-expanded', op); $('dmPA').setAttribute('aria-expanded', op); };
+  document.querySelectorAll('[data-dmaf]').forEach(function (b) { b.onclick = function () { S.sub.attF = b.getAttribute('data-dmaf'); S.sub.attDay = today(); PL.find = ''; plOpen('att'); }; });
+  dm_pultFill();
+}
+/* 96-nav (подключается позже) убирает att/tasks/map из групп пульта — поэтому обёртки ставим после загрузки всех частей */
+setTimeout(function () {
+  try {
+    var dok0 = plDeskOk; plDeskOk = function (id) { if (isDirector() && (id === 'map' || id === 'att' || id === 'tasks')) return true; return dok0.apply(this, arguments); };
+    var ix0 = plIndexHtml; plIndexHtml = function (cur) { var s = ix0.apply(this, arguments); try { if (s.indexOf('id="dmPA"') < 0) s = s.replace('<div id="plList">', '<div id="plList">' + dm_pultHtml()); } catch (e) {} return s; };
+    var fn0 = PL_FN; PL_FN = function (id) { if (id === 'map') return function (box) { return dm_map(box, false); }; return fn0.apply(this, arguments); };
+    var vd0 = vDesk; vDesk = function () { var r = vd0.apply(this, arguments); try { dm_pultBind(); } catch (e) { console.warn(e); } return r; };
+    if (typeof W3V !== 'undefined' && W3V.desk === vd0) W3V.desk = vDesk;
+  } catch (e) { console.warn('dm pult wrap', e); }
+}, 0);
+/* сервер: голосовое объяснение не сохраняется (нет хранения записи) — кнопку «Записать голосовое» не показываем */
+(function () {
+  if (typeof explainSheet !== 'function') return;
+  var es0 = explainSheet;
+  explainSheet = function () { var r = es0.apply(this, arguments); try { if (!dm_demo()) { var v = $('cbLv'); if (v) v.remove(); } } catch (e) {} return r; };
+})();
+/* без слежения (решение владельца): база повесила на visibilitychange исходный trackSync, обёртка 92b его не снимает —
+   держим TRK.watch «занятым», чтобы watchPosition не запускался; точки маршрута и native-слежение не отправляются */
+(function () {
+  try {
+    if (typeof TRK !== 'undefined' && TRK) { if (TRK.watch != null && navigator.geolocation) { try { navigator.geolocation.clearWatch(TRK.watch); } catch (e) {} } Object.defineProperty(TRK, 'watch', { get: function () { return 0; }, set: function () {}, configurable: true }); }
+    if (typeof trackPos === 'function') trackPos = function () {};
+    if (typeof nativeTrack === 'function') nativeTrack = async function () { try { var n = typeof nat === 'function' ? nat() : null; if (n && n.isTracking && n.isTracking()) n.stopTracking(); } catch (e) {} };
+  } catch (e) { console.warn('dm track', e); }
+})();
+window.__dm = { st: dm_st, lateList: dm_lateList, attCounts: dm_attCounts, mapData: dm_mapData, remind: dm_remind };
+
+
+/* ===== ВОЛНА 4 · 92n-parity.js ===== */
+/* ===== 92n — паритет «демо → сервер» для пилота (префикс dn_). Журнал w4/log/dn.md, аудит w4/log/AUDIT_SERVER.md =====
+   Только в режиме сервера (sv_on()); в демо ничего не меняется.
+   ЧАСТЬ 1. Скрыто то, что на сервере пока ничего не делает (не «Отправлено», когда ничего не ушло). Реестр — window.DN_HIDE:
+     emg «Экстренно», problem «Сообщить о проблеме», guides «Инструкции», chat «Чат руководителей», taskchat переписка в задаче,
+     rep «Отчёты» в Пульте, autoclock «Подсказка о приходе», pspaste «Вставить из таблицы» и правка расчётного листа вручную.
+     Часть 92o (вторая волна) включает свою функцию строкой DN_HIDE.<ключ> = false — обёртки ниже проверяют реестр при каждом показе.
+   ЧАСТЬ 2. Работает на сервере (0018_parity.sql + w4/files/sv-adapter.js):
+     ставки оплаты → member_pay (pay_sync), Telegram — ник в профиле, день рождения, «Закрыть месяц», публикация графика (schedule_publish),
+     «Попросить руководителя сбросить телефон», карточка «Банк вопросов» (пустая — скрыта). */
+window.DN_HIDE = Object.assign({ emg: true, problem: true, guides: true, chat: true, taskchat: true, rep: true, autoclock: true, pspaste: true }, window.DN_HIDE || {});
+function dn_on() { return typeof sv_on === 'function' && sv_on(); }
+function dn_hid(k) { return dn_on() && !!(window.DN_HIDE || {})[k]; }
+function dn_t(s) { try { return trUi(s); } catch (e) { return s; } }
+function dn_SV() { return window.JAMOA_SV || null; }
+
+(function () {
+  if (!dn_on()) return;
+  var VH = { problem: 'problem', guides: 'guides', chat: 'chat' };
+
+  /* ---------- ЧАСТЬ 1: скрыть ---------- */
+  /* экраны: «Разделы», меню, ссылки и go() — через проверку ядра (91-coremode) */
+  if (typeof cm_viewOk === 'function') { var cv0 = cm_viewOk; cm_viewOk = function (v) { var k = VH[String(v).replace(/^nav_s_/, '')]; if (k && dn_hid(k)) return false; return cv0.apply(this, arguments); }; }
+  if (typeof cm_featOk === 'function') { var cf0 = cm_featOk; cm_featOk = function (id) { if (id === 'desk:rep' && dn_hid('rep')) return false; if (id === 'chat' && dn_hid('chat')) return false; return cf0.apply(this, arguments); }; }
+  if (typeof canView === 'function') { var cw0 = canView; canView = function (v) { var k = VH[v]; if (k && dn_hid(k)) return false; return cw0.apply(this, arguments); }; }
+  /* «Экстренно» в «Ещё» и в профиле */
+  if (typeof emgBtnHtml === 'function') { var eb0 = emgBtnHtml; emgBtnHtml = function () { return dn_hid('emg') ? '' : eb0.apply(this, arguments); }; }
+  if (typeof emgBind === 'function') { var eg0 = emgBind; emgBind = function () { if (dn_hid('emg')) return; return eg0.apply(this, arguments); }; }
+  /* переписка в задаче */
+  if (typeof taskThreadHtml === 'function') { var tt0 = taskThreadHtml; taskThreadHtml = function () { return dn_hid('taskchat') ? '' : tt0.apply(this, arguments); }; }
+  if (typeof bindTaskThread === 'function') { var bt0 = bindTaskThread; bindTaskThread = function () { if (dn_hid('taskchat')) return; return bt0.apply(this, arguments); }; }
+  /* «Подсказка о приходе»: set_auto_clock на сервере нет */
+  if (typeof autoClockHtml === 'function') { var ac0 = autoClockHtml; autoClockHtml = function () { return dn_hid('autoclock') ? '' : ac0.apply(this, arguments); }; }
+
+  /* ---------- ЧАСТЬ 2 ---------- */
+  /* 2.1 Telegram: без бота — ник в карточке сотрудника (set_my_contact); баннер «Подключите Telegram» не показываем */
+  if (typeof tgBannerHtml === 'function') tgBannerHtml = function () { return ''; };
+  if (typeof pushBannerHtml === 'function') {
+    var pb0 = pushBannerHtml;
+    pushBannerHtml = function () { if (!S.me) return pb0.apply(this, arguments); var k = S.me.tg_chat_id; S.me.tg_chat_id = k || 'sv'; try { return pb0.apply(this, arguments); } finally { S.me.tg_chat_id = k; } };
+  }
+  function dn_tgCard() {
+    var v = (S.me && S.me.tg_username) || '';
+    return '<div class="card" id="dnTg"><h2>Telegram <small>' + (v ? '<span class="chip t-ok">@' + h(v) + '</span>' : '<span class="chip t-mute">' + h(dn_t('не указан')) + '</span>') + '</small></h2>' +
+      '<div class="meta" style="margin-bottom:8px;white-space:normal">' + h(dn_t('Ваш ник в Telegram — чтобы руководитель и коллеги могли написать вам. Уведомления Jamoa приходят в приложение.')) + '</div>' +
+      '<div style="display:flex;gap:8px"><input class="in" id="dnTgIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@nik" value="' + h(v ? '@' + v : '') + '" style="flex:1;min-width:0">' +
+      '<button type="button" class="btn ghost sm" id="dnTgSave">' + h(dn_t('Сохранить')) + '</button></div></div>';
+  }
+  if (typeof pushProfileHtml === 'function') {
+    var pp0 = pushProfileHtml;
+    pushProfileHtml = function () {
+      var x = pp0.apply(this, arguments); if (typeof x !== 'string') return x;
+      var i = x.indexOf('<div class="card"><h2>Telegram'), j = i >= 0 ? x.indexOf('<div class="card"><h2>', i + 10) : -1;
+      return i >= 0 ? x.slice(0, i) + dn_tgCard() + (j > 0 ? x.slice(j) : '') : x;
+    };
+  }
+  if (typeof bindPushProfile === 'function') {
+    var bp0 = bindPushProfile;
+    bindPushProfile = function () {
+      var r = bp0.apply(this, arguments), b = $('dnTgSave'); if (!b) return r;
+      b.onclick = async function () {
+        var v = ($('dnTgIn').value || '').trim(); this.disabled = true;
+        var x = await sb.rpc('set_my_contact', { p_tg: v }); this.disabled = false;
+        if (x.error) return toast(err(x.error), 4000);
+        S.me.tg_username = x.data || null; var SV = dn_SV(); if (SV) SV.stale('base');
+        $('dnTgIn').value = x.data ? '@' + x.data : ''; toast(dn_t(x.data ? 'Сохранено' : 'Ник Telegram убран'));
+      };
+      return r;
+    };
+  }
+
+  /* 2.2 «Расчётные листы»: «Закрыть месяц» (month_close / month_reopen); ручная правка листа и вставка из таблицы — нет на сервере */
+  if (typeof psOpen === 'function') { var po0 = psOpen; psOpen = function (p, edit) { return po0.call(this, p, dn_hid('pspaste') ? false : edit); }; }
+  if (typeof vPayroll === 'function') {
+    var vp0 = vPayroll;
+    vPayroll = async function () {
+      var r = await vp0.apply(this, arguments), m = $('main'); if (!m) return r;
+      if (dn_hid('pspaste')) { var bp = $('prPaste'); if (bp) bp.remove(); m.querySelectorAll('[data-pre]').forEach(function (b) { b.setAttribute('data-prv', b.getAttribute('data-pre')); b.removeAttribute('data-pre'); b.innerHTML = '<span>' + h(dn_t('Открыть расчёт')) + '</span>'; }); }
+      dn_closeBtn(m);
+      return r;
+    };
+  }
+  function dn_closeBtn(m) {
+    if (!S.me || S.me.role !== 'director' || $('dnMc')) return;
+    var ym = S.sub.prYm, cur = today().slice(0, 7), top = m.querySelector('.ps-top'); if (!ym || !top || ym >= cur) return;
+    var SV = dn_SV(), closed = ((SV && SV.T.month_closes) || []).some(function (c) { return c.ym === ym && !c.reopened_at; });
+    var d = document.createElement('div'); d.id = 'dnMc'; d.className = 'ps-acts'; d.style.marginTop = '8px';
+    d.innerHTML = closed ? '<span class="chip t-ok">' + h(dn_t('Месяц закрыт')) + '</span> <button type="button" class="btn ghost sm" id="dnMcR">' + h(dn_t('Открыть снова')) + '</button>'
+      : '<button type="button" class="btn ghost" id="dnMcC">' + icon('lock', 16) + '<span>' + h(dn_t('Закрыть месяц')) + '</span></button><div class="meta" style="white-space:normal">' + h(dn_t('После закрытия отметки, штрафы и премии этого месяца уже не меняются.')) + '</div>';
+    top.appendChild(d);
+    if ($('dnMcC')) $('dnMcC').onclick = async function () {
+      if (!(await askSure('Закрыть месяц? Отметки, штрафы и премии этого месяца больше не изменятся.', { ok: 'Закрыть месяц', title: 'Расчётные листы', sub: psYm(ym) }))) return;
+      this.disabled = true; var x = await sb.rpc('month_close', { p_ym: ym }); this.disabled = false;
+      if (x.error) return toast(err(x.error), 4000);
+      if (SV) await SV.refresh('pay'); toast(dn_t('Месяц закрыт')); vPayroll();
+    };
+    if ($('dnMcR')) $('dnMcR').onclick = async function () {
+      if (!(await askSure('Открыть месяц снова? Отметки, штрафы и премии этого месяца снова можно будет менять.', { ok: 'Открыть снова', sub: psYm(ym) }))) return;
+      this.disabled = true; var x = await sb.rpc('month_reopen', { p_ym: ym }); this.disabled = false;
+      if (x.error) return toast(err(x.error), 4000);
+      if (SV) await SV.refresh('pay'); toast(dn_t('Месяц снова открыт')); vPayroll();
+    };
+  }
+
+  /* 2.3 Банк вопросов: на сервере пустой банк — карточку не показываем (вопросы появятся после загрузки банка) */
+  if (typeof quizBankCard === 'function') {
+    var qb0 = quizBankCard;
+    quizBankCard = async function () {
+      var r = await qb0.apply(this, arguments), n = $('qbN'); if (!n) return r;
+      var k = +((n.textContent || '').match(/\d+/) || [0])[0]; if (!k) { var c = n.closest('.card'); if (c) c.hidden = true; }
+      return r;
+    };
+  }
+
+  /* 2.4 Отметка: телефон чужой или заблокирован — «Попросить руководителя сбросить телефон» (device_ask) */
+  if (typeof cb_why === 'function') {
+    var cy0 = cb_why;
+    cb_why = function (code) {
+      var r = cy0.apply(this, arguments);
+      if ((code === 'device_other' || code === 'device_blocked') && !$('dnDev')) {
+        var acts = document.querySelector('#layer .cb-acts');
+        if (acts) {
+          acts.insertAdjacentHTML('afterbegin', '<button type="button" class="btn gold full" id="dnDev">' + icon('bell', 18) + '<span>' + h(dn_t('Попросить руководителя сбросить телефон')) + '</span></button>');
+          $('dnDev').onclick = async function () {
+            this.disabled = true; var x = await sb.rpc('device_ask', { p_device_id: typeof deviceId === 'function' ? deviceId() : null }); this.disabled = false;
+            if (x.error) return toast(err(x.error), 4000);
+            toast(dn_t(x.data && x.data.sent ? 'Руководитель получил просьбу — после сброса отметьтесь ещё раз' : 'Телефон свободен — нажмите «Попробовать ещё раз»'), 5000);
+          };
+        }
+      }
+      return r;
+    };
+  }
+
+  /* 2.5 Ставки оплаты (п. 2 аудита): правило должности, как его видит приложение (earnRule: «Пульт → Заработок» или по умолчанию), → member_pay каждого
+     сотрудника одной rpc pay_sync. Личный оклад из приглашения сервер не затирает. Вызывается: после сохранения правил, после добавления сотрудника,
+     и один раз за вход владельца (сотрудники, добавленные раньше, получают ставку). */
+  function dn_payRow(e, rules) {
+    var keep = S.prefs, r;
+    if (rules) S.prefs = Object.assign({}, S.prefs || {}, { earn_rules: rules });
+    try { r = earnRule(e) || {}; } catch (x) { r = {}; } finally { S.prefs = keep; }
+    var s = Math.max(0, Math.round(+r.s || 0)), o = { member: e.id, scheme: 'month', rate: s, hour_rate: 0, pct: 0, piece_rate: 0 };
+    if (r.m === 'hour') { o.scheme = 'hour'; o.rate = 0; o.hour_rate = Math.max(0, Math.round(+r.ph || 25000)); }
+    else if (r.m === 'pct') { o.scheme = 'month_pct'; o.pct = Math.max(0, Math.min(100, +r.r || 0)); o.rev = (r.b || 'own') === 'own' ? 'own' : 'point'; }
+    else if (r.m === 'unit') { o.scheme = 'piece'; o.piece_rate = Math.max(0, Math.round(+r.up || 0)); }
+    return o;
+  }
+  function dn_payRows(rules) { return (S.emps || []).filter(function (e) { return e && e.active !== false && !e.colleague && e.role !== 'director' && e.id !== (S.me && S.me.id); }).map(function (e) { return dn_payRow(e, rules); }); }
+  async function dn_paySync(rules) {
+    if (!S.me || !(S.me.role === 'director' || (typeof isAccounting === 'function' && isAccounting()))) return null;
+    var rows = dn_payRows(rules); if (!rows.length) return null;
+    var x = await sb.rpc('pay_sync', { p_rows: rows }); if (x.error) throw x.error;
+    return x.data;
+  }
+  var SV0x = dn_SV();
+  if (SV0x) {
+    SV0x.hooks.paySync = function (rules) { return dn_paySync(rules); };
+    SV0x.hooks.schemeFor = function (posId) { var o = dn_payRow({ id: null, position_id: posId, role: 'staff' }); return o.scheme === 'piece' || o.scheme === 'month_pct' ? o.scheme : o.scheme === 'hour' ? 'hour' : 'month'; };
+  }
+  window.dn_paySync = dn_paySync;
+  var paid = false;
+  function dn_payOnce() { if (paid || !S.me || S.me.role !== 'director' || !(S.emps || []).length) return; paid = true; setTimeout(function () { dn_paySync().catch(function (e) { try { console.warn('[dn] pay_sync', e && e.message); } catch (x) {} }); }, 1500); }
+  if (typeof render === 'function') { var rd0 = render; render = function () { var r = rd0.apply(this, arguments); try { dn_payOnce(); } catch (e) {} return r; }; }
+
+  /* 2.6 График (п. 9): после «Опубликовать изменения» — schedule_publish (сотрудники получают «График на неделю опубликован»).
+     Клетки уходят одной rpc schedule_set_many (переходник). Обёртка — после всех частей (92d, 92l оборачивают vTeamSched раньше). */
+  setTimeout(function () {
+    if (typeof vTeamSched !== 'function') return;
+    var ts0 = vTeamSched;
+    vTeamSched = function () {
+      var r = ts0.apply(this, arguments);
+      Promise.resolve(r).then(function () {
+        var p = $('pub'); if (!p || p._dn || !p.onclick) return;
+        var f0 = p.onclick; p._dn = 1;
+        p.onclick = async function (ev) {
+          var n = Object.keys(S.sub.dirty || {}).length, wk = S.sub.tsWeek, dept = S.sub.tsDept;
+          var out = await f0.call(this, ev);
+          if (n && !Object.keys(S.sub.dirty || {}).length && wk) {
+            var x = await sb.rpc('schedule_publish', { p_week_start: wk, p_dept: dept && dept !== 'all' ? dept : null, p_confirm_holes: true });
+            if (x.error) toast(err(x.error), 4000); else if (x.data && x.data.notified) toast(dn_t('Сотрудники получили уведомление о графике') + ': ' + x.data.notified, 3500);
+          }
+          return out;
+        };
+      });
+      return r;
+    };
+  }, 0);
+
+  if (/[?&]w4dbg/.test(location.search)) window.__dn = { S: S, sb: sb, rows: dn_payRows, sync: dn_paySync, hid: dn_hid, why: function () { return cb_why.apply(null, arguments); } };
+})();
+
+
+/* ===== ВОЛНА 4 · 92o-features.js ===== */
+/* ===== 92o — функции демо на настоящем сервере (префикс do_). Журнал w4/log/do.md, сервер — 0019_features.sql, переходник — блок «92o» в sv-adapter.js =====
+   1. «Экстренно»: тревога уходит на сервер (emergency_raise) — срочное уведомление владельцу, руководителям и всем на смене.
+      Никогда не «молча»: нет связи / ошибка сервера → экран «Тревога НЕ отправлена» с большими кнопками 101 / 103 / 104 / 102 / 112 и «Отправить ещё раз».
+      Координаты — только если доступ к месту уже разрешён (без вопроса и не дольше 1,5 с). В демо — так же: после начала сразу «Вызвать» тех же людей.
+   2. «Сообщить о проблеме» — экран базы; на сервере — problem_create / list_problems / problem_reply (переходник).
+   3. «Инструкции» — для всех, для службы или для должности; узбекский текст; «Удалить». Руководитель — только своей службы.
+   4. Переписка в задаче — экран базы; обновляется каждые 10 с, пока задача открыта; без эмодзи.
+   5. «Пульт → Отчёты»: экстренные события (идёт / завершены), месяц по службам (смены, опоздания, не пришли, задачи, тест, заработок)
+      и отчёт по дням. Сервер — reports_month / reports_daily, демо — тот же расчёт по учебным таблицам.
+   6. Web-push: публичный ключ VAPID из server-config.js (vapidPublic); плейсхолдер — честное «ещё не настроено» вместо «включено».
+   В режиме сервера снимает свои пункты из реестра скрытого 92n (window.DN_HIDE: emg, problem, guides, taskchat, rep). */
+var DO = { ym: null, thr: null, busy: false };
+var DO_TEL = { '101': 'Пожарные', '103': 'Скорая', '104': 'Газовая служба', '102': 'Милиция', '112': 'Единая служба' };
+function do_t(s) { try { return trUi(s); } catch (e) { return s; } }
+function do_e(s) { return h(do_t(s)); }
+function do_sv() { return typeof sv_on === 'function' && sv_on(); }
+function do_wait(p, ms) { return Promise.race([Promise.resolve(p), new Promise(function (res) { setTimeout(function () { res({ data: null, error: { message: 'timeout' } }); }, ms); })]); }
+function do_b64u(buf) { var u = new Uint8Array(buf), s = ''; for (var i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function do_n(x) { return x == null || x === '' ? 0 : +x || 0; }
+
+/* реестр 92n: эти функции на сервере теперь работают */
+if (do_sv()) window.DN_HIDE = Object.assign(window.DN_HIDE || {}, { emg: false, problem: false, guides: false, taskchat: false, rep: false });
+
+(function () {
+  /* отладка (как у других частей: только с ?w4dbg в адресе) */
+  if (/[?&]w4dbg/.test(location.search)) window.__do = { S: S, sb: sb, go: function (v) { return go(v); }, emgOpen: function (id) { return emgOpen(id); }, taskSheet: function (t, r) { return taskSheet(t, r); } };
+  var st = document.createElement('style');
+  st.textContent =
+    '.do-fail{display:flex;flex-direction:column;gap:4px;font-size:15px;line-height:1.45}.do-fail b{font-size:16.5px;color:var(--bad)}' +
+    '.do-tels .emg-tel{min-height:64px}.emg-kind.do-busy{opacity:.55;pointer-events:none}' +
+    '.do-rep{display:flex;flex-direction:column;gap:12px;margin-bottom:12px}.do-mh{display:flex;align-items:center;gap:8px}.do-mh h2{flex:1;min-width:0;margin:0;text-align:center}' +
+    '.do-mh .btn{min-width:44px;min-height:44px;padding:0 10px}.do-kpi{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}' +
+    '.do-kpi>div{border:1px solid var(--line2);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}' +
+    '.do-kpi b{font-size:18px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.do-kpi span{font-size:12.5px;color:var(--muted)}' +
+    '.do-kpi .k-bad b{color:var(--bad)}.do-kpi .k-warn b{color:var(--warn)}.do-kpi .k-ok b{color:var(--ok)}' +
+    '.do-dr{padding:10px 0;border-top:1px solid var(--line2);display:flex;flex-direction:column;gap:6px}.do-dn{font-weight:700;font-size:14.5px}' +
+    '.do-dc{display:flex;flex-wrap:wrap;gap:4px}.do-dc .chip{white-space:nowrap}' +
+    '.do-day{border-top:1px solid var(--line2)}.do-day:first-of-type{border-top:0}.do-day>summary{list-style:none;cursor:pointer;padding:10px 0;display:flex;flex-direction:column;gap:4px;min-height:44px}' +
+    '.do-day>summary::-webkit-details-marker{display:none}.do-day .do-dd{font-weight:700}.do-day .meta{white-space:normal}' +
+    '.do-ev{display:flex;align-items:flex-start;gap:10px;width:100%;padding:10px 0;border:0;border-top:1px solid var(--line2);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;min-height:48px}' +
+    '.do-ev:first-of-type{border-top:0}.do-ev .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.do-ev .meta{white-space:normal}' +
+    '.do-gm{font-size:12.5px;color:var(--muted);font-weight:500}.do-gx{margin-top:8px;display:flex;flex-direction:column;gap:8px}';
+  document.head.appendChild(st);
+})();
+
+/* =====================================================================================
+   1. «Экстренно»
+   ===================================================================================== */
+/* координаты: только если доступ уже разрешён — без вопроса и не дольше 1,5 с */
+async function do_pos() {
+  try {
+    if (!navigator.geolocation || !navigator.permissions || !navigator.permissions.query) return null;
+    var p = await do_wait(navigator.permissions.query({ name: 'geolocation' }), 500); if (!p || p.state !== 'granted') return null;
+    return await new Promise(function (res) {
+      var done = false; function fin(v) { if (!done) { done = true; res(v); } }
+      setTimeout(function () { fin(null); }, 1500);
+      navigator.geolocation.getCurrentPosition(function (x) { fin({ lat: x.coords.latitude, lng: x.coords.longitude }); }, function () { fin(null); }, { maximumAge: 300000, timeout: 1400, enableHighAccuracy: false });
+    });
+  } catch (e) { return null; }
+}
+/* демо — как сервер: после начала тревоги сразу «Вызвать» владельца, руководителей и всех на смене */
+async function do_demoAlert(id) {
+  var on = await qSafe(sb.rpc('emergency_onshift')), sh = {};
+  ((on && on.data) || []).forEach(function (a) { if (!a.clock_out) sh[a.employee_id] = 1; });
+  var ids = (S.emps || []).filter(function (e) { return e.active !== false && e.id !== S.me.id && (e.role === 'director' || e.role === 'manager' || sh[e.id]); }).map(function (e) { return e.id; });
+  if (!ids.length) return 0;
+  var r = await sb.rpc('emergency_alert', { p_event: id, p_emps: ids });
+  if (r.error) throw r.error;
+  return ((r.data && r.data.sent) || ids).length;
+}
+async function do_emgStart(kind) {
+  if (EMG.busy) return; EMG.busy = true; haptic();
+  var el = $('emg'), btn = el ? el.querySelector('.emg-grid [data-k="' + kind + '"]') : null, off = navigator.onLine === false, drill = !!(EMG.drill && emgCanDrill());
+  if (btn) btn.classList.add('do-busy');
+  try {
+    var pos = off ? null : await do_pos(), a = { p_kind: kind, p_drill: drill };
+    if (pos) { a.p_lat = pos.lat; a.p_lng = pos.lng; }
+    var r = await do_wait(sb.rpc('emergency_start', a), off ? 4000 : 15000);
+    if (!r || r.error || !r.data || r.data.id == null) return do_emgFail(kind, r && r.error, off);
+    var id = r.data.id, n = r.data.alerted;
+    if (r.data.joined) emgToast(do_t('Событие уже идёт — вы присоединились'));
+    else {
+      if (!do_sv()) { try { n = await do_demoAlert(id); } catch (e) { n = null; emgToast(err(e)); } }
+      if (n != null) emgToast(do_t(drill ? 'Учебная тревога отправлена' : 'Тревога отправлена') + ': ' + n);
+    }
+    var q = await qSafe(sb.from('emergency_events').select('*').eq('id', id).maybeSingle());
+    if (!$('emg')) return;
+    EMG.ev = (q && q.data) || { id: id, kind: kind, drill: drill, place: null, started_by: S.me.id, started_at: new Date().toISOString(), ended_at: null };
+    EMG.tab = 'steps'; emgDraw();
+  } catch (e) { do_emgFail(kind, e, off); }
+  finally { EMG.busy = false; if (btn) btn.classList.remove('do-busy'); }
+}
+/* тревога не дошла: понятная причина + позвонить самому + повторить */
+function do_emgFail(kind, e, off) {
+  var el = $('emg'); if (!el) { toast(do_t('Тревога НЕ отправлена') + '. ' + do_t('Позвоните 101 / 103'), 8000); return; }
+  if (EMG.poll) { clearInterval(EMG.poll); EMG.poll = null; }
+  var why = off || navigator.onLine === false ? do_t('Нет интернета на телефоне.') : e && e.message === 'timeout' ? do_t('Сервер не ответил за 15 секунд.') : e ? err(e) : do_t('Сервер не ответил.');
+  var rec = (EMG_TELK[kind] || ['101', '103']).concat(['103', '112']).filter(function (x, i, L) { return L.indexOf(x) === i; });
+  var tels = rec.map(function (n) { return '<a class="emg-tel on" href="tel:' + n + '"><span class="emg-tn">' + n + '</span><span class="emg-tl">' + do_e(DO_TEL[n]) + '</span></a>'; }).join('');
+  el.innerHTML = '<div class="emg-in">' + emgHead('<span>' + do_e('Тревога НЕ отправлена') + '</span>', '<span>' + h(emgKName(kind)) + '</span>') +
+    '<div class="note t-bad do-fail" role="alert"><b>' + do_e('Коллеги и руководитель НЕ получили тревогу.') + '</b><span>' + h(why) + '</span></div>' +
+    '<div class="emg-cap">' + do_e('Позвоните сами прямо сейчас') + '</div><div class="emg-tels do-tels">' + tels + '</div>' +
+    '<div class="emg-sm">' + do_e('Потом предупредите руководителя голосом или по телефону.') + '</div>' +
+    '<button type="button" class="btn gold full" id="doEmgRetry">' + icon('refresh', 20) + '<span>' + do_e('Отправить тревогу ещё раз') + '</span></button>' +
+    '<button type="button" class="btn ghost full" id="doEmgBack">' + do_e('Назад') + '</button></div>';
+  $('emgX').onclick = emgClose;
+  $('doEmgRetry').onclick = function () { do_emgStart(kind); };
+  $('doEmgBack').onclick = function () { emgActive().then(function (a) { EMG.act = a; emgPick(); }); };
+  try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (x) {}
+}
+if (typeof emgPick === 'function') {
+  var do_ep0 = emgPick;
+  emgPick = function () {
+    var r = do_ep0.apply(this, arguments), el = $('emg');
+    if (el) el.querySelectorAll('.emg-grid [data-k]').forEach(function (b) { b.onclick = function () { do_emgStart(b.getAttribute('data-k')); }; });
+    return r;
+  };
+}
+
+/* =====================================================================================
+   3. «Инструкции»: для всех / для службы / для должности, узбекский текст, удаление
+   ===================================================================================== */
+function do_gDept(g) { if (g.position_id != null) { var p = (S.pos || []).filter(function (x) { return x.id === g.position_id; })[0]; return p ? p.dept_id : null; } return g.dept_id || null; }
+function do_myDepts() { return [S.me.dept_id, S.me.lead_dept].concat(S.me.extra_dept || []).filter(Boolean); }
+function do_gCan(g) { if (isDirector()) return true; if (S.me.role !== 'manager') return false; var d = do_gDept(g); return !!d && do_myDepts().indexOf(d) >= 0; }
+function do_gFor(g) { return g.position_id != null ? posName(g.position_id) : g.dept_id ? do_t('Служба') + ': ' + deptName(g.dept_id) : do_t('Для всех'); }
+if (typeof vGuides === 'function') {
+  vGuides = async function () {
+    var m = $('main'); m.innerHTML = '<div class="card empty">' + do_e('Загрузка…') + '</div>';
+    var r = await sb.from('guides').select('*').order('sort').order('id');
+    if (r.error) { m.innerHTML = '<div class="note t-bad">' + h(err(r.error)) + '</div>'; return; }
+    var list = (r.data || []).filter(function (g) { return g.active !== false; }), uz = uiLang() === 'uz', canNew = isDirector() || S.me.role === 'manager';
+    var myPos = [S.me.position_id].concat(S.me.extra_pos || []), myD = do_myDepts();
+    var mine = list.filter(function (g) { return (g.position_id == null && !g.dept_id) || myPos.indexOf(g.position_id) >= 0 || (g.position_id == null && g.dept_id && (g.dept_id === S.me.dept_id || (S.me.extra_dept || []).indexOf(g.dept_id) >= 0)); });
+    var other = list.filter(function (g) { return mine.indexOf(g) < 0 && (isDirector() || (S.me.role === 'manager' && myD.indexOf(do_gDept(g)) >= 0)); });
+    function item(g) {
+      return '<details class="card" data-gid="' + g.id + '" style="padding:0"><summary style="padding:14px;font-weight:700;font-size:15px;cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:8px"><span>' + h(uz && g.title_uz ? g.title_uz : g.title) + '</span><span class="do-gm">' + h(do_gFor(g)) + '</span></summary>' +
+        '<div style="padding:0 14px 14px;font-size:14.5px;line-height:1.55;white-space:pre-wrap">' + h(uz && g.body_uz ? g.body_uz : g.body) + '</div>' +
+        (do_gCan(g) ? '<div style="padding:0 14px 14px"><button type="button" class="btn ghost sm" data-ge="' + g.id + '">' + do_e('Редактировать') + '</button></div>' : '') + '</details>';
+    }
+    m.innerHTML = aiBox('ag', 'Поиск по инструкциям', 'Напишите вопрос — приложение откроет нужную инструкцию.', guidesHint(), 'Найти') + (canNew ? '<button class="btn gold full" id="gNew">' + do_e('+ Новая инструкция') + '</button>' : '') +
+      (mine.length ? '<div class="meta" style="font-weight:700">' + do_e('Моя должность и общие') + '</div>' + mine.map(item).join('') : '<div class="card empty">' + do_e('Для вашей должности инструкций пока нет') + '</div>') +
+      (other.length ? '<div class="meta" style="font-weight:700;margin-top:6px">' + do_e('Инструкции моей команды') + '</div>' + other.map(item).join('') : '');
+    if ($('gNew')) $('gNew').onclick = function () { guideSheet(null); };
+    aiGuideBind(mine.concat(other));
+    m.querySelectorAll('[data-ge]').forEach(function (b) { b.onclick = function (ev) { ev.preventDefault(); guideSheet(list.filter(function (g) { return g.id === +b.getAttribute('data-ge'); })[0]); }; });
+  };
+}
+if (typeof guideSheet === 'function') {
+  guideSheet = function (g) {
+    var isNew = !g, dir = isDirector(), myD = do_myDepts();
+    g = g || { title: '', body: '', position_id: null, dept_id: dir ? null : (S.me.lead_dept || S.me.dept_id) };
+    var cur = g.position_id != null ? 'p:' + g.position_id : g.dept_id ? 'd:' + g.dept_id : '';
+    var deps = (S.depts || []).filter(function (d) { return dir || myD.indexOf(d.id) >= 0; });
+    var opts = (dir ? '<option value="">' + do_e('Для всех сотрудников') + '</option>' : '') + deps.map(function (d) {
+      var ps = (S.pos || []).filter(function (p) { return p.dept_id === d.id; });
+      return '<optgroup label="' + h(d.name) + '"><option value="d:' + h(d.id) + '"' + (cur === 'd:' + d.id ? ' selected' : '') + '>' + h(do_t('Вся служба') + ': ' + d.name) + '</option>' +
+        ps.map(function (p) { return '<option value="p:' + p.id + '"' + (cur === 'p:' + p.id ? ' selected' : '') + '>' + h(p.name) + '</option>'; }).join('') + '</optgroup>';
+    }).join('');
+    sheet(sheetHead(do_t(isNew ? 'Новая инструкция' : 'Редактировать инструкцию')) +
+      '<label class="f">' + do_e('Для кого') + '<select class="in" id="gP">' + opts + '</select></label>' +
+      '<label class="f">' + do_e('Название') + '<input class="in" id="gT" maxlength="200" value="' + h(g.title) + '"></label>' +
+      '<label class="f">' + do_e('Текст (по пунктам)') + '<textarea class="in" id="gB" rows="12">' + h(g.body) + '</textarea></label>' +
+      '<details class="do-gx"' + (g.title_uz || g.body_uz ? ' open' : '') + '><summary class="meta" style="cursor:pointer;min-height:36px;display:flex;align-items:center">' + do_e('На узбекском (необязательно)') + '</summary>' +
+      '<label class="f">' + do_e('Название (узб.)') + '<input class="in" id="gTu" maxlength="200" value="' + h(g.title_uz || '') + '"></label>' +
+      '<label class="f">' + do_e('Текст (узб.)') + '<textarea class="in" id="gBu" rows="8">' + h(g.body_uz || '') + '</textarea></label></details>' +
+      '<button class="btn dark full" id="gS">' + do_e('Сохранить') + '</button>' + (isNew ? '' : '<button class="btn ghost full" id="gDel">' + do_e('Удалить инструкцию') + '</button>'));
+    $('gS').onclick = async function () {
+      var v = $('gP').value || '', row = { title: $('gT').value.trim(), body: $('gB').value.trim(), title_uz: $('gTu').value.trim() || null, body_uz: $('gBu').value.trim() || null,
+        position_id: /^p:/.test(v) ? +v.slice(2) : null, dept_id: /^d:/.test(v) ? v.slice(2) : null, updated_by: S.me.id, updated_at: new Date().toISOString() };
+      if (!row.title || !row.body) return toast(do_t('Заполните название и текст'));
+      this.disabled = true;
+      var r = isNew ? await sb.from('guides').insert(row) : await sb.from('guides').update(row).eq('id', g.id);
+      this.disabled = false;
+      if (r.error) return toast(err(r.error), 4000);
+      toast(do_t('Сохранено')); closeLayer(); vGuides();
+    };
+    if ($('gDel')) $('gDel').onclick = async function () {
+      if (!(await askSure('Удалить инструкцию?', { ok: 'Удалить', danger: true, sub: g.title }))) return;
+      var r = await sb.from('guides').delete().eq('id', g.id);
+      if (r.error) return toast(err(r.error), 4000);
+      toast(do_t('Инструкция удалена')); closeLayer(); vGuides();
+    };
+  };
+}
+
+/* =====================================================================================
+   4. Переписка в задаче: без эмодзи; обновление каждые 10 с, пока задача открыта
+   ===================================================================================== */
+if (typeof msgHtml === 'function') {
+  var do_mh0 = msgHtml;
+  msgHtml = function () { var x = do_mh0.apply(this, arguments); return typeof x === 'string' ? x.replace(/🎤\s?/g, icon('mic', 14) + ' ').replace(/📎\s?/g, icon('clip', 14) + ' ') : x; };
+}
+if (typeof taskThread === 'function') {
+  var do_tt0 = taskThread;
+  taskThread = async function () {
+    var r = await do_tt0.apply(this, arguments), L = $('tthrL');
+    if (L) L.querySelectorAll('.muted').forEach(function (n) { var w = document.createTreeWalker(n, NodeFilter.SHOW_TEXT), x; while ((x = w.nextNode())) if (/[\u{1F3A4}\u{1F4CE}]/u.test(x.nodeValue)) x.nodeValue = x.nodeValue.replace(/\s*[\u{1F3A4}\u{1F4CE}]/gu, ''); });
+    return r;
+  };
+}
+if (typeof bindTaskThread === 'function') {
+  var do_bt0 = bindTaskThread;
+  bindTaskThread = function (t) {
+    var r = do_bt0.apply(this, arguments);
+    if (DO.thr) { clearInterval(DO.thr); DO.thr = null; }
+    if ($('tthr') && t) DO.thr = setInterval(function () {
+      if (!$('tthr')) { clearInterval(DO.thr); DO.thr = null; return; }
+      var a = document.activeElement; if (document.hidden || (typeof REC !== 'undefined' && REC) || (a && /INPUT|TEXTAREA/.test(a.tagName) && a.value)) return;
+      taskThread(t);
+    }, 10000);
+    return r;
+  };
+}
+
+/* =====================================================================================
+   5. «Пульт → Отчёты»
+   ===================================================================================== */
+function do_ymAdd(ym, k) { var y = +ym.slice(0, 4), m = +ym.slice(5, 7) - 1 + k; y += Math.floor(m / 12); m = ((m % 12) + 12) % 12; return y + '-' + String(m + 1).padStart(2, '0'); }
+function do_lastDay(ym) { var d = new Date(Date.UTC(+ym.slice(0, 4), +ym.slice(5, 7), 0)); return ym + '-' + String(d.getUTCDate()).padStart(2, '0'); }
+/* демо: тот же расчёт, что jamoa.rep_calc на сервере */
+async function do_demoData(from, to) {
+  var r = await Promise.all([qSafe(sb.from('attendance').select('*').gte('day', from).lte('day', to)), qSafe(sb.from('schedule').select('*').gte('day', from).lte('day', to)),
+    qSafe(sb.from('tasks').select('*').gte('day', from).lte('day', to)), qSafe(sb.from('quiz_attempts').select('*').gte('day', from).lte('day', to))]);
+  return { att: (r[0] && r[0].data) || [], sch: (r[1] && r[1].data) || [], tasks: (r[2] && r[2].data) || [], quiz: (r[3] && r[3].data) || [] };
+}
+function do_calc(D, from, to, earn) {
+  var td = today(), emps = (S.emps || []).filter(function (e) { return e.active !== false && e.role !== 'director' && !e.colleague; }), by = {}, deps = [];
+  emps.forEach(function (e) { by[e.id] = e; if (deps.indexOf(e.dept_id) < 0) deps.push(e.dept_id); });
+  var di = function (id) { var i = (S.depts || []).findIndex(function (d) { return d.id === id; }); return i < 0 ? 999 : i; };
+  deps.sort(function (a, b) { return di(a) - di(b); });
+  var att = {}; D.att.forEach(function (a) { if (!by[a.employee_id] || a.day < from || a.day > to) return; (att[a.employee_id + '|' + a.day] = att[a.employee_id + '|' + a.day] || []).push(a); });
+  return deps.map(function (dp) {
+    var o = { dept_id: dp, name: deptName(dp), people: 0, plan: 0, shifts: 0, work_min: 0, late_n: 0, late_min: 0, absent_n: 0, tasks_total: 0, tasks_done: 0, tasks_overdue: 0, quiz_n: 0, quiz_avg: null, earn: null }, qs = 0;
+    emps.forEach(function (e) { if (e.dept_id === dp) o.people++; });
+    D.sch.forEach(function (s) { var e = by[s.employee_id]; if (!e || e.dept_id !== dp || !isW(s.kind) || s.day < from || s.day > to) return; if (s.day <= td) o.plan++; if (s.day < td && !att[s.employee_id + '|' + s.day]) o.absent_n++; });
+    Object.keys(att).forEach(function (k) {
+      var e = by[k.split('|')[0]]; if (!e || e.dept_id !== dp) return; o.shifts++;
+      att[k].forEach(function (a) { var lm = a.is_late ? do_n(a.late_min) : 0; if (lm > 0) { o.late_n++; o.late_min += lm; } o.work_min += a.worked_min != null ? do_n(a.worked_min) : a.clock_out ? Math.max(0, Math.round((Date.parse(a.clock_out) - Date.parse(a.clock_in)) / 6e4)) : 0; });
+    });
+    D.tasks.forEach(function (t) { var e = by[t.assignee_id]; if (!e || e.dept_id !== dp || t.status === 'cancel' || t.day < from || t.day > to) return; o.tasks_total++; if (t.status === 'done') o.tasks_done++; else if (t.day < td) o.tasks_overdue++; });
+    D.quiz.forEach(function (q) { var e = by[q.employee_id]; if (!e || e.dept_id !== dp || q.eligible === false || q.day < from || q.day > to) return; o.quiz_n++; qs += q.total ? Math.round(do_n(q.correct) * 100 / q.total) : q.score_pct != null ? do_n(q.score_pct) : Math.min(100, do_n(q.score)); });
+    if (o.quiz_n) o.quiz_avg = Math.round(qs / o.quiz_n);
+    if (earn) { o.earn = 0; emps.forEach(function (e) { if (e.dept_id === dp) o.earn += do_n(earn[e.id]); }); }
+    return o;
+  });
+}
+function do_total(L) {
+  var t = { people: 0, plan: 0, shifts: 0, work_min: 0, late_n: 0, late_min: 0, absent_n: 0, tasks_total: 0, tasks_done: 0, tasks_overdue: 0, quiz_n: 0, quiz_avg: null, earn: null }, qs = 0;
+  L.forEach(function (d) { ['people', 'plan', 'shifts', 'work_min', 'late_n', 'late_min', 'absent_n', 'tasks_total', 'tasks_done', 'tasks_overdue', 'quiz_n'].forEach(function (k) { t[k] += do_n(d[k]); }); if (d.quiz_avg != null) qs += d.quiz_avg * do_n(d.quiz_n); if (d.earn != null) t.earn = (t.earn || 0) + do_n(d.earn); });
+  if (t.quiz_n) t.quiz_avg = Math.round(qs / t.quiz_n); return t;
+}
+/* заработок месяца в демо — сумма по дням (92a ca_month), если функция есть и людей немного */
+async function do_demoEarn(ym) {
+  if (typeof ca_month !== 'function') return null;
+  var emps = (S.emps || []).filter(function (e) { return e.active !== false && e.role !== 'director' && !e.colleague; }); if (emps.length > 60) return null;
+  var out = {}; try { for (var i = 0; i < emps.length; i++) { var M = await ca_month(emps[i], ym); out[emps[i].id] = M ? M.sumDays : 0; } } catch (e) { return null; }
+  return out;
+}
+async function do_repMonth(ym) {
+  if (do_sv()) { var r = await sb.rpc('reports_month', { p_ym: ym }); if (r.error) throw r.error; return r.data || { depts: [] }; }
+  var to = ym === today().slice(0, 7) ? today() : do_lastDay(ym), from = ym + '-01';
+  if (from > today()) return { ym: ym, from: from, to: from, depts: [], total: do_total([]) };
+  var D = await do_demoData(from, to), L = do_calc(D, from, to, await do_demoEarn(ym));
+  return { ym: ym, from: from, to: to, depts: L, total: do_total(L) };
+}
+async function do_repDaily(n) {
+  if (do_sv()) { var r = await sb.rpc('reports_daily', { p_days: n }); if (r.error) throw r.error; return r.data || []; }
+  var to = today(), from = addDays(to, -(n - 1)), D = await do_demoData(from, to), out = [];
+  for (var d = to; d >= from; d = addDays(d, -1)) { var L = do_calc(D, d, d, null); out.push({ day: d, depts: L, total: do_total(L) }); }
+  return out;
+}
+async function do_evList() { var r = await qSafe(sb.from('emergency_events').select('*').order('started_at', { ascending: false }).limit(10)); return (r && r.data) || []; }
+function do_chip(cls, label, val) { return '<span class="chip ' + cls + '"><span>' + do_e(label) + '</span> <b class="num">' + val + '</b></span>'; }
+function do_money(x) { return Math.round(do_n(x)).toLocaleString('ru-RU').replace(/,/g, ' ') + ' ' + do_t('сум'); }
+function do_dChips(d) {
+  return do_chip('t-info', 'Смен', d.shifts + (d.plan ? ' / ' + d.plan : '')) +
+    do_chip(d.late_n ? 't-warn' : 't-ok', 'Опозданий', d.late_n + (d.late_min ? ' · ' + fmtMin(d.late_min) : '')) +
+    do_chip(d.absent_n ? 't-bad' : 't-ok', 'Не пришли', d.absent_n) +
+    (d.tasks_total ? do_chip(d.tasks_overdue ? 't-bad' : d.tasks_done === d.tasks_total ? 't-ok' : 't-info', 'Задачи', d.tasks_done + ' / ' + d.tasks_total) : '') +
+    (d.quiz_n ? do_chip(d.quiz_avg >= 80 ? 't-ok' : d.quiz_avg >= 60 ? 't-info' : 't-warn', 'Тест', d.quiz_avg + '%') : '') +
+    (d.earn != null ? do_chip('t-info', 'Заработок', do_money(d.earn)) : '');
+}
+function do_dName(d) { if (uiLang() === 'uz' && d.name_uz) return d.name_uz; var n = d.dept_id != null ? deptName(d.dept_id) : null; return n && n !== d.dept_id ? n : d.name || do_t('Без службы'); }
+function do_monthCard(M) {
+  var t = M.total || do_total(M.depts || []), cur = today().slice(0, 7), ym = M.ym || DO.ym;
+  var kpi = [['Смен', t.shifts + (t.plan ? ' / ' + t.plan : ''), ''], ['Опозданий', t.late_n + (t.late_min ? ' · ' + fmtMin(t.late_min) : ''), t.late_n ? 'k-warn' : 'k-ok'], ['Не пришли', t.absent_n, t.absent_n ? 'k-bad' : 'k-ok'],
+    ['Задачи выполнены', t.tasks_done + ' / ' + t.tasks_total + (t.tasks_overdue ? ' · ' + do_t('просрочено') + ' ' + t.tasks_overdue : ''), t.tasks_overdue ? 'k-bad' : ''],
+    ['Тест дня, средний', t.quiz_n ? t.quiz_avg + '% · ' + t.quiz_n : '—', ''], ['Отработано', fmtMin(t.work_min || 0), '']].concat(t.earn != null ? [['Заработок', do_money(t.earn), '']] : []);
+  return '<div class="card" id="doMon"><div class="do-mh"><button type="button" class="btn ghost sm" data-dom="-1" aria-label="' + do_e('Предыдущий месяц') + '">' + icon('back', 18) + '</button><h2>' + h(psYm(ym)) + '</h2>' +
+    '<button type="button" class="btn ghost sm" data-dom="1" aria-label="' + do_e('Следующий месяц') + '"' + (ym >= cur ? ' disabled' : '') + '><span style="display:inline-block;transform:scaleX(-1)">' + icon('back', 18) + '</span></button></div>' +
+    '<div class="meta" style="text-align:center">' + (M.from ? dm(String(M.from)) + ' – ' + dm(String(M.to)) : '') + ' · ' + do_e('по службам') + '</div>' +
+    '<div class="do-kpi">' + kpi.map(function (k) { return '<div class="' + k[2] + '"><b class="num">' + h(String(k[1])) + '</b><span>' + do_e(k[0]) + '</span></div>'; }).join('') + '</div>' +
+    ((M.depts || []).length ? (M.depts || []).map(function (d) { return '<div class="do-dr"><div class="do-dn">' + h(do_dName(d)) + ' <span class="meta">· ' + d.people + ' ' + do_e('чел.') + '</span></div><div class="do-dc">' + do_dChips(d) + '</div></div>'; }).join('') : '<div class="empty">' + do_e('Данных за этот месяц нет') + '</div>') +
+    (M.emerg != null || M.problems != null ? '<div class="meta" style="margin-top:8px">' + do_e('Тревог') + ': ' + do_n(M.emerg) + ' · ' + do_e('Сообщений о проблемах') + ': ' + do_n(M.problems) + '</div>' : '') + '</div>';
+}
+function do_dailyCard(L) {
+  return '<div class="card" id="doDays"><h2>' + do_e('По дням') + '</h2>' + (L.length ? L.map(function (x) {
+    var t = x.total || do_total(x.depts || []), d = String(x.day);
+    return '<details class="do-day"><summary><span class="do-dd">' + dm(d) + (d === today() ? ' · ' + do_e('сегодня') : '') + '</span><span class="do-dc">' + do_dChips(t) + '</span></summary>' +
+      (x.depts || []).filter(function (z) { return z.plan || z.shifts || z.tasks_total || z.quiz_n; }).map(function (z) { return '<div class="do-dr"><div class="do-dn">' + h(do_dName(z)) + '</div><div class="do-dc">' + do_dChips(z) + '</div></div>'; }).join('') + '</details>';
+  }).join('') : '<div class="empty">' + do_e('Отчётов нет') + '</div>') + '</div>';
+}
+function do_evCard(L) {
+  var act = L.filter(function (e) { return !e.ended_at && Date.parse(e.started_at) > Date.now() - 12 * 36e5; });
+  return '<div class="card" id="doEv"><h2>' + do_e('Экстренные события') + (act.length ? ' <small><span class="chip t-bad">' + do_e('идёт') + ' ' + act.length + '</span></small>' : '') + '</h2>' + (L.length ? L.map(function (e) {
+    var live = act.indexOf(e) >= 0, d = tsDate(e.started_at), mins = e.ended_at ? Math.max(1, Math.round((Date.parse(e.ended_at) - Date.parse(e.started_at)) / 6e4)) : 0;
+    return '<button type="button" class="do-ev" data-doev="' + e.id + '"><span class="emg-ic sm">' + emgIc(e.kind, 20) + '</span><span class="grow"><b>' + h(emgKName(e.kind)) + '</b>' +
+      '<span class="meta">' + dm(d) + ' ' + hm(e.started_at) + (e.ended_at ? ' · ' + fmtMin(mins) : '') + (e.place ? ' · ' + h(e.place) : '') + '</span></span>' +
+      (live ? '<span class="chip t-bad">' + do_e('идёт') + '</span>' : e.result === 'false' ? '<span class="chip t-mute">' + do_e('ложный вызов') + '</span>' : e.drill ? '<span class="chip t-info">' + do_e('учебная') + '</span>' : e.result === 'auto' ? '<span class="chip t-warn">' + do_e('закрыто автоматически') + '</span>' : '<span class="chip t-ok">' + do_e('завершено') + '</span>') + '</button>';
+  }).join('') : '<div class="meta">' + do_e('Тревог ещё не было. Кнопка «Экстренно» — в «Разделах» и в профиле у каждого сотрудника.') + '</div>') + '</div>';
+}
+async function do_rep() {
+  var box = $('dk'); if (!box || $('doRep')) return;
+  if (do_sv()) box.querySelectorAll(':scope > .card.empty').forEach(function (c) { if (/Отчётов нет|Hisobotlar yo/.test(c.textContent)) c.remove(); });
+  var d = document.createElement('div'); d.id = 'doRep'; d.className = 'do-rep'; box.insertBefore(d, box.firstChild);
+  var ym = DO.ym || today().slice(0, 7);
+  d.innerHTML = '<div class="card empty">' + do_e('Загрузка…') + '</div>';
+  var R;
+  try { R = await Promise.all([do_repMonth(ym), do_repDaily(14), do_evList()]); }
+  catch (e) { if ($('doRep')) d.innerHTML = '<div class="note t-bad">' + do_e('Отчёт не загрузился') + ': ' + h(err(e)) + '</div>'; return; }
+  if (!$('doRep') || d !== $('doRep')) return;
+  R[0].ym = R[0].ym || ym;
+  d.innerHTML = do_evCard(R[2]) + do_monthCard(R[0]) + do_dailyCard(R[1]);
+  d.querySelectorAll('[data-dom]').forEach(function (b) { b.onclick = function () { DO.ym = do_ymAdd(ym, +b.getAttribute('data-dom')); if (DO.ym > today().slice(0, 7)) DO.ym = today().slice(0, 7); var x = $('doRep'); if (x) x.remove(); do_rep(); }; });
+  d.querySelectorAll('[data-doev]').forEach(function (b) { b.onclick = function () { emgOpen(+b.getAttribute('data-doev')); }; });
+}
+if (typeof dReports === 'function') {
+  var do_dr0 = dReports;
+  dReports = async function () {
+    var r; try { r = await do_dr0.apply(this, arguments); } catch (e) { console.warn(e); }
+    try { await do_rep(); } catch (e) { console.warn(e); }
+    return r;
+  };
+}
+
+/* =====================================================================================
+   6. Web-push (только режим сервера): свой публичный ключ VAPID; плейсхолдер — честное «ещё не настроено»
+   ===================================================================================== */
+if (do_sv() && typeof pushSubscribe === 'function') {
+  var DO_KEY = String((window.JAMOA_SERVER || {}).vapidPublic || ''), DO_KEY_OK = /^B[A-Za-z0-9_-]{80,100}$/.test(DO_KEY);
+  if (DO_KEY_OK) VAPID = DO_KEY;
+  var do_ps0 = pushSubscribe;
+  pushSubscribe = async function (ask) {
+    if (!DO_KEY_OK) { if (ask) throw new Error(do_t('Уведомления на закрытый телефон ещё не настроены на сервере. Пока они приходят в приложение (колокольчик).')); return pushState(); }
+    try {
+      var reg = await do_wait(navigator.serviceWorker.ready, 3000);
+      var sub = reg && reg.pushManager ? await reg.pushManager.getSubscription() : null;
+      if (sub && sub.options && sub.options.applicationServerKey && do_b64u(sub.options.applicationServerKey) !== DO_KEY) await sub.unsubscribe();   /* подписка со старым ключом — заново */
+    } catch (e) {}
+    return do_ps0.apply(this, arguments);
+  };
+}
+
+
+/* ===== ВОЛНА 4 · 92p-founder-live.js ===== */
+/* ===== 92p «Кабинет основателя» на настоящих данных (префикс fp_) =====
+   Только в режиме сервера (window.JAMOA_DEMO === false) и только при входе app.html#as=jamoa.founder (тот же признак, что FD_ON в 98).
+   98-founder.js не переписывается: здесь обёртки render / fd_render / afterAuth / SV.ui.noVenue.
+   1) не вошёл — обычный экран входа приложения (почта и пароль основателя);
+   2) вошёл — rpc founder_overview (миграция 0020_founder) через SV.real; вкладки Обзор и Заведения — настоящие данные;
+      Рост и Маркетинг — только то, что честно считается из этих данных, остальное — «появится позже»;
+      Обращения — счётчики «Сообщить о проблеме», если таблица уже есть на сервере;
+   3) rpc вернул no_rights — экран «Нет доступа»;
+   4) в обычном приложении, если вход — основатель (rpc founder_me), в профиле и в «Разделах» карточка «Кабинет основателя».
+   В демо (JAMOA_DEMO !== false) ничего не меняется. Узбекский — w4/uz/founder-live.js (словарь FD_UZ, переводит fd_t). */
+var FP_SV = window.JAMOA_DEMO === false && window.JAMOA_SV ? window.JAMOA_SV : null;
+var FP_ON = !!FP_SV && /(^|[#&])as=jamoa\.founder(&|$)/.test(location.hash || '');
+var FP = { st: 'boot', D: null, err: null, me: null, busy: false, tab: 'ov', sub: { ven: 'all', grow: 'ret' } };
+var FP_STEPS = [['reg', 'Регистрация'], ['form', 'Анкета заполнена'], ['invited', 'Пригласили людей'], ['first_day', 'Первый рабочий день']];
+var FP_TABS = [['ov', 'Обзор', 'chart'], ['ven', 'Заведения', 'board'], ['grow', 'Рост', 'trend'], ['mkt', 'Маркетинг', 'target'], ['inbox', 'Обращения', 'chat']];
+
+function fp_ty(code) {
+  var n = code || '—';
+  try { var t = vType(code); if (t && t[0] === code) n = t[1]; } catch (e) {}
+  try { return fd_uz() && typeof trUi === 'function' ? trUi(n) : n; } catch (e) { return n; }
+}
+function fp_noRights(e) { var s = e ? [e.details, e.detail, e.code, e.message, e.hint].join(' ') : ''; return /no_rights|42501/.test(s); }
+function fp_real() { return FP_SV && FP_SV.real; }
+
+/* ---------- данные: ответ сервера → вид, понятный общим помощникам 98 (fd_chart, fd_strip, fd_bar) ---------- */
+function fp_map(R) {
+  var T = R.today || today();
+  var V = (R.venues || []).map(function (x, i) {
+    var reg = x.reg_day || String(x.created_at || '').slice(0, 10) || T, daily = x.daily || [], n = daily.length;
+    var v = { i: i, id: x.id, name: x.name || '—', type: x.type, demo: !!x.is_demo, district: x.district || '', reg: reg, regAgo: Math.max(0, fd_diff(reg, T)),
+      members: +x.members || 0, staff: +x.staff || 0, inToday: +x.in_today || 0, in7: +x.in7 || 0, in30: +x.in30 || 0, days60: +x.days60 || 0,
+      last: x.last_day || null, first: x.first_day || null, invited: x.invited_at ? String(x.invited_at).slice(0, 10) : null,
+      tasks30: +x.tasks30 || 0, quiz30: +x.quiz30 || 0, steps: x.steps || {}, owner: x.owner || {}, problems: x.problems || null, days: [] };
+    for (var j = 0; j < n; j++) { var d = fd_add(T, j - n + 1); v.days.push({ d: d, act: daily[j] > 0 ? 1 : 0, st: +daily[j] || 0, pre: d < reg ? 1 : 0 }); }
+    v.idle = v.last ? fd_diff(v.last, T) : null;
+    v.act7 = v.in7 > 0;
+    v.step = 0; FP_STEPS.forEach(function (s, k) { if (k && v.steps[s[0]]) v.step = k; });
+    v.started = !!v.steps.first_day;
+    var l60 = v.days.slice(-60).filter(function (o) { return !o.pre; });
+    v.miss60 = l60.filter(function (o) { return !o.act; }).length;
+    v.ready = v.regAgo >= FD_READY_DAYS && l60.length >= FD_READY_DAYS && v.miss60 <= FD_READY_MISS;
+    v.tel = String(v.owner.phone || '').replace(/[^\d+]/g, '');
+    return v;
+  });
+  return { T: T, V: V, R: R, tot: R.totals || {}, prob: !!R.problems_table };
+}
+function fp_gone(v) { return v.started && v.idle != null && v.idle >= 3; }
+function fp_new(v) { return v.regAgo < 14; }
+function fp_stuck(v) { return !v.started; }
+
+async function fp_load() {
+  if (FP.busy) return; FP.busy = true; FP.st = FP.D ? FP.st : 'load'; if (!FP.D) fp_main();
+  try {
+    var R = fp_real(); if (!R) throw new Error('server');
+    var x = await R.rpc('founder_overview');
+    if (x.error) { if (fp_noRights(x.error)) { FP.st = 'noright'; } else { FP.st = 'err'; FP.err = x.error; } }
+    else { FP.D = fp_map(x.data || {}); FP.st = 'ok'; FP.at = new Date(); }
+  } catch (e) { FP.st = 'err'; FP.err = e; }
+  FP.busy = false; fp_main();
+}
+async function fp_check() {
+  var R = fp_real(); if (!R) { FP.st = 'err'; return fp_main(); }
+  try { var s = await R.auth.getSession(); if (s && s.data && s.data.session) return fp_load(); } catch (e) {}
+  FP.st = 'out'; fp_main();
+}
+
+/* ---------- экраны ---------- */
+function fp_logout() { try { sb.auth.signOut(); } catch (e) {} FP.st = 'out'; FP.D = null; fp_main(); }
+function fp_toApp() { history.replaceState(null, '', location.pathname + location.search); location.reload(); }
+function fp_main() {
+  var app = $('app'); if (!app) return;
+  if (FP.st === 'boot') { app.className = ''; app.innerHTML = '<div class="login"><div class="meta">' + fd_e('Загрузка…') + '</div></div>'; fp_check(); return; }
+  if (FP.st === 'out') {
+    renderLogin();
+    var f = $('lf'), box = f && f.querySelector('.lg-form');
+    if (box && !$('fpLgN')) box.insertAdjacentHTML('afterbegin', '<div class="note" id="fpLgN">' + fd_e('Кабинет основателя Jamoa. Войдите по почте и паролю основателя.') + '</div>');
+    return;
+  }
+  if (FP.st === 'noright' || FP.st === 'err') {
+    var no = FP.st === 'noright';
+    app.className = '';
+    app.innerHTML = '<div class="login" style="max-width:420px"><div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;font-weight:700;letter-spacing:.18em;color:var(--gold);text-transform:uppercase">Jamoa</div>' +
+      '<div style="font-size:22px;font-weight:700;line-height:1.2">' + fd_e(no ? 'Нет доступа' : 'Сервер не ответил') + '</div>' +
+      '<div class="muted" style="font-size:14px;line-height:1.45">' + (no ? fd_e('Кабинет основателя открыт только для владельца продукта Jamoa. Этот вход — не основатель.') : h(FP.err ? err(FP.err) : fd_t('Проверьте интернет и попробуйте ещё раз.'))) + '</div></div>' +
+      (no ? '' : '<button class="btn dark full" id="fpRe">' + fd_e('Обновить') + '</button>') +
+      '<button class="btn ghost full" id="fpApp">' + fd_e('Открыть приложение') + '</button><button class="btn ghost full" id="fpOut">' + fd_e('Выйти') + '</button></div>';
+    if ($('fpRe')) $('fpRe').onclick = function () { FP.st = 'load'; fp_load(); };
+    $('fpApp').onclick = fp_toApp; $('fpOut').onclick = fp_logout;
+    return;
+  }
+  fp_shell();
+}
+function fp_shell() {
+  var app = $('app'); app.className = '';
+  var html = '<div class="top"><span class="av" aria-hidden="true">J</span>' +
+    '<div style="flex:1;min-width:0"><h1>' + fd_e(FD_TITLE[FP.tab] || 'Обзор') + '</h1><div class="sub">' + fd_e('Бекзод · кабинет основателя Jamoa') + '</div></div>' +
+    '<button class="iconbtn fd-lang" id="fdLang" aria-label="' + fd_e('Язык') + '">' + (fd_uz() ? 'RU' : 'UZ') + '</button>' +
+    '<button class="iconbtn" id="fpExit" aria-label="' + fd_e('Выйти') + '">' + icon('exit', 20) + '</button></div><main id="main" class="fd-main"></main>';
+  html += '<nav class="nav"><div class="in">' + FP_TABS.map(function (t) {
+    return '<button class="' + (FP.tab === t[0] ? 'on' : '') + '" data-fpgo="' + t[0] + '">' + icon(t[2]) + fd_e(t[1]) + '</button>';
+  }).join('') + '</div></nav>';
+  app.innerHTML = html;
+  app.querySelectorAll('[data-fpgo]').forEach(function (b) { b.onclick = function () { FP.tab = b.getAttribute('data-fpgo'); window.scrollTo(0, 0); fp_main(); }; });
+  $('fdLang').onclick = function () { try { window.MLX_I18N.set(fd_uz() ? 'ru' : 'uz'); } catch (e) {} try { closeLayer(); } catch (e) {} fp_main(); };
+  $('fpExit').onclick = function () {
+    sheet(sheetHead(fd_e('Кабинет основателя')) + '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">' +
+      '<button class="btn ghost full" id="fpApp">' + icon('home', 18) + '<span>' + fd_e('Открыть приложение') + '</span></button>' +
+      '<button class="btn ghost full" id="fpOut">' + icon('exit', 18) + '<span>' + fd_e('Выйти') + '</span></button></div>');
+    $('fpApp').onclick = fp_toApp; $('fpOut').onclick = function () { closeLayer(); fp_logout(); };
+  };
+  var m = $('main');
+  if (FP.st !== 'ok' || !FP.D) { m.innerHTML = '<div class="card"><div class="meta">' + fd_e('Загрузка…') + '</div></div>'; return; }
+  var D = FP.D, hm2 = function (d) { return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); };
+  m.innerHTML = '<div class="note" style="display:flex;align-items:center;gap:10px"><span style="flex:1;min-width:0">' + fd_e('Настоящие данные сервера · обновлено в {t}', { t: hm2(FP.at || new Date()) }) + '</span>' +
+    '<button class="btn ghost sm" id="fpRef">' + icon('refresh', 16) + '<span>' + fd_e('Обновить') + '</span></button></div>' +
+    ({ ov: fp_ov, ven: fp_ven, grow: fp_grow, mkt: fp_mkt, inbox: fp_inbox })[FP.tab](D);
+  $('fpRef').onclick = function () { fp_load(); };
+  m.querySelectorAll('[data-fpv]').forEach(function (b) { b.onclick = function () { fp_card(+b.getAttribute('data-fpv')); }; });
+  m.querySelectorAll('[data-fpsub]').forEach(function (b) { b.onclick = function () { var p = b.getAttribute('data-fpsub').split(':'); FP.sub[p[0]] = p[1]; fp_main(); }; });
+  if ($('fpCsv')) $('fpCsv').onclick = fp_csv;
+}
+function fp_seg(key, items) {
+  return '<div class="seg">' + items.map(function (t) { return '<button class="' + (FP.sub[key] === t[0] ? 'on' : '') + '" data-fpsub="' + key + ':' + t[0] + '">' + fd_e(t[1]) + '</button>'; }).join('') + '</div>';
+}
+function fp_later(title, what) {
+  return '<div class="card"><h2>' + fd_e(title) + '</h2><div class="meta">' + fd_e('Появится позже') + (what ? ' — ' + fd_e(what) : '') + '</div></div>';
+}
+
+/* ---------- Обзор ---------- */
+function fp_ov(D) {
+  var V = D.V, t = D.tot, n = V.length, real = V.filter(function (v) { return !v.demo; }).length;
+  var act = V.filter(function (v) { return v.inToday > 0; }).length, a7 = V.filter(function (v) { return v.act7; }).length, gone = V.filter(fp_gone).length, stuck = V.filter(fp_stuck).length;
+  var o = '<div class="card"><h2>' + fd_e('Заведения') + '</h2><div class="an-grid" style="margin:0">' +
+    fd_k('Всего', n, fd_e('настоящих {a}, учебных {b}', { a: real, b: n - real })) +
+    fd_k('Активны сегодня', act, fd_e('{p}% от всех', { p: fd_pct(act, n) })) +
+    fd_k('Активны за 7 дней', a7, fd_e('{p}% от всех', { p: fd_pct(a7, n) })) +
+    fd_k('Перестали заходить', '<span class="' + (gone ? 'fd-c-bad' : '') + '">' + gone + '</span>', fd_e('не начали работать: {n}', { n: stuck })) +
+    '</div><div class="meta" style="margin-top:8px">' + fd_e('Активное заведение — за день была хотя бы одна отметка прихода.') + '</div></div>';
+  var stAll = t.staff != null ? +t.staff : V.reduce(function (s, v) { return s + v.staff; }, 0);
+  o += '<div class="card"><h2>' + fd_term('fd_act', 'Активные пользователи') + '</h2><div class="an-sts">' +
+    '<div class="an-st"><b>' + stAll + '</b><span>' + fd_e('сотрудников добавлено') + '</span></div>' +
+    '<div class="an-st"><b>' + (+t.in_today || 0) + '</b><span>' + fd_e('отметились сегодня') + '</span></div>' +
+    '<div class="an-st"><b>' + (+t.in7 || 0) + '</b><span>' + fd_e('отметок прихода за 7 дней') + '</span></div>' +
+    '<div class="an-st"><b>' + (+t.in30 || 0) + '</b><span>' + fd_e('отметок прихода за 30 дней') + '</span></div></div>' +
+    '<div class="meta" style="margin-top:6px">' + fd_e('Сотрудники — все участники заведений, кроме владельцев. О людях — только числа.') + '</div></div>';
+  var ready = V.filter(function (v) { return v.ready; });
+  o += '<div class="card"><h2>' + fd_e('Готовность к подписке') + '</h2>' +
+    '<div class="an-bmh"><span>' + fd_e('Работают каждый день 2+ месяца') + '</span><b>' + ready.length + ' <small>' + fd_e('из {n}', { n: FD_GOAL }) + '</small></b></div>' +
+    '<div class="an-bmt"><i class="an-bmx" style="width:' + fd_pct(ready.length, FD_GOAL) + '%"></i></div>' +
+    '<div class="meta">' + fd_e('Подписка выключена. Решение о включении — когда 20–30 заведений работают каждый день 2+ месяца. «Каждый день» — не больше {m} дней без отметок за последние {d} дней.', { m: FD_READY_MISS, d: FD_READY_DAYS }) + '</div>' +
+    (ready.length ? '<div class="fd-tags">' + ready.map(function (v) { return '<span class="chip t-ok">' + h(v.name) + '</span>'; }).join('') + '</div>' : '') + '</div>';
+  o += '<div class="card"><h2>' + fd_e('Новые и активные по неделям') + '</h2>' + fd_chart(D) +
+    '<div class="an-leg" style="margin-top:4px"><span><i class="an-lg1"></i><span>' + fd_e('активные заведения') + '</span></span><span><i class="fd-lgn"></i><span>' + fd_e('новые за неделю') + '</span></span></div></div>';
+  var ty = {}, ord = []; V.forEach(function (v) { var x = ty[v.type]; if (!x) { x = ty[v.type] = { n: 0, a: 0 }; ord.push(v.type); } x.n++; if (v.act7) x.a++; });
+  ord.sort(function (a, b) { return ty[b].n - ty[a].n; });
+  o += '<div class="card"><h2>' + fd_e('По типам') + '</h2>' + (ord.length ? ord.map(function (k) {
+    return fd_bar(h(fp_ty(k)) + ' <span class="meta">· ' + fd_e('активны {a}', { a: ty[k].a }) + '</span>', ty[k].n, n, null, true);
+  }).join('') : '<div class="empty">' + fd_e('Заведений пока нет') + '</div>') + '</div>';
+  o += fp_later('Итог недели', 'сводка для Telegram, оценка здоровья заведений.');
+  return o;
+}
+
+/* ---------- Заведения ---------- */
+function fp_ven(D) {
+  var f = FP.sub.ven, V = D.V;
+  var L = V.filter(function (v) { return f === 'gone' ? fp_gone(v) : f === 'new' ? fp_new(v) : f === 'stuck' ? fp_stuck(v) : true; });
+  L.sort(function (a, b) { return (fp_gone(b) - fp_gone(a)) || (b.in7 - a.in7) || a.name.localeCompare(b.name); });
+  var o = fp_seg('ven', [['all', fd_t('Все') + ' ' + V.length], ['gone', fd_t('Перестали') + ' ' + V.filter(fp_gone).length], ['stuck', fd_t('Не начали') + ' ' + V.filter(fp_stuck).length], ['new', fd_t('Новые') + ' ' + V.filter(fp_new).length]]);
+  o += '<div class="card"><h2>' + fd_e('Заведения') + '</h2><div class="meta" style="margin-bottom:6px">' + fd_e('Сначала те, кто перестал заходить. Справа — дней с работой за последние 30. Нажмите на заведение — откроется карточка.') + '</div>' +
+    (L.length ? L.map(fp_vrow).join('') : '<div class="empty">' + fd_e('Таких заведений нет') + '</div>') + '</div>';
+  o += '<button class="btn ghost full" id="fpCsv" style="margin-top:4px">' + icon('dl', 18) + '<span>' + fd_e('Скачать CSV') + '</span></button>';
+  return o;
+}
+function fp_d30(v) { return v.days.slice(-30).filter(function (o) { return o.act; }).length; }
+function fp_tags(v, all) {
+  var t = [];
+  if (v.demo) t.push(['t-mute', 'учебное']);
+  if (fp_new(v)) t.push(['t-info', 'новое']);
+  if (v.ready) t.push(['t-ok', 'каждый день 2+ мес.']);
+  if (fp_gone(v)) t.push(['t-warn', fd_t('не заходят {n} дн.', { n: v.idle })]);
+  if (v.step < FP_STEPS.length - 1) { var nx = FP_STEPS.filter(function (s, k) { return k && !v.steps[s[0]]; })[0]; if (nx) t.push(['t-mute', fd_t('остановились: {s}', { s: fd_t(nx[1]).toLowerCase() })]); }
+  if (all && v.problems && v.problems.new) t.push(['t-bad', fd_t('новых сообщений о проблемах: {n}', { n: v.problems.new })]);
+  return t.length ? '<div class="fd-tags">' + t.map(function (x) { return '<span class="chip ' + x[0] + '">' + fd_e(x[1]) + '</span>'; }).join('') + '</div>' : '';
+}
+function fp_vrow(v) {
+  var d30 = fp_d30(v), c = !v.started ? 'muted' : fp_gone(v) ? 'bad' : v.act7 ? 'ok' : 'warn', bar = !v.started ? '' : c === 'bad' ? ' w3-red' : c === 'warn' ? ' w3-yel' : ' w3-grn';
+  return '<button class="fd-v' + bar + '" data-fpv="' + v.i + '"><div class="fd-vm"><b>' + h(v.name) + '</b><div class="meta">' + h(fp_ty(v.type)) + ' · ' + fd_e('{n} чел.', { n: v.members }) +
+    (v.started ? ' · ' + fd_e('сегодня {n}', { n: v.inToday }) : '') + ' · ' + fd_e('с {d}', { d: fd_dm(v.reg) }) + '</div>' + fp_tags(v) + '</div>' +
+    '<div class="fd-hs fd-c-' + c + '">' + d30 + '<small>' + fd_e('из 30 дн.') + '</small></div></button>';
+}
+function fp_card(i) {
+  var D = FP.D, v = D.V[i]; if (!v) return;
+  var ow = v.owner || {}, act = [];
+  if (v.tel) act.push('<a class="btn ghost sm" href="tel:' + h(v.tel) + '">' + icon('phone', 16) + '<span>' + fd_e('Позвонить') + '</span></a>');
+  if (ow.email) act.push('<a class="btn ghost sm" href="mailto:' + h(ow.email) + '">' + icon('send', 16) + '<span>' + fd_e('Написать') + '</span></a>');
+  var html = sheetHead(h(v.name), h(fp_ty(v.type)) + (v.district ? ' · ' + h(v.district) : '') + ' · ' + fd_e('с {d}', { d: fd_dm(v.reg) })) + fp_tags(v, 1) +
+    '<div style="margin-top:8px"><div class="meta" style="margin:0">' + fd_e('Владелец') + '</div><b>' + h(ow.name || '—') + '</b>' +
+    '<div class="meta" style="margin:0">' + h([ow.phone, ow.email].filter(Boolean).join(' · ') || fd_t('Телефон и почта не указаны')) + '</div>' +
+    (act.length ? '<div class="fd-acts">' + act.join('') + '</div>' : '') + '</div>' +
+    '<div class="an-sts" style="margin-top:10px">' +
+    '<div class="an-st"><b>' + v.members + '</b><span>' + fd_e('людей · сотрудников {n}', { n: v.staff }) + '</span></div>' +
+    '<div class="an-st"><b>' + v.in7 + '</b><span>' + fd_e('отметок за 7 дней · за 30 дней {n}', { n: v.in30 }) + '</span></div>' +
+    '<div class="an-st"><b>' + v.days60 + '</b><span>' + fd_e('дней с работой за 60') + '</span></div>' +
+    '<div class="an-st"><b style="font-size:17px">' + (v.last ? fd_ago(fd_diff(v.last, D.T)) : '—') + '</b><span>' + fd_e('последняя отметка') + '</span></div></div>' +
+    '<div class="an-sh-rows">' + [['Задач выполнено за 30 дней', v.tasks30], ['Тестов дня за 30 дней', v.quiz30]].concat(v.problems ? [['Сообщений о проблемах за 30 дней', v.problems.d30]] : []).map(function (x) {
+      return '<div class="an-sr"><span>' + fd_e(x[0]) + '</span><b>' + x[1] + '</b></div>'; }).join('') + '</div>';
+  html += '<h3 style="margin-top:12px">' + fd_e('Последние 30 дней') + '</h3>' + fd_strip(v);
+  var dt = { reg: v.reg, form: null, invited: v.invited, first_day: v.first };
+  html += '<h3 style="margin-top:12px">' + fd_term('fd_path', 'Путь регистрации') + '</h3>' + FP_STEPS.map(function (s) {
+    var ok = !!v.steps[s[0]]; return '<div class="fd-st ob-st' + (ok ? ' ok' : '') + '" style="min-height:0"><span class="ob-ck">' + (ok ? icon('tick', 16) : '') + '</span><span style="flex:1">' + fd_e(s[1]) + '</span><span class="meta" style="margin:0">' + (ok && dt[s[0]] ? h(fd_dm(dt[s[0]])) : ok ? '' : '—') + '</span></div>'; }).join('') +
+    '<div class="meta" style="margin-top:4px">' + fd_e('Анкета заполнена — задана точка заведения для отметки прихода.') + '</div>';
+  html += '<div class="meta" style="margin-top:10px">' + fd_e('Заметки, источник и «кто привёл» — появятся позже.') + '</div>';
+  sheet(html);
+}
+function fp_csv() {
+  var D = FP.D, q = function (s) { s = String(s == null ? '' : s); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  var rows = [['Заведение', 'Тип', 'Район', 'Дата регистрации', 'Людей', 'Отметок за 7 дней', 'Отметок за 30 дней', 'Дней с работой за 60', 'Последняя отметка', 'Владелец', 'Телефон', 'Почта'].map(fd_t)];
+  D.V.forEach(function (v) { rows.push([v.name, fp_ty(v.type), v.district, v.reg, v.members, v.in7, v.in30, v.days60, v.last || '', v.owner.name || '', v.owner.phone || '', v.owner.email || '']); });
+  var csv = '﻿' + rows.map(function (r) { return r.map(q).join(';'); }).join('\r\n');
+  try {
+    var b = new Blob([csv], { type: 'text/csv;charset=utf-8' }), u = URL.createObjectURL(b), a = document.createElement('a');
+    a.href = u; a.download = 'jamoa-zavedeniya-' + D.T + '.csv'; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(u); }, 4000); toast(fd_t('Файл CSV сохранён'));
+  } catch (e) { toast(fd_t('Не удалось сохранить файл')); }
+}
+
+/* ---------- Рост: удержание и путь регистрации (из настоящих данных); функции — позже ---------- */
+function fp_grow(D) {
+  var o = fp_seg('grow', [['ret', 'Удержание'], ['path', 'Путь регистрации']]);
+  if (FP.sub.grow === 'path') {
+    var V = D.V, n = FP_STEPS.map(function (s) { return V.filter(function (v) { return !!v.steps[s[0]]; }).length; });
+    o += '<div class="card"><h2>' + fd_term('fd_path', 'Путь регистрации') + '</h2><div class="meta" style="margin-bottom:6px">' + fd_e('Сколько заведений дошли до каждого шага из {n} зарегистрированных.', { n: V.length }) + '</div>';
+    FP_STEPS.forEach(function (s, k) {
+      if (k) { var d = n[k - 1] - n[k]; o += '<div class="fd-drop">' + (d > 0 ? fd_e('бросили') + ' <b>' + d + '</b>' : fd_e('никто не бросил')) + '</div>'; }
+      o += fd_bar((k + 1) + '. ' + fd_e(s[1]), n[k], V.length, n[k] + ' <small>' + fd_pct(n[k], V.length) + '%</small>', true);
+    });
+    o += '<div class="meta" style="margin-top:6px">' + fd_e('Анкета заполнена — задана точка заведения для отметки прихода.') + '</div></div>';
+    var S0 = V.filter(fp_stuck);
+    o += '<div class="card"><h2>' + fd_e('Не дошли до первого рабочего дня') + '</h2>' + (S0.length ? S0.map(function (v) {
+      return '<button class="fd-v" data-fpv="' + v.i + '"><div class="fd-vm"><b>' + h(v.name) + '</b><div class="meta">' + fd_ago(v.regAgo) + ' · ' + h(v.owner.name || '—') + (v.owner.phone ? ' · ' + h(v.owner.phone) : '') + '</div>' + fp_tags(v) + '</div></button>';
+    }).join('') : '<div class="empty">' + fd_e('Все начали работать') + '</div>') + '</div>';
+  } else {
+    o += '<div class="card"><h2>' + fd_term('fd_ret', 'Удержание') + '</h2><div class="meta" style="margin-bottom:8px">' + fd_e('Доля заведений, у которых была работа в эту неделю после регистрации. Считаются только те, кто уже дожил до этой недели.') + '</div><div class="an-sts">';
+    [1, 2, 4, 8].forEach(function (w) {
+      var base = D.V.filter(function (v) { return v.regAgo >= w * 7 + 6; }), kept = base.filter(function (v) { return v.days.some(function (x) { var k = fd_diff(v.reg, x.d); return x.act && k >= w * 7 && k < w * 7 + 7; }); });
+      o += '<div class="an-st"><b>' + (base.length ? fd_pct(kept.length, base.length) + '<small>%</small>' : '—') + '</b><span>' + fd_e(w === 1 ? 'через 1 неделю' : w === 2 ? 'через 2 недели' : w === 4 ? 'через 4 недели' : 'через 8 недель') + ' · ' + fd_e('{a} из {b}', { a: kept.length, b: base.length }) + '</span></div>';
+    });
+    o += '</div></div>';
+    var G = D.V.filter(fp_gone).sort(function (a, b) { return b.idle - a.idle; });
+    o += '<div class="card"><h2>' + fd_e('Перестали заходить') + '</h2><div class="meta" style="margin-bottom:4px">' + fd_e('Были рабочие дни, но 3 дня и больше нет отметок.') + '</div>' +
+      (G.length ? G.map(function (v) {
+        return '<div class="w3-row" style="display:block;padding:10px 0"><div style="display:flex;gap:10px;align-items:baseline"><b style="flex:1;min-width:0">' + h(v.name) + '</b><span class="chip t-warn">' + fd_e('{n} дн.', { n: v.idle }) + '</span></div>' +
+          '<div class="meta">' + h(v.owner.name || '—') + (v.owner.phone ? ' · ' + h(v.owner.phone) : '') + ' · ' + fd_e('последний раз {d}', { d: fd_dm(v.last) }) + '</div>' +
+          '<div class="fd-acts">' + (v.tel ? '<a class="btn ghost sm" href="tel:' + h(v.tel) + '">' + icon('phone', 16) + '<span>' + fd_e('Позвонить') + '</span></a>' : '') + '<button class="btn ghost sm" data-fpv="' + v.i + '">' + fd_e('Карточка') + '</button></div></div>';
+      }).join('') : '<div class="empty">' + fd_e('Все работают') + '</div>') + '</div>';
+  }
+  o += fp_later('Функции', 'какими разделами пользуются заведения.');
+  return o;
+}
+
+/* ---------- Маркетинг: районы (если указаны); источники — позже ---------- */
+function fp_mkt(D) {
+  var ds = {}, ord = []; D.V.forEach(function (v) { var k = v.district || ''; var x = ds[k]; if (!x) { x = ds[k] = { n: 0, a: 0, p: 0 }; ord.push(k); } x.n++; if (v.act7) x.a++; x.p += v.members; });
+  ord.sort(function (a, b) { return (a === '') - (b === '') || ds[b].n - ds[a].n; });
+  var o = '<div class="card"><h2>' + fd_e('Районы Ташкента') + '</h2>' +
+    '<table class="fd-tbl"><thead><tr><th>' + fd_e('Район') + '</th><th>' + fd_e('Всего') + '</th><th>' + fd_e('Активны') + '</th><th>' + fd_e('Людей') + '</th></tr></thead><tbody>' +
+    ord.map(function (k) { var x = ds[k]; return '<tr><td>' + (k ? h(k) : fd_e('Не указан')) + '</td><td>' + x.n + '</td><td>' + x.a + '</td><td>' + x.p + '</td></tr>'; }).join('') + '</tbody></table>' +
+    '<div class="meta" style="margin-top:6px">' + fd_e('Район берётся из настроек заведения.') + '</div></div>';
+  o += fp_later('Откуда пришли заведения', 'источник регистрации и «кто кого привёл» сервер пока не записывает.');
+  return o;
+}
+
+/* ---------- Обращения: «Сообщить о проблеме» по заведениям, если таблица есть ---------- */
+function fp_inbox(D) {
+  var o = '';
+  if (D.prob) {
+    var L = D.V.filter(function (v) { return v.problems && v.problems.all; }).sort(function (a, b) { return b.problems.new - a.problems.new || b.problems.all - a.problems.all; });
+    o += '<div class="card"><h2>' + fd_e('Сообщить о проблеме') + '</h2><div class="meta" style="margin-bottom:4px">' + fd_e('Сколько сообщений сотрудники отправили владельцам заведений. Текст сообщений здесь не показывается.') + '</div>' +
+      '<div class="an-sts"><div class="an-st"><b>' + (+D.tot.problems_new || 0) + '</b><span>' + fd_e('новых, без ответа') + '</span></div>' +
+      '<div class="an-st"><b>' + L.reduce(function (s, v) { return s + v.problems.d30; }, 0) + '</b><span>' + fd_e('за 30 дней') + '</span></div></div>' +
+      (L.length ? '<table class="fd-tbl" style="margin-top:10px"><thead><tr><th>' + fd_e('Заведение') + '</th><th>' + fd_e('Новые') + '</th><th>' + fd_e('за 30 дней') + '</th><th>' + fd_e('Всего') + '</th></tr></thead><tbody>' +
+        L.map(function (v) { return '<tr><td>' + h(v.name) + '</td><td>' + v.problems.new + '</td><td>' + v.problems.d30 + '</td><td>' + v.problems.all + '</td></tr>'; }).join('') + '</tbody></table>' : '<div class="empty">' + fd_e('Сообщений пока нет') + '</div>') + '</div>';
+  } else o += fp_later('Сообщить о проблеме', 'счётчики появятся, когда на сервере включат раздел «Сообщить о проблеме».');
+  o += fp_later('Сообщения владельцев, ошибки и пожелания', 'на сервере таких записей пока нет.');
+  return o;
+}
+
+/* ---------- обёртки: только в режиме сервера при #as=jamoa.founder ---------- */
+if (FP_ON) {
+  (function () {
+    var r0 = render; render = function () { try { return fp_main(); } catch (e) { console.error(e); } };   /* r0 не нужен: в кабинете приложение заведения не рисуется */
+    void r0;
+    var f0 = fd_render; fd_render = function () { if (FP_ON) return fp_main(); return f0.apply(this, arguments); };
+    /* вход завершён: не открываем заведение (онбординг, сигналы, сброс адреса #as=…) — только кабинет */
+    afterAuth = async function () { S.loading = false; fp_load(); };
+    /* у основателя может не быть своего заведения — не просим его создать */
+    if (FP_SV.ui) FP_SV.ui.noVenue = function () { return Promise.resolve(false); };
+    try {
+      fp_real().auth.onAuthStateChange(function (ev, s) {
+        if (ev === 'SIGNED_IN' && s && FP.st !== 'ok') setTimeout(fp_load, 0);
+        if (ev === 'SIGNED_OUT') { FP.st = 'out'; FP.D = null; setTimeout(fp_main, 0); }
+      });
+    } catch (e) {}
+    /* без своего заведения событие входа до приложения не доходит (90-server) — первый экран рисуем сами */
+    var kick = function () { setTimeout(function () { if (FP.st === 'boot') fp_main(); }, 0); };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', kick); else kick();
+  })();
+}
+
+/* ---------- вход в кабинет из обычного приложения (режим сервера, только основатель) ---------- */
+function fp_isFounder() {
+  if (!FP_SV || FP_ON || !S.me) return Promise.resolve(false);
+  if (FP.me != null) return Promise.resolve(FP.me);
+  if (FP.meP) return FP.meP;
+  FP.meP = Promise.resolve().then(function () { return fp_real().rpc('founder_me'); }).then(function (x) { FP.me = !x.error && x.data === true; FP.meP = null; return FP.me; }, function () { FP.meP = null; return false; });
+  return FP.meP;
+}
+function fp_open() { location.hash = 'as=jamoa.founder'; location.reload(); }
+function fp_entry(where) {
+  fp_isFounder().then(function (yes) {
+    var m = $('main'); if (!yes || !m || $('fpEntry') || S.view !== where) return;
+    m.insertAdjacentHTML(where === 'more' ? 'afterbegin' : 'beforeend', '<button class="card" id="fpEntry" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer">' +
+      '<span class="now-ic">' + icon('chart', 20) + '</span><span class="grow" style="flex:1;min-width:0"><b>' + fd_e('Кабинет основателя') + '</b><span class="meta" style="display:block;margin:2px 0 0">' + fd_e('Все заведения Jamoa: активность, путь регистрации, контакты владельцев') + '</span></span>' + icon('chev', 18) + '</button>');
+    $('fpEntry').onclick = fp_open;
+  });
+}
+if (FP_SV && !FP_ON) {
+  (function () {
+    var vp0 = vProfile; vProfile = async function () { var r = await vp0.apply(this, arguments); setTimeout(function () { fp_entry('profile'); }, 0); return r; };
+    var vm0 = vMore; vMore = function () { var r = vm0.apply(this, arguments); setTimeout(function () { fp_entry('more'); }, 0); return r; };
+    try { fp_real().auth.onAuthStateChange(function (ev) { if (ev === 'SIGNED_OUT' || ev === 'SIGNED_IN') FP.me = null; }); } catch (e) {}
+  })();
+}
 
 
 /* ===== ВОЛНА 4 · 93-u45.js ===== */
