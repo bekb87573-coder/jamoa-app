@@ -38133,8 +38133,10 @@ var DAI_DEMO = {
     if (!S.me) return { ok: false, reason: 'auth', message: dai_t('Войдите в приложение заново и повторите вопрос.') };
     var o = dai_db(), who = dz_who(), q = String(b.q || '').trim(), now = Date.now(), lg = b.lang || 'ru';
     if (!q || q.length > 1000) return { ok: false, reason: 'bad_input', message: dai_t('Напишите вопрос (до 1000 знаков).') };
+    if (dai_own()) return dai_demoOwnerAsk(o, who, q, lg, b);
     var mine = o.L.filter(function (x) { return x.who === who; });
     var day0 = new Date(); day0.setHours(0, 0, 0, 0);
+    mine = mine.filter(function (x) { return x.mode !== 'owner'; });
     if (mine.filter(function (x) { return now - Date.parse(x.at) < 36e5; }).length >= 30) return { ok: false, reason: 'limit', scope: 'hour', message: dai_t('Слишком много вопросов за час. Попробуйте позже или нажмите «Передать команде».') };
     if (mine.filter(function (x) { return Date.parse(x.at) >= +day0; }).length >= 100) return { ok: false, reason: 'limit', scope: 'day', message: dai_t('На сегодня вопросы помощнику закончились. Завтра можно снова, а сейчас — «Передать команде».') };
     await new Promise(function (res) { setTimeout(res, 450); });
@@ -38151,7 +38153,7 @@ var DAI_DEMO = {
     if (!d) { var last = o.L.filter(function (x) { return x.who === who && Date.now() - Date.parse(x.at) < 864e5; }).pop(); d = last ? last.dialog : null; }
     if (!d) return { data: { dialog: null, items: [] }, error: null };
     return { data: { dialog: d, items: o.L.filter(function (x) { return x.who === who && x.dialog === d; }).map(function (x) {
-      return { id: x.id, q: x.q, a: x.a, status: x.status, suggest: x.suggest, handed: x.handed, ticket_id: x.ticket_id, created_at: x.at };
+      return { id: x.id, q: x.q, a: x.a, status: x.status, suggest: x.suggest, handed: x.handed, ticket_id: x.ticket_id, created_at: x.at, mode: x.mode || 'support', steps: x.steps || [], cards: x.cards || [] };
     }) }, error: null };
   },
   support_ai_handoff: async function (a) {
@@ -38288,6 +38290,7 @@ function dai_ex() {
 
 /* ---------- сообщения ---------- */
 function dai_msg(x, i) {
+  if (dai_own()) return dai_msgO(x, i);   /* 30.10 (утро): личный помощник владельца — свой вид сообщения (шаги, разметка, карточки) */
   var me = '<div class="dai-row"><div class="dai-me">' + h(x.q) + '</div></div>';
   var who = '<div class="dai-who">' + dai_ico('star', 13, 1.4) + '<span>' + dai_e('Помощник Jamoa') + '</span></div>';
   if (x.wait) return me + '<div class="dai-row dai-ai" id="daiWait">' + who + '<div class="dai-typing" role="status" aria-label="' + dai_e('Помощник печатает') + '"><i></i><i></i><i></i></div></div>';
@@ -38302,6 +38305,7 @@ function dai_msg(x, i) {
       : x.handoff ? '<div class="dai-acts"><button type="button" class="dai-mini go" data-daih="' + i + '">' + dai_ico('team', 15) + '<span>' + dai_e('Передать команде') + '</span></button></div>' : '') + '</div>';
 }
 function dai_empty() {
+  if (dai_own()) return dai_emptyO();
   var nm = ''; try { nm = (S.me && S.me.first_name) || ''; } catch (e) {}
   return '<div class="dai-hi"><div class="dai-hic">' + dai_ico('ask', 24) + '</div>' +
     '<h2 class="dai-h">' + h(dai_cy(nm ? dai_t('Чем помочь, {n}?', { n: nm }) : dai_t('Чем помочь?'))) + '</h2>' +
@@ -38318,6 +38322,7 @@ function dai_paint(scroll) {
   th.querySelectorAll('[data-daiq]').forEach(function (b) { b.onclick = function () { dai_send(b.getAttribute('data-daiq')); }; });
   th.querySelectorAll('[data-daih]').forEach(function (b) { b.onclick = function () { dai_handoff(+b.getAttribute('data-daih')); }; });
   th.querySelectorAll('[data-dair]').forEach(function (b) { b.onclick = function () { var k = +b.getAttribute('data-dair'), x = DAI.items[k]; if (!x) return; DAI.items.splice(k, 1); dai_send(x.q); }; });
+  dai_bindO(th);
   dai_head(); dai_fit();
   if (scroll !== false && DAI.items.length) dai_bottom();
 }
@@ -38330,8 +38335,9 @@ function dai_calm() { try { return matchMedia('(prefers-reduced-motion: reduce)'
 /* ---------- поле ввода: внизу экрана, над экранной клавиатурой ---------- */
 function dai_cmpHtml() {
   return '<div class="dai-cmp" id="daiCmp"><div class="dai-cin">' +
-    '<div class="dai-dis" id="daiDis">' + dai_e('ИИ-помощник Jamoa может ошибаться') + '</div>' +
-    '<div class="dai-box"><textarea id="daiQ" class="dai-ta" rows="1" maxlength="1000" enterkeyhint="enter" aria-label="' + dai_e('Ваш вопрос') + '" placeholder="' + dai_e('Спросите о Jamoa…') + '"></textarea>' +
+    '<div class="dai-dis" id="daiDis">' + dai_e(dai_own() ? 'Помощник может ошибаться — проверяйте карточку перед «Выполнить»' : 'ИИ-помощник Jamoa может ошибаться') + '</div>' +
+    '<div class="dai-box"><textarea id="daiQ" class="dai-ta" rows="1" maxlength="1000" enterkeyhint="enter" aria-label="' + dai_e(dai_own() ? 'Ваша команда' : 'Ваш вопрос') + '" placeholder="' + dai_e(dai_own() ? 'Напишите или скажите…' : 'Спросите о Jamoa…') + '"></textarea>' +
+    (dai_own() ? dai_micHtml() : '') +
     '<button type="button" class="dai-snd" id="daiSend" aria-label="' + dai_e('Отправить') + '" disabled>' + dai_ico('up', 20, 2.3) + '</button></div>' +
     '<div class="dai-cnt" id="daiN" hidden></div></div></div>';
 }
@@ -38373,6 +38379,7 @@ function dai_head() {
     mb.onclick = function (e) { e.stopPropagation(); dai_menu(mb); };
   }
   var n2 = $('daiNew'); if (n2) n2.disabled = !DAI.items.length || DAI.busy;
+  dai_headO(top);
 }
 function dai_new() { dai_menuX(); if (DAI.busy) return; DAI.items = []; DAI.dialog = dai_uuid(); DAI.fresh = true; dai_paint(false); window.scrollTo(0, 0); var ta = $('daiQ'); if (ta && dai_desk()) ta.focus(); }
 function dai_menuX() { var p = $('daiPop'); if (p) p.remove(); document.removeEventListener('pointerdown', dai_menuOut, true); }
@@ -38394,16 +38401,19 @@ function dai_menu(btn) {
 /* ---------- экран ---------- */
 async function vDaiAsk() {
   var m = $('main'); if (!m || S.view !== 'daiask') return;
-  var who = dz_who(); if (DAI.who !== who) { DAI.who = who; DAI.items = []; DAI.dialog = null; DAI.loaded = false; DAI.fresh = false; DAI.busy = false; DAI.pending = null; DAI.draft = ''; }
+  var who = dz_who(); if (DAI.who !== who) { DAI.who = who; DAI.items = []; DAI.dialog = null; DAI.loaded = false; DAI.fresh = false; DAI.busy = false; DAI.pending = null; DAI.draft = ''; DAI.mode = null; DAI.left = null; DAI.lim = null; }
   m.classList.add('dai-chat');
   if (!$('daiTh')) m.innerHTML = '<div id="daiTh" role="log" aria-live="polite" aria-relevant="additions"></div>';
   dai_head();
+  if (!DAI.mode) await dai_state();   /* режим (owner / support) и «Осталось сегодня» — с сервера */
+  if (S.view !== 'daiask' || $('main') !== m) return;
   if (!DAI.loaded && !DAI.fresh) {
     DAI.loaded = true;
     var r = await dai_rpc('support_ai_my', { p_dialog: null });
     if (r && !r.error && r.data && r.data.dialog && !DAI.items.length) {
       DAI.dialog = r.data.dialog;
-      DAI.items = (r.data.items || []).map(function (x) { return { id: x.id, q: x.q, a: x.a, at: x.created_at, handoff: !!x.suggest, handed: !!x.handed, ticket_id: x.ticket_id, err: x.status === 'error' ? dai_t('Помощник сейчас не ответил. Попробуйте ещё раз или нажмите «Передать команде».') : null }; });
+      DAI.items = (r.data.items || []).map(function (x) { return { id: x.id, q: x.q, a: x.a, at: x.created_at, handoff: !!x.suggest, handed: !!x.handed, ticket_id: x.ticket_id, err: x.status === 'error' ? dai_t(dai_own() ? 'Помощник сейчас не ответил. Попробуйте ещё раз через минуту.' : 'Помощник сейчас не ответил. Попробуйте ещё раз или нажмите «Передать команде».') : null,
+        mode: x.mode, steps: x.steps || [], cards: (x.cards || []).map(function (c) { return Object.assign({}, c, { res: c.result || null }); }) }; });
     }
     if (S.view !== 'daiask' || $('main') !== m) return;
   }
@@ -38434,8 +38444,10 @@ async function dai_send(qq) {
   dai_grow(); dai_paint();
   var r = await dai_ask({ q: q, dialog: DAI.dialog, lang: dai_lang(), screen: dai_scr(DAI.from), ver: String(window.JAMOA_VERSION || '') });
   DAI.busy = false; it.wait = false;
-  if (r && r.ok) { it.id = r.id; it.a = r.answer; it.handoff = !!r.handoff; it.kind = r.kind || 'question'; it.ticket = r.ticket || null; }
-  else { it.err = (r && r.message) || dai_t('Помощник сейчас не ответил. Попробуйте ещё раз или нажмите «Передать команде».'); it.reason = r && r.reason; }
+  if (r && r.ok) { it.id = r.id; it.a = r.answer; it.handoff = !!r.handoff; it.kind = r.kind || 'question'; it.ticket = r.ticket || null;
+    it.mode = r.mode || null; it.steps = r.steps || []; it.cards = r.cards || []; it.fresh = true; }
+  else { it.err = (r && r.message) || dai_t('Помощник сейчас не ответил. Попробуйте ещё раз или нажмите «Передать команде».'); it.reason = r && r.reason; it.steps = (r && r.steps) || []; }
+  if (r && r.mode === 'owner') { if (r.left_day != null) DAI.left = Math.max(0, +r.left_day); else if (r.reason === 'limit') DAI.left = 0; if (r.lim_day) DAI.lim = +r.lim_day; }
   if (S.view === 'daiask') { dai_paint(); dai_grow(); }
 }
 
@@ -38443,7 +38455,7 @@ async function dai_send(qq) {
 function dai_topBtn() {
   var on = !!S.me && S.view === 'daiask';
   document.documentElement.classList.toggle('dai-full', on);
-  if (!on) { dai_menuX(); var c = $('daiCmp'); if (c) c.remove(); var mm = $('main'); if (mm) mm.classList.remove('dai-chat'); }
+  if (!on) { dai_menuX(); dai_micStop(); var c = $('daiCmp'); if (c) c.remove(); var mm = $('main'); if (mm) mm.classList.remove('dai-chat'); }
   var top = document.querySelector('#app > .top'); if (!top || !S.me) return;
   if (on) return dai_head();
   if ($('daiTop')) return;
@@ -38576,6 +38588,340 @@ async function dai_fFill() {
 (function () {
   try { if (typeof dz_fBox === 'function') { var b0 = dz_fBox; dz_fBox = function () { setTimeout(dai_fFill, 0); return b0.apply(this, arguments) + '<div id="daiF"></div>'; }; } } catch (e) {}
 })();
+
+/* =====================================================================================
+   30.10 (утро): ЛИЧНЫЙ ПОМОЩНИК ВЛАДЕЛЬЦА (только роль owner/director; у остальных — помощник поддержки, как выше).
+   Тот же экран daiask и та же edge-функция support-ai: сервер сам включает режим owner по роли (support_ai_begin),
+   отвечает текстом + «честными» шагами (реально вызванные инструменты) + КАРТОЧКАМИ действий (план вызовов rpc).
+   «Выполнить» — приложение вызывает те же rpc, что ручной ввод (переходник 92ai: owner_ai_run → SV.real.rpc с сессией владельца),
+   имена rpc — только из белого списка DAI_RPC; итог — owner_ai_card_mark. Лимит 10 команд в день — «Осталось сегодня: N из 10».
+   Вид — по пакету владельца (Mir Luxe One, ai-v1/ai-v2): шар ИИ, золотые рамки с бегущим бликом, пузыри, текст проявляется по словам
+   из размытия, свёрнутый блок «Подумал», поле с микрофоном. Без эмодзи (SVG), без скрепки и без плавающей кнопки.
+   Демо: правдоподобные ответы и карточки на учебных данных; «Выполнить» в демо не сохраняет.
+   ===================================================================================== */
+var DAI_RPC = ['schedule_set_many', 'schedule_publish', 'task_create', 'task_cancel', 'repair_create', 'repair_assign', 'buy_create',
+  'leave_decide', 'advance_decide', 'clock_request_decide', 'zone_decide', 'delay_decide', 'adj_decide', 'task_review', 'swap_decide',
+  'health_decide', 'buy_decide', 'adj_add', 'ann_create', 'notify_send', 'member_archive'];
+var DAI_STEP_RPC = { schedule_set_many: 'График', schedule_publish: 'Публикация графика', task_create: 'Задача', task_cancel: 'Отмена задачи', repair_create: 'Заявка на ремонт',
+  repair_assign: 'Поручение по ремонту', buy_create: 'Заявка на закупку', adj_add: 'Премия или штраф', ann_create: 'Объявление', notify_send: 'Уведомление', member_archive: 'Сотрудник' };
+var DAI_KIND = { schedule: 'График', task: 'Задача', repair: 'Ремонт', buy: 'Закупка', decide: 'Решения', adjust: 'Деньги', announce: 'Объявление', notify: 'Уведомление', cancel: 'Отмена', archive: 'Сотрудник', open: 'Экран' };
+DAI_IC.mic = '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>';
+DAI_IC.orb = '<path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9z" fill="#fff" stroke="none"/><circle cx="19" cy="18" r="1.6" fill="#fff" stroke="none"/><circle cx="5" cy="17" r="1.1" fill="#fff" stroke="none"/>';
+DAI_IC.warn = '<path d="M12 4l9 16H3z"/><path d="M12 10v4.5M12 17.4v.1"/>';
+DAI_IC.go = '<path d="M5 12h13M13 6l6 6-6 6"/>';
+DAI_IC.x = '<path d="M6 6l12 12M18 6L6 18"/>';
+function dai_own() { if (DAI.mode) return DAI.mode === 'owner'; try { return !!S.me && !!isDirector(); } catch (e) { return false; } }
+function dai_orb(lg) { return '<span class="dai-orb' + (lg ? ' lg' : '') + '" aria-hidden="true">' + dai_svg(DAI_IC.orb, lg ? 26 : 15, 0) + '</span>'; }
+async function dai_state() {
+  var own0 = false; try { own0 = !!isDirector(); } catch (e) {}
+  if (!dz_sv()) { DAI.mode = own0 ? 'owner' : 'support'; if (own0) { var o = dai_db(), who = dz_who(), d0 = new Date(); d0.setHours(0, 0, 0, 0); DAI.lim = 10;
+    DAI.left = Math.max(0, 10 - o.L.filter(function (x) { return x.who === who && x.mode === 'owner' && Date.parse(x.at) >= +d0; }).length); } return; }
+  var r = await dai_rpc('owner_ai_state', {});
+  if (r && !r.error && r.data && r.data.mode) { DAI.mode = r.data.mode; DAI.lim = +r.data.lim_day || 10; DAI.left = Math.max(0, +r.data.left_day || 0); }
+  else DAI.mode = own0 ? 'owner' : 'support';   /* старый сервер без 0032 — как по роли; функция всё равно решит сама */
+}
+
+/* ---------- стили владельца (только html.dai-own; помощник поддержки не меняется) ---------- */
+(function () {
+  var st = document.createElement('style'); st.id = 'daiOwnCss';
+  st.textContent =
+    '@property --daia{syntax:"<angle>";inherits:false;initial-value:0deg}' +
+    '@keyframes daiSpin{to{--daia:360deg}}@keyframes daiBreath{0%,100%{transform:scale(1);filter:brightness(1)}50%{transform:scale(1.035);filter:brightness(1.08)}}' +
+    '@keyframes daiIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}@keyframes daiSheen{0%,55%{left:-60%}100%{left:130%}}' +
+    '@keyframes daiWord{from{opacity:0;filter:blur(6px);transform:translateY(3px)}to{opacity:1;filter:blur(0);transform:none}}@keyframes daiCaret{0%,100%{opacity:1}50%{opacity:.15}}' +
+    '@keyframes daiShim{to{background-position:-200% 0}}' +
+    '.dai-orb{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:radial-gradient(circle at 30% 26%,rgba(255,250,235,.95) 0 9%,rgba(255,250,235,0) 34%),conic-gradient(from 210deg,#8A6A2C,#D9B970,#F3E2B8,#B8913F,#7A5C22,#C9A24E,#8A6A2C);box-shadow:0 0 0 1px rgba(255,255,255,.5) inset,0 0 14px rgba(184,145,63,.4),inset 0 -5px 12px rgba(60,40,10,.25);animation:daiBreath 4.2s cubic-bezier(.45,0,.55,1) infinite}' +
+    '.dai-orb.lg{width:64px;height:64px}.dai-orb svg{filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}' +
+    '.dai-ttl{display:flex;align-items:center;gap:10px}.dai-ttl .dai-orb{width:32px;height:32px}' +
+    '.dai-gt{background:linear-gradient(90deg,#7A5C22,var(--gold),#E3C98A,var(--gold),#7A5C22);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:daiShim 5s linear infinite}' +
+    '.dai-om{display:flex;gap:10px;align-items:flex-start;min-width:0;animation:daiIn .6s cubic-bezier(.22,1,.36,1) both}' +
+    '.dai-om>.dai-orb{margin-top:2px}.dai-ob{flex:1;min-width:0;max-width:calc(100% - 40px)}' +
+    'html.dai-own .dai-me{background:linear-gradient(135deg,#B8913F,#9A7731);color:#fff;box-shadow:0 6px 18px -10px rgba(122,92,34,.8)}' +
+    '.dai-bub{background:var(--card);border:1px solid color-mix(in srgb,var(--gold) 22%,var(--line));border-radius:6px 18px 18px 18px;padding:11px 14px;box-shadow:0 8px 24px -18px rgba(60,40,10,.5);font-size:15.5px;line-height:1.55;color:var(--ink);overflow-wrap:anywhere}' +
+    '.dai-bub p{margin:0 0 8px}.dai-bub p:last-child{margin:0}.dai-bub ol,.dai-bub ul{margin:4px 0 8px;padding-left:22px}.dai-bub li{margin:3px 0}.dai-bub ul{list-style:none;padding-left:16px}' +
+    '.dai-bub ul li{position:relative}.dai-bub ul li::before{content:"";position:absolute;left:-13px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--gold)}.dai-bub b{font-weight:700}' +
+    '.dai-dw{display:none}.dai-dw.on{display:inline;animation:daiWord .55s cubic-bezier(.22,1,.36,1) both}.dai-dh{display:none!important}' +
+    '.dai-crt{display:inline-block;width:2px;height:1.05em;margin-left:2px;vertical-align:-2px;border-radius:2px;background:linear-gradient(180deg,#D9B970,#8A6A2C);animation:daiCaret 1s ease-in-out infinite}' +
+    '.dai-thk{margin:0 0 8px;font-size:13px;color:var(--muted)}.dai-thk summary{display:inline-flex;align-items:center;gap:7px;cursor:pointer;list-style:none;min-height:30px;font-weight:600;border-radius:8px}' +
+    '.dai-thk summary::-webkit-details-marker{display:none}.dai-thk summary svg.chev{transition:transform .3s;color:var(--faint)}.dai-thk[open] summary svg.chev{transform:rotate(90deg)}' +
+    '.dai-thk summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px}' +
+    '.dai-thk ol{list-style:none;margin:2px 0 4px;padding:0 0 0 4px;display:flex;flex-direction:column;gap:3px}.dai-thk li{display:flex;gap:7px;align-items:center}.dai-thk li svg{color:var(--goldink,var(--gold));flex:none}' +
+    '.dai-wt{display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:600;min-height:30px}' +
+    '.dai-wt .dai-typing i{background:var(--gold)}' +
+    '.dai-card{position:relative;border-radius:18px;padding:1.5px;margin:10px 0 0;background:linear-gradient(135deg,rgba(184,145,63,.6),rgba(243,226,184,.8),rgba(184,145,63,.6));animation:daiIn .7s cubic-bezier(.22,1,.36,1) both}' +
+    '.dai-card.live{background:conic-gradient(from var(--daia),color-mix(in srgb,var(--gold) 38%,transparent),color-mix(in srgb,var(--gold) 38%,transparent) 55%,#F3E2B8 70%,var(--gold) 80%,color-mix(in srgb,var(--gold) 38%,transparent) 92%);animation:daiIn .7s cubic-bezier(.22,1,.36,1) both,daiSpin 9s linear infinite;box-shadow:0 10px 30px -14px rgba(138,106,44,.45)}' +
+    '.dai-card>.c{position:relative;overflow:hidden;border-radius:16.5px;background:linear-gradient(135deg,var(--card),color-mix(in srgb,var(--goldbg) 40%,var(--card)));padding:13px 14px;display:flex;flex-direction:column;gap:8px}' +
+    '.dai-card.live>.c::after{content:"";position:absolute;top:0;bottom:0;width:40%;left:-60%;background:linear-gradient(100deg,transparent,rgba(243,226,184,.35),transparent);animation:daiSheen 5.5s cubic-bezier(.45,0,.55,1) infinite;pointer-events:none}' +
+    '.dai-ck{font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--goldink,var(--gold));font-weight:700}' +
+    '.dai-ct{font-size:16px;font-weight:700;line-height:1.3;color:var(--ink);margin-top:-4px}' +
+    '.dai-cl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14.5px;line-height:1.45}.dai-cl li{position:relative;padding-left:14px;overflow-wrap:anywhere}' +
+    '.dai-cl li::before{content:"";position:absolute;left:0;top:.6em;width:6px;height:6px;border-radius:50%;background:var(--gold)}' +
+    '.dai-cw{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:12px;font-size:13px;line-height:1.4;background:color-mix(in srgb,var(--gold) 13%,transparent);color:var(--ink)}.dai-cw svg{flex:none;margin-top:1px;color:var(--goldink,var(--gold))}' +
+    '.dai-cw.bad{background:color-mix(in srgb,var(--bad) 11%,transparent)}.dai-cw.bad svg{color:var(--bad)}' +
+    '.dai-cbs{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}.dai-cb{all:unset;box-sizing:border-box;cursor:pointer;flex:1 1 auto;min-height:44px;padding:0 14px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;gap:7px;font:600 14.5px/1.2 var(--sans);text-align:center;color:var(--ink);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gold) 40%,var(--line));transition:transform .4s cubic-bezier(.22,1,.36,1),opacity .3s}' +
+    '.dai-cb.go{color:#fff;background:linear-gradient(135deg,#C9A24E,#8A6A2C);box-shadow:0 6px 16px -8px rgba(122,92,34,.9)}.dai-cb:active{transform:scale(.96)}.dai-cb[disabled]{opacity:.5;cursor:default}.dai-cb:focus-visible{outline:2px solid var(--gold);outline-offset:2px}' +
+    '.dai-cd{display:inline-flex;align-items:center;gap:7px;font-weight:700;font-size:15px;color:var(--ok,var(--done))}.dai-cd.part{color:var(--warn,var(--gold))}.dai-cd.bad{color:var(--bad)}.dai-cd.off{color:var(--muted);font-weight:600}' +
+    '.dai-cr{font-size:12.5px;color:var(--muted);line-height:1.4}' +
+    '.dai-ohi{display:flex;flex-direction:column;align-items:center;text-align:center;padding:5vh 4px 4px;animation:daiIn .7s cubic-bezier(.22,1,.36,1) both}.dai-ohi .dai-orb{margin-bottom:14px}' +
+    '.dai-ohi .dai-h{text-align:center}.dai-ohi .dai-p{text-align:center;max-width:420px}' +
+    'html.dai-own .dai-sgb{border-color:color-mix(in srgb,var(--gold) 30%,var(--line))}' +
+    'html.dai-own .dai-box{border-color:color-mix(in srgb,var(--gold) 35%,var(--line))}' +
+    '.dai-mic{flex:none;width:38px;height:38px;border-radius:50%;border:0;display:grid;place-items:center;background:transparent;color:var(--goldink,var(--gold));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gold) 38%,transparent);cursor:pointer;transition:transform .4s cubic-bezier(.22,1,.36,1),background .5s ease}' +
+    '.dai-mic:active{transform:scale(.92)}.dai-mic.on{background:color-mix(in srgb,var(--gold) 22%,transparent);animation:daiBreath 2.8s cubic-bezier(.45,0,.55,1) infinite}.dai-mic:focus-visible{outline:2px solid var(--gold);outline-offset:2px}' +
+    'html.dai-own .dai-snd{background:linear-gradient(135deg,#C9A24E,#8A6A2C);color:#fff}' +
+    '@media (prefers-reduced-motion:reduce){.dai-orb,.dai-gt,.dai-om,.dai-card,.dai-card.live,.dai-card.live>.c::after,.dai-mic.on,.dai-ohi,.dai-crt{animation:none!important}.dai-dw{display:inline}.dai-dw.on{animation:none!important}}';
+  (document.head || document.documentElement).appendChild(st);
+})();
+
+/* ---------- разметка ответа: **жирный**, «1.» и «— » (только после экранирования — без HTML-инъекций) ---------- */
+function dai_md(s) {
+  var out = [], list = null;
+  function inl(t) { return h(t).replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>'); }
+  function close() { if (list) { out.push('</' + list + '>'); list = null; } }
+  String(s || '').split('\n').forEach(function (ln) {
+    var m = /^\s*(\d{1,2})[.)]\s+(.*)$/.exec(ln);
+    if (m) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push('<li>' + inl(m[2]) + '</li>'); return; }
+    m = /^\s*[—–•-]\s+(.*)$/.exec(ln);
+    if (m) { if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; } out.push('<li>' + inl(m[1]) + '</li>'); return; }
+    close(); if (ln.trim()) out.push('<p>' + inl(ln) + '</p>');
+  });
+  close(); return out.join('');
+}
+function dai_stepsHtml(x) {
+  var L = x.steps || []; if (!L.length) return '';
+  return '<details class="dai-thk"><summary>' + icon('chev', 13).replace('<svg', '<svg class="chev"') + '<span>' + dai_e('Подумал') + ' · ' + dai_e('шагов: {n}', { n: L.length }) + '</span></summary><ol>' +
+    L.map(function (s) { return '<li>' + dai_ico('ok', 13, 2.4) + '<span>' + h(s.l || s.n || '') + '</span></li>'; }).join('') + '</ol></details>';
+}
+function dai_cardHtml(c, i, j) {
+  var st = c.status || 'proposed', k = i + ':' + j, R = c.res || null, busy = !!c.busy, out = '';
+  var head = '<div class="dai-ck">' + dai_e(DAI_KIND[c.kind] || 'Действие') + '</div><div class="dai-ct">' + h(c.title || '') + '</div>';
+  var lines = (c.lines || []).length ? '<ul class="dai-cl">' + c.lines.map(function (l) { return '<li>' + h(l && l.t != null ? l.t : l) + '</li>'; }).join('') + '</ul>' : '';
+  if (st === 'proposed') {
+    out = (c.warn ? '<div class="dai-cw' + (c.kind === 'archive' || c.kind === 'adjust' ? ' bad' : '') + '">' + dai_ico('warn', 16, 2) + '<span>' + h(c.warn) + '</span></div>' : '') +
+      '<div class="dai-cbs">' + (c.kind === 'open'
+        ? '<button type="button" class="dai-cb go" data-daio="' + k + '">' + dai_ico('go', 16, 2.2) + '<span>' + dai_e('Открыть') + '</span></button>'
+        : '<button type="button" class="dai-cb go" data-daix="' + k + '"' + (busy ? ' disabled' : '') + '>' + (busy ? '<span>' + dai_e('Выполняю…') + '</span>' : dai_ico('ok', 16, 2.4) + '<span>' + dai_e('Выполнить') + '</span>') + '</button>' +
+          (c.extra && c.extra.publish && c.extra.publish.length && !busy ? '<button type="button" class="dai-cb go" data-daixp="' + k + '">' + dai_ico('ok', 16, 2.4) + '<span>' + dai_e('Выполнить и опубликовать') + '</span></button>' : '')) +
+      (busy ? '' : '<button type="button" class="dai-cb" data-daic="' + k + '">' + dai_ico('x', 15, 2.2) + '<span>' + dai_e('Отменить') + '</span></button>') + '</div>';
+  } else {
+    var tag = st === 'done' ? '<span class="dai-cd">' + dai_ico('ok', 17, 2.6) + '<span>' + dai_e(R && R.publish ? 'Выполнено и опубликовано' : 'Выполнено') + '</span></span>'
+      : st === 'partial' ? '<span class="dai-cd part">' + dai_ico('warn', 16, 2.2) + '<span>' + dai_e('Выполнено частично') + '</span></span>'
+      : st === 'failed' ? '<span class="dai-cd bad">' + dai_ico('warn', 16, 2.2) + '<span>' + dai_e('Не выполнено') + '</span></span>'
+      : '<span class="dai-cd off">' + dai_ico('x', 15, 2.2) + '<span>' + dai_e('Отменено') + '</span></span>';
+    var er = R && R.errors && R.errors.length ? '<div class="dai-cw bad">' + dai_ico('warn', 16, 2) + '<span>' + R.errors.map(h).join('<br>') + '</span></div>' : '';
+    var cnt = R && (st === 'partial' || st === 'failed') ? '<div class="dai-cr">' + dai_e('Сделано: {a} из {b}', { a: +R.ok || 0, b: (+R.ok || 0) + (+R.fail || 0) }) + '</div>' : '';
+    var dm0 = R && R.demo ? '<div class="dai-cr">' + dai_e('В демо не сохраняется — на сервере действие выполнится по-настоящему.') + '</div>' : '';
+    var ob = (st === 'done' || st === 'partial') && c.extra && c.extra.view ? '<button type="button" class="dai-cb" data-daio="' + k + '">' + dai_ico('go', 16, 2.2) + '<span>' + dai_e('Открыть') + '</span></button>' : '';
+    var again = st === 'failed' ? '<button type="button" class="dai-cb go" data-daix="' + k + '">' + icon('refresh', 15) + '<span>' + dai_e('Ещё раз') + '</span></button>' : '';
+    out = er + cnt + dm0 + '<div class="dai-cbs" style="align-items:center">' + tag + (ob || again ? '<span style="flex:1"></span>' + ob + again : '') + '</div>';
+  }
+  return '<div class="dai-card' + (st === 'proposed' ? ' live' : '') + '" data-daik="' + k + '"><div class="c">' + head + lines + out + '</div></div>';
+}
+function dai_msgO(x, i) {
+  var me = '<div class="dai-row"><div class="dai-me">' + h(x.q) + '</div></div>';
+  if (x.wait) return me + '<div class="dai-om" id="daiWait">' + dai_orb() + '<div class="dai-ob"><div class="dai-wt" role="status"><span class="dai-gt">' + dai_e('Думаю') + '</span><span class="dai-typing"><i></i><i></i><i></i></span></div></div></div>';
+  if (x.err) {
+    var nc = x.reason === 'not_configured', lim = x.reason === 'limit';
+    return me + '<div class="dai-om">' + dai_orb() + '<div class="dai-ob">' + dai_stepsHtml(x) + '<div class="dai-bub"><div class="dai-er">' + h(x.err) + '</div></div><div class="dai-acts">' +
+      (nc || lim ? '' : '<button type="button" class="dai-mini" data-dair="' + i + '">' + icon('refresh', 15) + '<span>' + dai_e('Ещё раз') + '</span></button>') +
+      (nc ? '<button type="button" class="dai-mini go" data-daih="' + i + '">' + dai_ico('team', 15) + '<span>' + dai_e('Написать команде') + '</span></button>' : '') + '</div></div></div>';
+  }
+  return me + '<div class="dai-om">' + dai_orb() + '<div class="dai-ob">' + dai_stepsHtml(x) +
+    '<div class="dai-bub" data-dait="' + i + '">' + dai_md(x.a || '') + '</div>' +
+    '<div class="dai-cards" data-daicards="' + i + '"' + (x.fresh ? ' hidden' : '') + '>' + (x.cards || []).map(function (c, j) { return dai_cardHtml(c, i, j); }).join('') + '</div></div></div>';
+}
+function dai_emptyO() {
+  var nm = ''; try { nm = (S.me && S.me.first_name) || ''; } catch (e) {}
+  var ex = ['Поставь график на следующую неделю: …', 'Кто сегодня опоздал?', 'Поставь задачу …: …', 'Что ждёт моего решения?'];
+  try { var T0 = myTeam().filter(function (e) { return e.first_name; }); if (T0[0]) ex[2] = dai_t('Поставь задачу {n}: …', { n: T0[0].first_name }); } catch (e) {}
+  return '<div class="dai-ohi">' + dai_orb(true) + '<h2 class="dai-h">' + h(dai_cy(nm ? dai_t('Здравствуйте, {n}!', { n: nm }) : dai_t('Здравствуйте!'))) + '</h2>' +
+    '<p class="dai-p">' + dai_e('Я ваш помощник: смотрю, что происходит в заведении, готовлю график, задачи и решения. Ничего не меняю без вашего «Выполнить». Можно голосом.') + '</p></div>' +
+    '<div class="dai-sg">' + ex.map(function (q) { var t = dai_t(q); return '<button type="button" class="dai-sgb" data-daiq="' + h(t) + '"' + (/…/.test(t) ? ' data-daifill="1"' : '') + '><span>' + h(t) + '</span>' + icon('chev', 16) + '</button>'; }).join('') + '</div>' +
+    '<p class="dai-fine">' + dai_e('Помощник — ИИ, может ошибаться. Всё, что меняет данные, выполняется только после вашего «Выполнить». 10 команд в день.') +
+      (!dz_sv() ? ' ' + dai_e('В демо ответы и карточки — на учебных данных, «Выполнить» не сохраняет.') : '') + '</p>';
+}
+function dai_headO(top) {
+  document.documentElement.classList.toggle('dai-own', dai_own());
+  if (!dai_own() || !top) return;
+  var h1 = top.querySelector('h1'), sub = top.querySelector('.sub'), lim = DAI.lim || 10, left = DAI.left == null ? lim : DAI.left;
+  if (h1 && !h1.querySelector('.dai-orb')) { h1.innerHTML = '<span class="dai-ttl">' + dai_orb() + '<span class="dai-gt">' + h(dai_cy(dai_t('Помощник'))) + '</span></span>'; }
+  if (sub) { sub.id = 'daiLeft'; sub.textContent = dai_cy(dai_t('Осталось сегодня: {n} из {m}', { n: left, m: lim })); sub.title = sub.textContent; }
+}
+/* «живой» ответ: слова проявляются из размытия (как в пакете владельца); prefers-reduced-motion — сразу целиком */
+function dai_reveal(i) {
+  var x = DAI.items[i], box = document.querySelector('[data-dait="' + i + '"]'), cards = document.querySelector('[data-daicards="' + i + '"]');
+  if (!x || !box) return; x.fresh = false;
+  var showCards = function () { if (cards) cards.hidden = false; dai_bottom(); };
+  if (dai_calm()) return showCards();
+  var words = [];
+  (function split(n) {
+    Array.prototype.slice.call(n.childNodes).forEach(function (c) {
+      if (c.nodeType === 3) {
+        var f = document.createDocumentFragment();
+        c.nodeValue.split(/(\s+)/).forEach(function (p) { if (!p) return; if (/^\s+$/.test(p)) { f.appendChild(document.createTextNode(p)); return; } var sp = document.createElement('span'); sp.className = 'dai-dw'; sp.textContent = p; f.appendChild(sp); words.push(sp); });
+        c.parentNode.replaceChild(f, c);
+      } else if (c.nodeType === 1) split(c);
+    });
+  })(box);
+  box.querySelectorAll('p,li,ul,ol').forEach(function (e) { e.classList.add('dai-dh'); });
+  var show = function (w) { w.classList.add('on'); for (var q = w.parentNode; q && q !== box; q = q.parentNode) if (q.classList) q.classList.remove('dai-dh'); };
+  var caret = document.createElement('span'); caret.className = 'dai-crt';
+  var k = 0, base = words.length > 160 ? 14 : 22, last = 0;
+  function tick(t) {
+    if (!box.isConnected) return;
+    if (t - last >= base) { last = t; var n = words.length > 300 ? 3 : 1; for (var z = 0; z < n && k < words.length; z++, k++) { var w = words[k]; show(w); w.parentNode.insertBefore(caret, w.nextSibling); if (/[.!?:]$/.test(w.textContent)) last += 110; } }
+    if (k < words.length) requestAnimationFrame(tick); else setTimeout(function () { caret.remove(); showCards(); }, 300);
+  }
+  if (!words.length) return showCards();
+  requestAnimationFrame(tick);
+}
+function dai_bindO(th) {
+  document.documentElement.classList.toggle('dai-own', dai_own());
+  if (!dai_own()) return;
+  var ix = function (b, a) { var p = String(b.getAttribute(a)).split(':'); return [+p[0], +p[1]]; };
+  th.querySelectorAll('[data-daix]').forEach(function (b) { b.onclick = function () { var p = ix(b, 'data-daix'); dai_exec(p[0], p[1], false); }; });
+  th.querySelectorAll('[data-daixp]').forEach(function (b) { b.onclick = function () { var p = ix(b, 'data-daixp'); dai_exec(p[0], p[1], true); }; });
+  th.querySelectorAll('[data-daic]').forEach(function (b) { b.onclick = function () { var p = ix(b, 'data-daic'); dai_cancel(p[0], p[1]); }; });
+  th.querySelectorAll('[data-daio]').forEach(function (b) { b.onclick = function () { var p = ix(b, 'data-daio'); dai_openView(p[0], p[1]); }; });
+  /* пример с «…» — в поле ввода (дописать), без «…» — сразу команда */
+  th.querySelectorAll('[data-daifill]').forEach(function (b) { b.onclick = function () { var ta = $('daiQ'); if (!ta) return; ta.value = String(b.getAttribute('data-daiq')).replace(/…\s*$/, '').replace(/…/g, ''); dai_grow(); ta.focus(); try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {} }; });
+  DAI.items.forEach(function (x, i) { if (x.fresh && !x.wait) dai_reveal(i); });
+}
+function dai_rpcLabel(n) { return dai_t(DAI_STEP_RPC[n] || 'Решение'); }
+async function dai_exec(i, j, pub) {
+  var x = DAI.items[i], c = x && x.cards && x.cards[j];
+  if (!c || c.busy || (c.status && c.status !== 'proposed' && c.status !== 'failed')) return;
+  var steps = (c.plan || []).concat(pub ? ((c.extra && c.extra.publish) || []) : []);
+  if (!steps.length || steps.some(function (s) { return !s || DAI_RPC.indexOf(s.rpc) < 0; })) return toast(dai_t('В карточке недопустимое действие — попросите помощника подготовить её заново'));
+  c.busy = true; dai_paint(false);
+  var res;
+  if (!dz_sv()) { await new Promise(function (r) { setTimeout(r, 500); }); res = { ok: steps.length, fail: 0, errors: [], demo: true }; }
+  else {
+    var r = await dai_rpc('owner_ai_run', { p_steps: steps });
+    var L = (r && r.data && r.data.results) || [];
+    if (r && r.error) res = { ok: 0, fail: steps.length, errors: [dz_err(r.error)] };
+    else res = { ok: L.filter(function (y) { return y.ok; }).length, fail: L.filter(function (y) { return !y.ok; }).length,
+      errors: L.filter(function (y) { return !y.ok; }).map(function (y) { return dai_rpcLabel(y.rpc) + ': ' + (y.skipped ? dai_t('пропущено — предыдущий шаг не выполнен') : dz_err(y.error)); }).slice(0, 6) };
+  }
+  res.publish = !!pub;
+  c.busy = false; c.res = res;
+  c.status = res.fail === 0 ? 'done' : res.ok > 0 ? 'partial' : 'failed';
+  if (c.id != null) await dai_rpc('owner_ai_card_mark', { p_id: c.id, p_status: c.status, p_result: res });
+  else if (!dz_sv()) dai_demoMark(x, j, c);
+  if (S.view === 'daiask') dai_paint(false);
+  toast(dai_t(c.status === 'done' ? (res.demo ? 'Выполнено (в демо не сохраняется)' : 'Выполнено') : c.status === 'partial' ? 'Выполнено частично — смотрите карточку' : 'Не выполнено — смотрите карточку'));
+}
+async function dai_cancel(i, j) {
+  var x = DAI.items[i], c = x && x.cards && x.cards[j]; if (!c || c.busy || (c.status && c.status !== 'proposed')) return;
+  c.status = 'cancelled';
+  if (c.id != null) await dai_rpc('owner_ai_card_mark', { p_id: c.id, p_status: 'cancelled', p_result: null }); else if (!dz_sv()) dai_demoMark(x, j, c);
+  if (S.view === 'daiask') dai_paint(false);
+}
+function dai_openView(i, j) {
+  var x = DAI.items[i], c = x && x.cards && x.cards[j]; if (!c) return;
+  var v = (c.extra && c.extra.view) || 'home';
+  if (v === 'sched' && typeof canView === 'function' && canView('teamsched')) v = 'teamsched';
+  if (typeof canView === 'function' && !canView(v)) v = 'home';
+  go(v);
+}
+/* ---------- голос: Web Speech API (ru-RU / uz-UZ по языку интерфейса); нет — подсказка про микрофон клавиатуры ---------- */
+function dai_micHtml() { return '<button type="button" class="dai-mic" id="daiMic" aria-pressed="false" aria-label="' + dai_e('Сказать голосом') + '" title="' + dai_e('Сказать голосом') + '">' + dai_ico('mic', 20, 2) + '</button>'; }
+function dai_micStop() { if (DAI.rec) { try { DAI.rec.abort(); } catch (e) {} DAI.rec = null; } }
+function dai_mic() {
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition, b = $('daiMic'), ta = $('daiQ');
+  if (DAI.rec) { try { DAI.rec.stop(); } catch (e) {} return; }
+  if (!SR) { toast(dai_t('Голосовой ввод: нажмите микрофон на клавиатуре телефона — текст появится в поле')); if (ta) ta.focus(); return; }
+  var rec = new SR(); rec.lang = dai_lang() === 'ru' ? 'ru-RU' : 'uz-UZ'; rec.interimResults = true; rec.continuous = false;
+  var base = ta && ta.value ? ta.value.replace(/\s+$/, '') + ' ' : '';
+  var ui = function (on) { var bb = $('daiMic'); if (!bb) return; bb.classList.toggle('on', on); bb.setAttribute('aria-pressed', on ? 'true' : 'false'); bb.setAttribute('aria-label', dai_t(on ? 'Слушаю — нажмите, чтобы закончить' : 'Сказать голосом')); };
+  rec.onresult = function (e) { var t = ''; for (var z = 0; z < e.results.length; z++) t += e.results[z][0].transcript; var q = $('daiQ'); if (q) { q.value = (base + t).slice(0, 1000); dai_grow(); } };
+  rec.onerror = function (e) { if (e && (e.error === 'not-allowed' || e.error === 'service-not-allowed')) toast(dai_t('Разрешите доступ к микрофону в настройках браузера')); else if (e && e.error !== 'aborted' && e.error !== 'no-speech') toast(dai_t('Голос не распознан — попробуйте ещё раз или напишите')); };
+  rec.onend = function () { DAI.rec = null; ui(false); };
+  try { rec.start(); DAI.rec = rec; ui(true); try { navigator.vibrate && navigator.vibrate(8); } catch (x) {} } catch (e) { DAI.rec = null; ui(false); toast(dai_t('Голос не распознан — попробуйте ещё раз или напишите')); }
+}
+(function () { document.addEventListener('click', function (e) { var b = e.target && e.target.closest && e.target.closest('#daiMic'); if (b) { e.preventDefault(); dai_mic(); } }); })();
+
+/* =====================================================================================
+   Демо владельца: правдоподобные ответы и карточки на учебных данных (без ИИ и без записи)
+   ===================================================================================== */
+var DAI_C2L = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'j', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sh', ъ: '', ы: 'i', ь: '', э: 'e', ю: 'yu', я: 'ya', ў: 'o', қ: 'k', ғ: 'g', ҳ: 'h' };
+function dai_norm(s) { return String(s || '').toLowerCase().replace(/[а-яёўқғҳ]/g, function (c) { return DAI_C2L[c] != null ? DAI_C2L[c] : c; }).replace(/[ʻ'‘`’ʼ]/g, '').replace(/kh/g, 'h').replace(/x/g, 'h').replace(/q/g, 'k'); }
+function dai_dstr(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+function dai_dm(s) { return s.slice(8, 10) + '.' + s.slice(5, 7); }
+function dai_dow(s) { var k = new Date(s + 'T12:00:00').getDay(), L = dai_lang() === 'ru' ? ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'] : ['Ya', 'Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh']; return L[k]; }
+function dai_team() { try { return myTeam().filter(function (e) { return e && e.first_name && e.id !== (S.me && S.me.id); }); } catch (e) { return []; } }
+function dai_nm(e) { return e.first_name + (e.last_name ? ' ' + String(e.last_name).slice(0, 1) + '.' : ''); }
+function dai_named(q) {
+  var w = dai_norm(q).split(/[^a-z0-9]+/).filter(function (x) { return x.length >= 3; }), out = [];
+  dai_team().forEach(function (e) { var f = dai_norm(e.first_name), at = -1; w.forEach(function (x, k) { if (at < 0 && (x === f || (f.length >= 4 && x.indexOf(f.slice(0, Math.max(4, f.length - 2))) === 0))) at = k; }); if (at >= 0) out.push([at, e]); });
+  return out.sort(function (a, b) { return a[0] - b[0]; }).map(function (x) { return x[1]; });
+}
+function dai_stepL(n) {
+  var M = { team: 'Смотрю сотрудников', shifts: 'Смотрю смены', schedule: 'Смотрю график', now: 'Смотрю, кто на смене', pending: 'Смотрю, что ждёт решения', brief: 'Смотрю сводку дня',
+    propose_schedule: 'Готовлю карточку графика', propose_task: 'Готовлю карточку задачи', propose_decide: 'Готовлю карточку решений' };
+  return { n: n, l: dai_t(M[n] || n) };
+}
+function dai_demoOwner(q, lg) {
+  var T0 = dai_team(), nm = dai_named(q), ru = lg === 'ru', today = new Date(); today.setHours(12, 0, 0, 0);
+  var mon = new Date(today); mon.setDate(mon.getDate() + ((8 - mon.getDay()) % 7 || 7));
+  var D = function (n) { var x = new Date(mon); x.setDate(x.getDate() + n); return dai_dstr(x); };
+  var A = nm[0] || T0[0], B = nm[1] || T0.filter(function (e) { return e !== A; })[0];
+  if (/график|смен|jadval|жадвал|smena|смена/i.test(q) && /постав|состав|сделай|qoʻy|qo'y|tuz|қўй|туз|на следующ|keyingi|кейинги/i.test(q) && A) {
+    var lines = [{ t: dai_nm(A) + ' — ' + dai_dow(D(0)) + '–' + dai_dow(D(4)) + ' ' + dai_dm(D(0)) + '–' + dai_dm(D(4)) + ': ' + dai_t('Утро') + ' 08:30–17:30' }];
+    var rows = [0, 1, 2, 3, 4].map(function (k) { return { member: A.id, day: D(k), kind: 'work', start: '08:30', end: '17:30' }; });
+    if (B) { lines.push({ t: dai_nm(B) + ' — ' + dai_dow(D(5)) + ' ' + dai_dm(D(5)) + ', ' + dai_dow(D(6)) + ' ' + dai_dm(D(6)) + ': 14:00–23:00' }); rows.push({ member: B.id, day: D(5), kind: 'work', start: '14:00', end: '23:00' }, { member: B.id, day: D(6), kind: 'work', start: '14:00', end: '23:00' }); }
+    var pub = /опублик|eʼlon|e'lon|эълон/i.test(q);
+    return { steps: ['team', 'shifts', 'schedule', 'propose_schedule'].map(dai_stepL),
+      answer: dai_t('Подготовил **график** на {a}–{b}:', { a: dai_dm(D(0)), b: dai_dm(D(6)) }) + '\n— ' + lines.map(function (l) { return l.t; }).join('\n— ') + '\n' + dai_t('Проверьте карточку и нажмите «Выполнить».'),
+      cards: [{ id: null, status: 'proposed', kind: 'schedule', title: dai_t('График') + ' ' + dai_dm(D(0)) + '–' + dai_dm(D(6)) + (pub ? dai_t(' · с публикацией') : ''), lines: lines,
+        warn: dai_t(pub ? 'График будет опубликован — сотрудники получат уведомление.' : 'Сотрудники увидят изменения после публикации.'),
+        plan: [{ rpc: 'schedule_set_many', args: { p_rows: rows } }].concat(pub ? [{ rpc: 'schedule_publish', args: { p_week_start: D(0), p_dept: null, p_confirm_holes: true } }] : []),
+        extra: pub ? { view: 'sched' } : { view: 'sched', publish: [{ rpc: 'schedule_publish', args: { p_week_start: D(0), p_dept: null, p_confirm_holes: true } }] } }] };
+  }
+  if (/опозд|прогул|на смене|kechik|кечик|smenada|сменада|kim keld/i.test(q)) {
+    var a = A ? dai_nm(A) : '—', b = B ? dai_nm(B) : '—';
+    return { steps: ['now', 'brief'].map(dai_stepL), cards: [],
+      answer: dai_t('Сегодня опоздали двое:') + '\n— **' + a + '** — ' + dai_t('на {n} мин, пришла в {t}', { n: 12, t: '08:42' }) + '\n— **' + b + '** — ' + dai_t('на {n} мин, пришёл в {t}', { n: 25, t: '09:25' }) + '\n' +
+        dai_t('Прогулов нет. Если нужно — скажите, кому поставить штраф или задачу.') };
+  }
+  if (/задач|vazifa|вазифа/i.test(q) && A) {
+    var tt = (String(q).split(/[:—–]/)[1] || '').trim() || dai_t('Проверить чистоту и порядок на рабочем месте');
+    tt = tt.charAt(0).toUpperCase() + tt.slice(0, 200).slice(1);
+    var d0 = dai_dstr(today);
+    return { steps: ['team', 'propose_task'].map(dai_stepL), answer: dai_t('Подготовил задачу для **{n}** — проверьте и нажмите «Выполнить».', { n: dai_nm(A) }),
+      cards: [{ id: null, status: 'proposed', kind: 'task', title: dai_t('Задача'), lines: [{ t: dai_nm(A) + ' — «' + tt + '» · ' + dai_dow(d0) + ' ' + dai_dm(d0) + ' ' + dai_t('до {t}', { t: '18:00' }) }], warn: null,
+        plan: [{ rpc: 'task_create', args: { p_title: tt, p_assignee: A.id, p_day: d0, p_due: '18:00' } }], extra: { view: 'tasks' } }] };
+  }
+  if (/реш|жд[её]т|одобр|qaror|kutay|қарор|кутай/i.test(q)) {
+    var a2 = A ? dai_nm(A) : '—', b2 = B ? dai_nm(B) : '—';
+    return { steps: ['pending'].map(dai_stepL), cards: [],
+      answer: dai_t('Ждут вашего решения:') + '\n1. **' + a2 + '** — ' + dai_t('отпуск {a}–{b}', { a: dai_dm(D(1)), b: dai_dm(D(3)) }) + '\n2. **' + b2 + '** — ' + dai_t('обмен сменами {a} и {b}', { a: dai_dm(D(2)), b: dai_dm(D(4)) }) +
+        '\n3. ' + dai_t('Закупка: пятновыводитель, ~450 000 сум') + '\n' + dai_t('Скажите, что одобрить, — подготовлю карточку.') };
+  }
+  var S0 = dai_demoAnswer(q, lg);
+  return { steps: [], cards: [], answer: S0.handoff ? dai_t('Не понял команду. Например: «Кто сегодня опоздал?», «Поставь задачу …», «Поставь график на следующую неделю: …».') : S0.answer };
+}
+async function dai_demoOwnerAsk(o, who, q, lg, b) {
+  var d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  var used = o.L.filter(function (x) { return x.who === who && x.mode === 'owner' && Date.parse(x.at) >= +d0; }).length;
+  if (used >= 10) return { ok: false, reason: 'limit', scope: 'day', mode: 'owner', left_day: 0, lim_day: 10, message: dai_t('На сегодня команды помощнику закончились (10 в день). Завтра можно снова — а сейчас всё доступно в приложении как обычно.') };
+  await new Promise(function (res) { setTimeout(res, 650); });
+  var A = dai_demoOwner(q, lg), vn = dz_myVenue();
+  var row = { id: ++o.seq, who: who, dialog: b.dialog, q: q, a: A.answer, lang: lg, screen: b.screen || null, status: 'ok', suggest: false, handed: false, ticket_id: null, mode: 'owner',
+    steps: A.steps, cards: A.cards.map(function (c, j) { return Object.assign({}, c, { id: o.seq * 10 + j }); }),
+    in: 2400 + q.length, out: Math.round(A.answer.length / 2.6), cr: 14000, cw: 0, ms: 650, at: new Date().toISOString(), venue_name: vn.name, venue_type: vn.type, role: 'owner' };
+  o.L.push(row); dai_put(o);
+  return { ok: true, mode: 'owner', id: row.id, dialog: b.dialog, answer: A.answer, steps: A.steps, cards: JSON.parse(JSON.stringify(row.cards)), left_day: 10 - used - 1, lim_day: 10, demo: true };
+}
+function dai_demoMark(x, j, c) {
+  var o = dai_ld(), r = o.L.filter(function (y) { return y.id === x.id; })[0];
+  if (r && r.cards && r.cards[j]) { r.cards[j].status = c.status; r.cards[j].result = c.res || null; dai_put(o); }
+}
+DAI_DEMO.owner_ai_state = async function () { await dai_state(); return { data: { mode: DAI.mode, lim_day: DAI.lim || 10, left_day: DAI.left == null ? 10 : DAI.left }, error: null }; };
+DAI_DEMO.owner_ai_card_mark = async function (a) {
+  var o = dai_ld(), n = 0; o.L.forEach(function (x) { (x.cards || []).forEach(function (c) { if (c.id === a.p_id && (c.status === 'proposed' || c.status === 'failed')) { c.status = a.p_status; c.result = a.p_result || null; n++; } }); });
+  dai_put(o); return { data: n > 0, error: null };
+};
 
 
 /* ===== ВОЛНА 4 · 92b-clock.js ===== */

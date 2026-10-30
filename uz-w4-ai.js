@@ -108,3 +108,45 @@
     'Не ответил': 'Javob bermadi'
   });
 })();
+/* 30.10 (утро): личный помощник владельца — строки экрана, карточек, голоса и демо (латиница; кириллица — 94-cyr / dai_cy) */
+(function () {
+  var O = {
+    'Осталось сегодня: {n} из {m}': 'Bugun qoldi: {m} tadan {n}',
+    'Подумал': 'Oʻyladim', 'шагов: {n}': 'qadamlar: {n}', 'Думаю': 'Oʻylayapman',
+    'Выполнить': 'Bajarish', 'Выполнить и опубликовать': 'Bajarish va eʼlon qilish', 'Отменить': 'Bekor qilish', 'Открыть': 'Ochish', 'Выполняю…': 'Bajaryapman…',
+    'Выполнено': 'Bajarildi', 'Выполнено и опубликовано': 'Bajarildi va eʼlon qilindi', 'Выполнено частично': 'Qisman bajarildi', 'Не выполнено': 'Bajarilmadi', 'Отменено': 'Bekor qilindi',
+    'Сделано: {a} из {b}': 'Bajarildi: {b} tadan {a}', 'В демо не сохраняется — на сервере действие выполнится по-настоящему.': 'Demoda saqlanmaydi — serverda harakat haqiqatan bajariladi.',
+    'Здравствуйте, {n}!': 'Assalomu alaykum, {n}!', 'Здравствуйте!': 'Assalomu alaykum!',
+    'Я ваш помощник: смотрю, что происходит в заведении, готовлю график, задачи и решения. Ничего не меняю без вашего «Выполнить». Можно голосом.': 'Men sizning yordamchingizman: muassasada nima boʻlayotganini koʻraman, jadval, vazifa va qarorlarni tayyorlayman. «Bajarish»siz hech narsani oʻzgartirmayman. Ovoz bilan ham mumkin.',
+    'Помощник — ИИ, может ошибаться. Всё, что меняет данные, выполняется только после вашего «Выполнить». 10 команд в день.': 'Yordamchi — SI, xato qilishi mumkin. Maʼlumotni oʻzgartiradigan hamma narsa faqat «Bajarish»dan keyin bajariladi. Kuniga 10 ta buyruq.',
+    'В демо ответы и карточки — на учебных данных, «Выполнить» не сохраняет.': 'Demoda javob va kartochkalar — oʻquv maʼlumotlarida, «Bajarish» saqlamaydi.',
+    'Поставь график на следующую неделю: …': 'Keyingi haftaga jadval tuz: …', 'Кто сегодня опоздал?': 'Bugun kim kechikdi?', 'Поставь задачу …: …': 'Vazifa ber …: …', 'Поставь задачу {n}: …': '{n}ga vazifa ber: …',
+    'Что ждёт моего решения?': 'Nimalar qarorimni kutyapti?', 'Ваша команда': 'Buyrugʻingiz', 'Напишите или скажите…': 'Yozing yoki ayting…',
+    'Помощник может ошибаться — проверяйте карточку перед «Выполнить»': 'Yordamchi xato qilishi mumkin — «Bajarish»dan oldin kartochkani tekshiring',
+    'Сказать голосом': 'Ovoz bilan aytish', 'Слушаю — нажмите, чтобы закончить': 'Tinglayapman — tugatish uchun bosing',
+    'Голосовой ввод: нажмите микрофон на клавиатуре телефона — текст появится в поле': 'Ovozli kiritish: telefon klaviaturasidagi mikrofonni bosing — matn maydonda paydo boʻladi',
+    'Разрешите доступ к микрофону в настройках браузера': 'Brauzer sozlamalarida mikrofonga ruxsat bering', 'Голос не распознан — попробуйте ещё раз или напишите': 'Ovoz tanilmadi — yana urinib koʻring yoki yozing',
+    'В карточке недопустимое действие — попросите помощника подготовить её заново': 'Kartochkada ruxsat etilmagan harakat — yordamchidan qayta tayyorlashni soʻrang',
+    'Выполнено (в демо не сохраняется)': 'Bajarildi (demoda saqlanmaydi)', 'Выполнено частично — смотрите карточку': 'Qisman bajarildi — kartochkani koʻring', 'Не выполнено — смотрите карточку': 'Bajarilmadi — kartochkani koʻring',
+    'пропущено — предыдущий шаг не выполнен': 'oʻtkazib yuborildi — oldingi qadam bajarilmadi',
+    'График': 'Jadval', 'Задача': 'Vazifa', 'Ремонт': 'Taʼmirlash', 'Закупка': 'Xarid', 'Решения': 'Qarorlar', 'Деньги': 'Pul', 'Объявление': 'Eʼlon', 'Уведомление': 'Bildirishnoma', 'Отмена': 'Bekor qilish',
+    'Сотрудник': 'Xodim', 'Экран': 'Ekran', 'Действие': 'Harakat', 'Решение': 'Qaror',
+    'Публикация графика': 'Jadvalni eʼlon qilish', 'Отмена задачи': 'Vazifani bekor qilish', 'Заявка на ремонт': 'Taʼmirlash arizasi', 'Поручение по ремонту': 'Taʼmirlash topshirigʻi',
+    'Заявка на закупку': 'Xarid arizasi', 'Премия или штраф': 'Mukofot yoki jarima',
+    'Смотрю сотрудников': 'Xodimlarni koʻryapman', 'Смотрю смены': 'Smenalarni koʻryapman', 'Смотрю график': 'Jadvalni koʻryapman', 'Смотрю, кто на смене': 'Kim smenada — koʻryapman',
+    'Смотрю, что ждёт решения': 'Qaror kutayotganlarni koʻryapman', 'Смотрю сводку дня': 'Kun xulosasini koʻryapman', 'Готовлю карточку графика': 'Jadval kartochkasini tayyorlayapman',
+    'Готовлю карточку задачи': 'Vazifa kartochkasini tayyorlayapman', 'Готовлю карточку решений': 'Qarorlar kartochkasini tayyorlayapman',
+    'Подготовил **график** на {a}–{b}:': '{a}–{b} uchun **jadval** tayyorladim:', 'Проверьте карточку и нажмите «Выполнить».': 'Kartochkani tekshiring va «Bajarish»ni bosing.',
+    'Утро': 'Ertalab', ' · с публикацией': ' · eʼlon bilan', 'График будет опубликован — сотрудники получат уведомление.': 'Jadval eʼlon qilinadi — xodimlar bildirishnoma oladi.',
+    'Сотрудники увидят изменения после публикации.': 'Xodimlar oʻzgarishlarni eʼlon qilingandan keyin koʻradi.',
+    'Сегодня опоздали двое:': 'Bugun ikki kishi kechikdi:', 'на {n} мин, пришла в {t}': '{n} daqiqaga, {t} da keldi', 'на {n} мин, пришёл в {t}': '{n} daqiqaga, {t} da keldi',
+    'Прогулов нет. Если нужно — скажите, кому поставить штраф или задачу.': 'Kelmaganlar yoʻq. Kerak boʻlsa — kimga jarima yoki vazifa qoʻyishni ayting.',
+    'Проверить чистоту и порядок на рабочем месте': 'Ish joyida tozalik va tartibni tekshirish', 'Подготовил задачу для **{n}** — проверьте и нажмите «Выполнить».': '**{n}** uchun vazifa tayyorladim — tekshiring va «Bajarish»ni bosing.',
+    'до {t}': '{t} gacha', 'Ждут вашего решения:': 'Qaroringizni kutmoqda:', 'отпуск {a}–{b}': 'taʼtil {a}–{b}', 'обмен сменами {a} и {b}': 'smena almashinuvi {a} va {b}',
+    'Закупка: пятновыводитель, ~450 000 сум': 'Xarid: dogʻ ketkazgich, ~450 000 soʻm', 'Скажите, что одобрить, — подготовлю карточку.': 'Nimani tasdiqlashni ayting — kartochka tayyorlayman.',
+    'Не понял команду. Например: «Кто сегодня опоздал?», «Поставь задачу …», «Поставь график на следующую неделю: …».': 'Buyruqni tushunmadim. Masalan: «Bugun kim kechikdi?», «Vazifa ber …», «Keyingi haftaga jadval tuz: …».',
+    'На сегодня команды помощнику закончились (10 в день). Завтра можно снова — а сейчас всё доступно в приложении как обычно.': 'Bugun uchun yordamchiga buyruqlar tugadi (kuniga 10 ta). Ertaga yana mumkin — hozir esa hammasi ilovada odatdagidek.',
+    'Помощник сейчас не ответил. Попробуйте ещё раз через минуту.': 'Yordamchi hozir javob bermadi. Bir daqiqadan keyin yana urinib koʻring.'
+  };
+  window.DAI_UZ = Object.assign(window.DAI_UZ || {}, O);
+})();

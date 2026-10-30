@@ -1773,7 +1773,8 @@
 /* Часть dai (92ai-support, 0031_support_ai.sql, edge-функция support-ai): ИИ-помощник поддержки. Блок не трогает код выше:
    как 92z — оборачивает SVAdapter.make / supabase.createClient, дополняет SV.rpcMap и functions.invoke.
    functions.invoke('support-ai') → настоящая функция (JWT пользователя и x-venue-id ставит клиент сервера);
-   rpc: support_ai_my, support_ai_handoff; founder_ai_stats — кабинет 92p вызывает через SV.real, здесь на всякий случай.
+   rpc: support_ai_my, support_ai_handoff; founder_ai_stats — кабинет 92p вызывает через SV.real, здесь на всякий случай;
+   помощник владельца (0032): owner_ai_state, owner_ai_card_mark, owner_ai_run (план карточки — те же rpc, что ручной ввод).
    support_ai_begin / support_ai_finish вызывает только edge-функция. */
 (function (root) {
   'use strict';
@@ -1784,6 +1785,29 @@
     R.support_ai_my = async function (a) { a = a || {}; return real.rpc('support_ai_my', { p_dialog: a.p_dialog == null ? null : a.p_dialog }); };
     R.support_ai_handoff = async function (a) { a = a || {}; return real.rpc('support_ai_handoff', { p_dialog: a.p_dialog, p_ticket: a.p_ticket == null ? null : a.p_ticket }); };
     R.founder_ai_stats = async function () { return real.rpc('founder_ai_stats', {}); };
+    /* 30.10 (утро): личный помощник владельца (0032). Режим и остаток — owner_ai_state; отметка карточки — owner_ai_card_mark.
+       owner_ai_run — «Выполнить» карточки: шаги плана по очереди через SV.real.rpc с сессией владельца (права и RLS — как при ручном вводе);
+       имена rpc — только из белого списка; {"$step": k} — результат шага k; шаг после неудачного шага, от которого зависит, — пропускается. */
+    var OWN_RPC = ['schedule_set_many', 'schedule_publish', 'task_create', 'task_cancel', 'repair_create', 'repair_assign', 'buy_create',
+      'leave_decide', 'advance_decide', 'clock_request_decide', 'zone_decide', 'delay_decide', 'adj_decide', 'task_review', 'swap_decide',
+      'health_decide', 'buy_decide', 'adj_add', 'ann_create', 'notify_send', 'member_archive'];
+    R.owner_ai_state = async function () { return real.rpc('owner_ai_state', {}); };
+    R.owner_ai_card_mark = async function (a) { a = a || {}; return real.rpc('owner_ai_card_mark', { p_id: a.p_id, p_status: a.p_status, p_result: a.p_result == null ? null : a.p_result }); };
+    R.owner_ai_run = async function (a) {
+      var L = (a && a.p_steps) || [], out = [], failed = {};
+      if (!Array.isArray(L) || !L.length || L.length > 40) return { data: null, error: { message: 'Пустой план', details: 'bad_input', code: 'bad_input' } };
+      for (var i = 0; i < L.length; i++) {
+        var st = L[i] || {}, n = st.rpc, dep = false, args = {};
+        if (OWN_RPC.indexOf(n) < 0) { out.push({ rpc: n, ok: false, error: { message: 'Недопустимое действие', details: 'no_rights' } }); failed[i] = 1; continue; }
+        Object.keys(st.args || {}).forEach(function (k) { var v = st.args[k]; if (v && typeof v === 'object' && !Array.isArray(v) && v.$step != null) { var j = +v.$step; if (failed[j] || !out[j]) dep = true; else v = out[j].data; } args[k] = v; });
+        if (n === 'schedule_publish') L.slice(0, i).forEach(function (x, j) { if (x && x.rpc === 'schedule_set_many' && failed[j]) dep = true; });
+        if (dep) { out.push({ rpc: n, ok: false, skipped: true }); failed[i] = 1; continue; }
+        var r; try { r = await real.rpc(n, args); } catch (e) { r = { data: null, error: e }; }
+        if (r && r.error) { out.push({ rpc: n, ok: false, error: r.error }); failed[i] = 1; } else out.push({ rpc: n, ok: true, data: r ? r.data : null });
+      }
+      try { SV.stale('base', 'sched', 'att', 'tasks', 'ann', 'req', 'pay', 'notif'); } catch (e) {}
+      return { data: { results: out }, error: null };
+    };
     if (cl.functions && typeof cl.functions.invoke === 'function') {
       var inv0 = cl.functions.invoke;
       cl.functions.invoke = async function (n, o) {
