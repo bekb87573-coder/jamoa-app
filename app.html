@@ -38214,7 +38214,7 @@ async function dai_ask(body) {
 })();
 /* v28 (30.10 ночь): экран — как чат в Claude. Полный экран (нижнее меню скрыто), лента сообщений, поле ввода закреплено внизу
    (над экранной клавиатурой iPhone — visualViewport), пузыри: вопрос справа, ответ слева без рамки, «печатает…», подсказки по роли.
-   Вход: значок в шапке каждого экрана (рядом с колокольчиком), строка на главной «Сегодня», «Помощь и предложения», «Справка». */
+   Вход: строка на главной «Сегодня», «Помощь и предложения», «Справка»; с v30 — плавающий шар на каждом экране (значок в шапке убран). */
 function dai_svg(p, s, w) { return '<svg width="' + (s || 21) + '" height="' + (s || 21) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (w || 1.9) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + '</svg>'; }
 var DAI_IC = {
   ask: '<path d="M5.5 4.5h13a2 2 0 0 1 2 2v8.5a2 2 0 0 1-2 2H11l-4.5 3.5v-3.5h-1a2 2 0 0 1-2-2V6.5a2 2 0 0 1 2-2z"/><path d="M12 7.6l.85 2.05 2.05.85-2.05.85L12 13.4l-.85-2.05-2.05-.85 2.05-.85z" fill="currentColor" stroke-width="1.2"/>',
@@ -38432,13 +38432,14 @@ async function vDaiAsk() {
     $('daiSend').onclick = function () { dai_send(); if (!dai_desk()) { var t = $('daiQ'); if (t) t.focus(); } };
   }
   dai_paint(); dai_grow();
+  if (DAI.queue && !DAI.busy) { var qv = DAI.queue; DAI.queue = null; dai_send(qv.q, qv); }   /* v30: команда из листа «График голосом» */
 }
-async function dai_send(qq) {
+async function dai_send(qq, opt) {
   if (DAI.busy) return;
   var ta = $('daiQ'), typed = qq == null, q = String(!typed ? qq : (ta ? ta.value : '')).trim();
   if (!q) return toast(dai_t('Напишите вопрос'));
   if (q.length > 1000) return toast(dai_t('Вопрос — не больше 1000 знаков'));
-  var it = { q: q, at: new Date().toISOString(), wait: true };
+  var it = { q: q, at: new Date().toISOString(), wait: true, voice: !!(opt && opt.voice) };
   DAI.items.push(it); DAI.busy = true; DAI.fresh = false;
   if (typed && ta) { ta.value = ''; DAI.draft = ''; }
   dai_grow(); dai_paint();
@@ -38456,13 +38457,10 @@ function dai_topBtn() {
   var on = !!S.me && S.view === 'daiask';
   document.documentElement.classList.toggle('dai-full', on);
   if (!on) { dai_menuX(); dai_micStop(); var c = $('daiCmp'); if (c) c.remove(); var mm = $('main'); if (mm) mm.classList.remove('dai-chat'); }
+  var tb = $('daiTop'); if (tb) tb.remove();   /* v30: значка в шапке больше нет — вход через плавающий шар (dai_fab) */
+  try { dai_fabSync(); dai_vbtn(); if (window.__daiKick) window.__daiKick(); } catch (e) {}
   var top = document.querySelector('#app > .top'); if (!top || !S.me) return;
   if (on) return dai_head();
-  if ($('daiTop')) return;
-  var b = document.createElement('button'); b.type = 'button'; b.className = 'iconbtn'; b.id = 'daiTop';
-  b.setAttribute('aria-label', dai_t('Спросить помощника')); b.title = dai_t('Спросить помощника'); b.innerHTML = dai_ico('ask', 21);
-  b.onclick = function () { dai_open(); };
-  top.insertBefore(b, top.querySelector('[data-go="notif"]') || null);
 }
 (function () {
   /* обёртка render — после всех частей (двойной setTimeout 0): шапку дорисовывают и другие части */
@@ -38596,7 +38594,7 @@ async function dai_fFill() {
    «Выполнить» — приложение вызывает те же rpc, что ручной ввод (переходник 92ai: owner_ai_run → SV.real.rpc с сессией владельца),
    имена rpc — только из белого списка DAI_RPC; итог — owner_ai_card_mark. Лимит 10 команд в день — «Осталось сегодня: N из 10».
    Вид — по пакету владельца (Mir Luxe One, ai-v1/ai-v2): шар ИИ, золотые рамки с бегущим бликом, пузыри, текст проявляется по словам
-   из размытия, свёрнутый блок «Подумал», поле с микрофоном. Без эмодзи (SVG), без скрепки и без плавающей кнопки.
+   из размытия, свёрнутый блок «Подумал», поле с микрофоном. Без эмодзи (SVG), без скрепки. Плавающий шар — v30 (в конце файла).
    Демо: правдоподобные ответы и карточки на учебных данных; «Выполнить» в демо не сохраняет.
    ===================================================================================== */
 var DAI_RPC = ['schedule_set_many', 'schedule_publish', 'task_create', 'task_cancel', 'repair_create', 'repair_assign', 'buy_create',
@@ -38728,7 +38726,9 @@ function dai_msgO(x, i) {
   }
   return me + '<div class="dai-om">' + dai_orb() + '<div class="dai-ob">' + dai_stepsHtml(x) +
     '<div class="dai-bub" data-dait="' + i + '">' + dai_md(x.a || '') + '</div>' +
-    '<div class="dai-cards" data-daicards="' + i + '"' + (x.fresh ? ' hidden' : '') + '>' + (x.cards || []).map(function (c, j) { return dai_cardHtml(c, i, j); }).join('') + '</div></div></div>';
+    '<div class="dai-cards" data-daicards="' + i + '"' + (x.fresh ? ' hidden' : '') + '>' +
+      ((x.voice || dai_isVoiceQ(x.q)) && (x.cards || []).some(function (c) { return c.kind === 'schedule'; }) ? '<div class="dai-vund">' + dai_ico('warn', 15, 2) + '<span>' + dai_e('ИИ понял так — проверьте') + '</span></div>' : '') +
+      (x.cards || []).map(function (c, j) { return dai_cardHtml(c, i, j); }).join('') + '</div></div></div>';
 }
 function dai_emptyO() {
   var nm = ''; try { nm = (S.me && S.me.first_name) || ''; } catch (e) {}
@@ -38864,6 +38864,7 @@ function dai_stepL(n) {
 function dai_demoOwner(q, lg) {
   var T0 = dai_team(), nm = dai_named(q), ru = lg === 'ru', today = new Date(); today.setHours(12, 0, 0, 0);
   var mon = new Date(today); mon.setDate(mon.getDate() + ((8 - mon.getDay()) % 7 || 7));
+  var wkq = /(\d{4}-\d{2}-\d{2})/.exec(q); if (wkq) { var m2 = new Date(wkq[1] + 'T12:00:00'); if (!isNaN(+m2)) mon = m2; }   /* v30: неделя из «График голосом» */
   var D = function (n) { var x = new Date(mon); x.setDate(x.getDate() + n); return dai_dstr(x); };
   var A = nm[0] || T0[0], B = nm[1] || T0.filter(function (e) { return e !== A; })[0];
   if (/график|смен|jadval|жадвал|smena|смена/i.test(q) && /постав|состав|сделай|qoʻy|qo'y|tuz|қўй|туз|на следующ|keyingi|кейинги/i.test(q) && A) {
@@ -38922,6 +38923,231 @@ DAI_DEMO.owner_ai_card_mark = async function (a) {
   var o = dai_ld(), n = 0; o.L.forEach(function (x) { (x.cards || []).forEach(function (c) { if (c.id === a.p_id && (c.status === 'proposed' || c.status === 'failed')) { c.status = a.p_status; c.result = a.p_result || null; n++; } }); });
   dai_put(o); return { data: n > 0, error: null };
 };
+
+/* =====================================================================================
+   v30 (30.10): ПЛАВАЮЩИЙ ЗОЛОТОЙ ШАР — как кнопка помощника в Mir Luxe One (пакет владельца, «Кнопка ✦»).
+   1. Шар 58×58 справа внизу над нижним меню (safe-area учитывается через высоту меню), на каждом экране у каждого вошедшего.
+      Владелец открывает личного помощника, остальные — помощника поддержки (режим решает dai_state / сервер, как и раньше).
+      «Дышит» 4,2 с, от шара расходится тонкое кольцо; искра — SVG. prefers-reduced-motion — без анимации.
+   2. Прокрутка вниз и фокус/набор в любом поле — плавно уезжает вниз; прокрутка вверх и 1,6 с покоя — возвращается.
+   3. Скрыт: в чате помощника, при открытом листе (#layer), окне подтверждения (#askSure), любом aria-modal / dialog.
+   4. Не перекрывает главные кнопки: если под шаром закреплённая (fixed / sticky) кнопка, например «Опубликовать изменения»
+      графика или «Отменить» во всплывающей строке, — шар уезжает вниз, пока она под ним (проверка — после прокрутки,
+      перерисовки и нажатий). Обычные кнопки в ленте шар может накрыть посреди прокрутки (как в MLO): при прокрутке вниз он уезжает; внизу каждого экрана — свободное место (padding-bottom у #main), чтобы последняя карточка
+      не оставалась под шаром.
+   5. Значок помощника в шапке (v28) убран (dai_topBtn) — вход один; строка на главной, «Помощь и предложения» и «Справка» остались.
+   «ГРАФИК ГОЛОСОМ» (по образцу экрана MLO «Распределить голосом»): на «Графике команды» владельца — кнопка «Голосом» → лист:
+   большая золотая кнопка-микрофон, волна звука во время записи, RU / UZ, «Вы сказали: …» (можно поправить). «Составить» —
+   та же команда личному помощнику (dai_send → support-ai), с префиксом «Составь график на неделю … (служба …): …»,
+   неделя — открытая на экране; открывается чат с ответом и карточкой («ИИ понял так — проверьте»). Расходует одну команду из 10.
+   Нет Web Speech API — поле текста и подсказка «нажмите микрофон на клавиатуре».
+   ===================================================================================== */
+DAI_IC.fab = '<path d="M12 2.6l2.05 5.9 5.85 2.1-5.85 2.1L12 18.6l-2.05-5.9L4.1 10.6l5.85-2.1z" fill="#fff" stroke="none"/><circle cx="18.6" cy="18.4" r="1.55" fill="#fff" stroke="none"/><circle cx="5.4" cy="17.6" r="1.05" fill="#fff" stroke="none"/>';
+var DAI_FAB = { y0: 0, t: 0, typing: false, lift: 0 };
+(function () {
+  var st = document.createElement('style'); st.id = 'daiFabCss';
+  st.textContent =
+    '@keyframes daiRing{0%{transform:scale(.94);opacity:.85}70%,100%{transform:scale(1.32);opacity:0}}' +
+    '@keyframes daiWave{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}' +
+    '.dai-fab{all:unset;box-sizing:border-box;position:fixed;right:max(16px,env(safe-area-inset-right));bottom:calc(86px + env(safe-area-inset-bottom));z-index:8;width:58px;height:58px;border-radius:50%;cursor:pointer;-webkit-tap-highlight-color:transparent;' +
+      'transition:transform .55s cubic-bezier(.22,1,.36,1),opacity .45s ease,bottom .45s cubic-bezier(.22,1,.36,1)}' +
+    '.dai-fab.hide,.dai-fab.blk{transform:translateY(110px) scale(.82);opacity:0;pointer-events:none}' +
+    '.dai-fab.off{transform:scale(.6);opacity:0;pointer-events:none;visibility:hidden;transition:transform .3s ease,opacity .25s ease,visibility 0s linear .3s}' +
+    '.dai-fab:focus-visible{outline:2px solid var(--gold);outline-offset:5px}' +
+    '.dai-fab>i{position:absolute;inset:0;border-radius:50%;display:grid;place-items:center;' +
+      'background:radial-gradient(circle at 30% 26%,rgba(255,250,235,.95) 0 9%,rgba(255,250,235,0) 34%),conic-gradient(from 210deg,#8A6A2C,#D9B970,#F3E2B8,#B8913F,#7A5C22,#C9A24E,#8A6A2C);' +
+      'box-shadow:0 0 0 1px rgba(255,255,255,.55) inset,inset 0 -6px 14px rgba(60,40,10,.28),0 10px 26px -6px rgba(122,92,34,.55),0 0 22px rgba(217,185,112,.35);animation:daiBreath 4.2s cubic-bezier(.45,0,.55,1) infinite}' +
+    '.dai-fab>i::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:1px solid rgba(217,185,112,.5);animation:daiRing 4.2s cubic-bezier(.45,0,.55,1) infinite;pointer-events:none}' +
+    '.dai-fab svg{filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}.dai-fab:active>i{transform:scale(.92)}' +
+    'html.dai-fabon:not(.dai-full) #main{padding-bottom:var(--dai-fabpad,160px)!important}' +
+    '.dai-vund{display:flex;align-items:center;gap:7px;margin:10px 0 -2px;font-size:13px;font-weight:600;color:var(--goldink,var(--gold))}.dai-vund svg{flex:none}' +
+    /* «График голосом»: кнопка на экране и лист */
+    '.dai-vbtn{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;margin:0 0 12px;padding:8px 14px 8px 8px;border-radius:16px;cursor:pointer;text-align:left;color:var(--ink);font:inherit;' +
+      'border:1px solid color-mix(in srgb,var(--gold) 38%,var(--line));background:linear-gradient(135deg,var(--card),color-mix(in srgb,var(--goldbg) 45%,var(--card)))}' +
+    '.dai-vbtn .dai-orb{width:36px;height:36px;animation:none}.dai-vbtn .sx{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}.dai-vbtn b{font-size:15px;font-weight:700}' +
+    '.dai-vbtn .sx span{font-size:12.5px;color:var(--muted);line-height:1.3}.dai-vbtn>svg{flex:none;color:var(--faint)}.dai-vbtn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}' +
+    '.dai-vs{display:flex;flex-direction:column;align-items:stretch}' +
+    '.dai-vmic{all:unset;box-sizing:border-box;cursor:pointer;width:88px;height:88px;flex:none;border-radius:50%;display:grid;place-items:center;margin:18px auto 6px;color:#fff;-webkit-tap-highlight-color:transparent;' +
+      'background:radial-gradient(circle at 30% 26%,rgba(255,250,235,.85) 0 9%,rgba(255,250,235,0) 34%),conic-gradient(from 210deg,#8A6A2C,#D9B970,#F3E2B8,#B8913F,#7A5C22,#C9A24E,#8A6A2C);' +
+      'box-shadow:0 0 0 10px rgba(184,145,63,.12),0 0 0 22px rgba(217,185,112,.07),0 0 40px rgba(184,145,63,.4);transition:transform .5s cubic-bezier(.22,1,.36,1),box-shadow .8s ease}' +
+    '.dai-vmic svg{filter:drop-shadow(0 1px 2px rgba(0,0,0,.35))}.dai-vmic:active{transform:scale(.95)}.dai-vmic:focus-visible{outline:2px solid var(--gold);outline-offset:6px}' +
+    '.dai-vmic.on{animation:daiBreath 3.4s cubic-bezier(.45,0,.55,1) infinite;box-shadow:0 0 0 12px rgba(184,145,63,.2),0 0 0 26px rgba(217,185,112,.11),0 0 54px rgba(184,145,63,.6)}' +
+    '.dai-wave{display:flex;justify-content:center;align-items:center;gap:4px;height:34px;margin:8px 0 2px;opacity:.25;transition:opacity .8s ease}.dai-wave.on{opacity:1}' +
+    '.dai-wave i{width:3px;height:100%;border-radius:3px;background:linear-gradient(180deg,#D9B970,#8A6A2C);transform:scaleY(.3)}.dai-wave.on i{animation:daiWave 1.4s cubic-bezier(.45,0,.55,1) infinite}' +
+    '.dai-vst{text-align:center;font-size:15px;font-weight:700;min-height:22px;margin:2px 0 0}' +
+    '.dai-vh{text-align:center;font-size:13px;line-height:1.4;color:var(--muted);margin:2px 8px 10px}' +
+    '.dai-vlg{display:flex;gap:6px;justify-content:center;margin:0 0 8px}.dai-vlg .pick{min-height:36px;padding:0 16px}' +
+    '.dai-vl{font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;color:var(--goldink,var(--gold));margin:6px 2px 6px}' +
+    '.dai-vs textarea{width:100%;box-sizing:border-box;margin:0;min-height:92px;font-size:16px;line-height:1.45;resize:vertical;border-color:color-mix(in srgb,var(--gold) 35%,var(--line))}' +
+    '.dai-vf{font-size:12.5px;line-height:1.4;color:var(--muted);margin:8px 2px 0}' +
+    '.dai-vbt{display:flex;gap:10px;margin-top:12px}.dai-vbt .btn{flex:1;margin:0;min-height:50px}' +
+    '@media (prefers-reduced-motion:reduce){.dai-fab,.dai-fab.off{transition:none}.dai-fab>i{animation:none}.dai-fab>i::after{animation:none;display:none}.dai-fab.hide,.dai-fab.blk{transform:none}' +
+      '.dai-vmic,.dai-vmic.on,.dai-wave.on i{animation:none!important;transition:none}.dai-wave{transition:none}}';
+  (document.head || document.documentElement).appendChild(st);
+})();
+function dai_fabModal() { return !!document.querySelector('#layer > *, #askSure, [aria-modal="true"], dialog[open], #daiPop'); }
+function dai_fabField(el) {
+  if (!el || !el.tagName) return false;
+  if (el.isContentEditable) return true;
+  if (el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') return true;
+  return el.tagName === 'INPUT' && !/^(button|submit|reset|checkbox|radio|range|color|file|image|hidden)$/i.test(el.type || '');
+}
+/* место шара: над нижним меню (его высота уже включает safe-area), иначе 16 px + safe-area; поднимается над закреплёнными кнопками */
+function dai_fabPlace(b) {
+  var nav = document.querySelector('#app > .nav'), base = 0, vh = innerHeight;
+  if (nav && nav.getClientRects().length && getComputedStyle(nav).display !== 'none') { var r = nav.getBoundingClientRect(); if (r.top > vh * 0.5) base = Math.round(vh - r.top) + 12; }
+  if (!base) base = 16;
+  var lift = 0, w = 58, right = 16;
+  try { right = Math.max(16, Math.round(innerWidth - b.getBoundingClientRect().right)); } catch (e) {}
+  var x0 = innerWidth - right - w, y1 = vh - base, y0 = y1 - w, seen = [];
+  [[x0 + 29, y0 + 29], [x0 + 8, y0 + 8], [x0 + 50, y0 + 8], [x0 + 8, y1 - 8], [x0 + 50, y1 - 8]].forEach(function (p) {
+    var L = []; try { L = document.elementsFromPoint(p[0], p[1]) || []; } catch (e) {}
+    for (var i = 0; i < L.length; i++) {
+      var el = L[i]; if (el === b || b.contains(el) || el === nav || (nav && nav.contains(el))) continue;
+      if (el === document.body || el === document.documentElement || el.id === 'app' || el.id === 'main') break;
+      var bt = el.closest && el.closest('button, a[href], input, select, textarea, [role="button"], .btn'); if (!bt || seen.indexOf(bt) >= 0) continue; seen.push(bt);
+      for (var q = bt; q && q !== document.body; q = q.parentElement) {
+        var ps = getComputedStyle(q).position;
+        if (ps === 'fixed' || ps === 'sticky') { var rb = bt.getBoundingClientRect(); if (rb.top < y1 && rb.bottom > y0) lift = Math.max(lift, Math.round(vh - rb.top) + 10 - base); break; }
+      }
+      break;
+    }
+  });
+  /* под шаром закреплённая кнопка (например «Опубликовать изменения» графика) — шар не висит над экраном, а уезжает вниз, пока она видна */
+  b.style.bottom = base + 'px'; b.classList.toggle('blk', lift > 0);
+  /* свободное место внизу экрана: от низа окна до верха шара + 14 px */
+  try { document.documentElement.style.setProperty('--dai-fabpad', Math.max(110, base + w + 14) + 'px'); } catch (e) {}
+}
+function dai_fabSync() {
+  var b = $('daiFab'), on = !!S.me;
+  document.documentElement.classList.toggle('dai-fabon', on);
+  if (!on) { if (b) b.remove(); return; }
+  if (!b) {
+    b = document.createElement('button'); b.type = 'button'; b.id = 'daiFab'; b.className = 'dai-fab';
+    b.innerHTML = '<i>' + dai_svg(DAI_IC.fab, 26, 0) + '</i>';
+    b.onclick = function () { dai_open(); };
+    document.body.appendChild(b);
+  }
+  var lb = dai_t(dai_own() ? 'Помощник' : 'Спросить помощника'); lb = dai_cy(lb);
+  if (b.getAttribute('aria-label') !== lb) { b.setAttribute('aria-label', lb); b.title = lb; }
+  var off = S.view === 'daiask' || document.documentElement.classList.contains('dai-full') || dai_fabModal();
+  b.classList.toggle('off', off);
+  if (!off) dai_fabPlace(b);
+}
+function dai_fabHide(v) { var b = $('daiFab'); if (b) b.classList.toggle('hide', !!v); }
+function dai_fabRest() {
+  clearTimeout(DAI_FAB.t);
+  DAI_FAB.t = setTimeout(function () { if (DAI_FAB.typing && dai_fabField(document.activeElement)) return; DAI_FAB.typing = false; dai_fabHide(false); try { dai_fabSync(); } catch (e) {} }, 1600);
+}
+(function () {
+  DAI_FAB.y0 = window.scrollY || 0;
+  addEventListener('scroll', function () {
+    var b = $('daiFab'); if (!b) return;
+    var y = window.scrollY || 0, d = y - DAI_FAB.y0; if (Math.abs(d) < 8) return;
+    if (d > 0 && y > 60) dai_fabHide(true); else if (d < 0 && !DAI_FAB.typing) dai_fabHide(false);
+    DAI_FAB.y0 = y; dai_fabRest();
+  }, { passive: true });
+  document.addEventListener('focusin', function (e) { if (dai_fabField(e.target) && !(e.target.closest && e.target.closest('#daiCmp'))) { DAI_FAB.typing = true; dai_fabHide(true); clearTimeout(DAI_FAB.t); } });
+  document.addEventListener('input', function (e) { if (dai_fabField(e.target) && document.activeElement === e.target && !(e.target.closest && e.target.closest('#daiCmp'))) { DAI_FAB.typing = true; dai_fabHide(true); clearTimeout(DAI_FAB.t); } }, true);
+  document.addEventListener('focusout', function () { setTimeout(function () { if (!dai_fabField(document.activeElement)) { DAI_FAB.typing = false; dai_fabRest(); } }, 200); });
+  addEventListener('resize', function () { try { dai_fabSync(); } catch (e) {} });
+  /* листы, окна подтверждения, перерисовка экрана — шар прячется / встаёт на место; кнопка «Голосом» на «Графике» */
+  var pend = 0, mo = null, oM = null, oL = null, oA = null;
+  /* #main / #layer могут пересоздаваться при перерисовке — наблюдатель переподключается к новым */
+  var watch = function () {
+    try {
+      var M = $('main'), L = $('layer'), A = $('app');
+      if (M === oM && L === oL && A === oA) return;
+      if (mo) mo.disconnect(); mo = new MutationObserver(kick); oM = M; oL = L; oA = A;
+      mo.observe(document.body, { childList: true });
+      if (A) mo.observe(A, { childList: true });
+      if (L) mo.observe(L, { childList: true });
+      if (M) mo.observe(M, { childList: true });
+    } catch (e) {}
+  };
+  var kick = function () { if (pend) return; pend = requestAnimationFrame(function () { pend = 0; watch(); try { dai_fabSync(); dai_vbtn(); dai_vsGone(); } catch (e) {} }); };
+  var start = function () { watch(); kick(); };
+  window.__daiKick = function () { kick(); setTimeout(kick, 400); setTimeout(kick, 1200); };
+  /* после нажатий (кисть на графике включает закреплённую «Опубликовать» без перерисовки экрана) — проверить место шара */
+  var tk = 0, later = function () { clearTimeout(tk); tk = setTimeout(kick, 140); };
+  document.addEventListener('pointerup', later, true); document.addEventListener('keyup', later, true);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else setTimeout(start, 0);
+})();
+
+/* ---------- «График голосом» (только личный помощник владельца) ---------- */
+var DAI_VS = { rec: null, on: false, lang: null };
+function dai_isVoiceQ(q) { return /^(Составь график на неделю|Haftaga jadval tuz|[ХҲ]афтага жадвал туз)/i.test(String(q || '')); }
+function dai_vbtn() {
+  if (!S.me || S.view !== 'teamsched' || !dai_own()) return;
+  var m = $('main'); if (!m || $('daiVoice')) return;
+  var seg = m.querySelector(':scope > .seg'); if (!seg) return;
+  seg.insertAdjacentHTML('afterend', '<button type="button" class="dai-vbtn" id="daiVoice">' + dai_orb() + '<span class="sx"><b>' + dai_e('Голосом') + '</b><span>' +
+    dai_e('Скажите, кто когда работает, — помощник составит график') + '</span></span>' + dai_ico('mic', 20, 2) + '</button>');
+  $('daiVoice').onclick = function () { dai_vsOpen(); };
+}
+function dai_vsWeek() { var w = ''; try { w = (S.sub && S.sub.tsWeek) || monday(today()); } catch (e) {} return w; }
+function dai_vsDept() { try { var d = S.sub && S.sub.tsDept; return d ? String(deptName(d) || '') : ''; } catch (e) { return ''; } }
+function dai_vsLabel(w) { try { return dai_dm(w) + '–' + dai_dm(addDays(w, 6)); } catch (e) { return w; } }
+function dai_whoSync() {
+  var who = dz_who(); if (DAI.who !== who) { DAI.who = who; DAI.items = []; DAI.dialog = null; DAI.loaded = false; DAI.fresh = false; DAI.busy = false; DAI.pending = null; DAI.draft = ''; DAI.mode = null; DAI.left = null; DAI.lim = null; }
+}
+async function dai_vsOpen() {
+  dai_whoSync();
+  if (!DAI.mode) await dai_state();
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition, w = dai_vsWeek(), dn = dai_vsDept();
+  DAI_VS.lang = dai_lang() === 'ru' ? 'ru' : 'uz';
+  var lim = DAI.lim || 10, left = DAI.left == null ? lim : DAI.left;
+  var bars = [14, 22, 30, 18, 34, 26, 12, 28, 20, 32, 16, 24, 30, 14].map(function (hh, i) { return '<i style="height:' + hh + 'px;animation-delay:-' + (i * 0.13).toFixed(2) + 's"></i>'; }).join('');
+  var sub = dai_t('Неделя {w}', { w: dai_vsLabel(w) }) + (dn ? ' · ' + (typeof trUi === 'function' ? trUi(dn) : dn) : '');
+  sheet(sheetHead(h(dai_t('График голосом')), h(sub)) +
+    '<div class="dai-vs" id="daiVs">' +
+    (SR ? '<button type="button" class="dai-vmic" id="daiVsM" aria-pressed="false" aria-label="' + dai_e('Говорить') + '">' + dai_ico('mic', 34, 2) + '</button>' +
+      '<div class="dai-wave" id="daiVsW" aria-hidden="true">' + bars + '</div>' +
+      '<div class="dai-vst" id="daiVsS" role="status" aria-live="polite">' + dai_e('Нажмите на микрофон и говорите') + '</div>' +
+      '<div class="dai-vh">' + dai_e('Говорите по-русски или по-узбекски · нажмите ещё раз, чтобы закончить') + '</div>' +
+      '<div class="dai-vlg"><button type="button" class="pick' + (DAI_VS.lang === 'ru' ? ' on' : '') + '" data-daivl="ru">RU</button><button type="button" class="pick' + (DAI_VS.lang === 'uz' ? ' on' : '') + '" data-daivl="uz">UZ</button></div>'
+      : '<div class="dai-vh" style="margin-top:14px;text-align:left">' + dai_e('Голосовой ввод в этом браузере не поддерживается — нажмите микрофон на клавиатуре телефона и говорите, текст появится в поле.') + '</div>') +
+    '<div class="dai-vl">' + dai_e('Вы сказали') + '</div>' +
+    '<textarea class="in" id="daiVsT" rows="3" maxlength="900" aria-label="' + dai_e('Вы сказали') + '" placeholder="' + dai_e('Например: Барно пн–пт утро, Ибрахим сб и вс с 14 до 23') + '"></textarea>' +
+    '<div class="dai-vf" id="daiVsF">' + dai_e('Расходует одну команду из {m} · осталось сегодня: {n}', { m: lim, n: left }) + '. ' + dai_e('Помощник подготовит карточку — ничего не изменится без вашего «Выполнить».') + '</div>' +
+    '<div class="dai-vbt"><button type="button" class="btn gold" id="daiVsGo" disabled>' + dai_e('Составить') + '</button></div></div>');
+  var ta = $('daiVsT'), go2 = $('daiVsGo');
+  var upd = function () { go2.disabled = !ta.value.trim() || left <= 0; };
+  ta.oninput = upd;
+  if (left <= 0) $('daiVsF').textContent = dai_t('На сегодня команды помощнику закончились (10 в день). Завтра можно снова — а сейчас всё доступно в приложении как обычно.');
+  document.querySelectorAll('[data-daivl]').forEach(function (b) { b.onclick = function () { DAI_VS.lang = b.getAttribute('data-daivl'); document.querySelectorAll('[data-daivl]').forEach(function (x) { x.classList.toggle('on', x === b); }); if (DAI_VS.on) { dai_vsStop(); setTimeout(dai_vsStart, 250); } }; });
+  if ($('daiVsM')) $('daiVsM').onclick = function () { if (DAI_VS.on) dai_vsStop(); else dai_vsStart(); };
+  go2.onclick = function () {
+    var t = ta.value.trim(); if (!t) return;
+    dai_vsStop();
+    var pre = dai_t('Составь график на неделю {a} (с {w}){d}:', { a: dai_vsLabel(w), w: w, d: dn ? dai_t(', служба «{d}»', { d: dn }) : '' });
+    if (dai_lang() === 'uzc') pre = dai_cy(pre);
+    closeLayer();
+    DAI.queue = { q: (pre + ' ' + t).slice(0, 1000), voice: true };
+    dai_open('teamsched');
+  };
+  upd();
+}
+function dai_vsUi(on) {
+  DAI_VS.on = on;
+  var m = $('daiVsM'), w = $('daiVsW'), s = $('daiVsS');
+  if (m) { m.classList.toggle('on', on); m.setAttribute('aria-pressed', on ? 'true' : 'false'); m.setAttribute('aria-label', dai_t(on ? 'Слушаю — нажмите, чтобы закончить' : 'Говорить')); }
+  if (w) w.classList.toggle('on', on);
+  if (s) s.textContent = dai_t(on ? 'Слушаю…' : 'Нажмите на микрофон и говорите');
+}
+function dai_vsStop() { var r = DAI_VS.rec; DAI_VS.rec = null; if (r) { try { r.stop(); } catch (e) {} } dai_vsUi(false); }
+function dai_vsGone() { if (DAI_VS.rec && !$('daiVs')) { try { DAI_VS.rec.abort(); } catch (e) {} DAI_VS.rec = null; DAI_VS.on = false; } }
+function dai_vsStart() {
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition, ta = $('daiVsT');
+  if (!SR) { toast(dai_t('Голосовой ввод: нажмите микрофон на клавиатуре телефона — текст появится в поле')); if (ta) ta.focus(); return; }
+  var rec = new SR(); rec.lang = DAI_VS.lang === 'uz' ? 'uz-UZ' : 'ru-RU'; rec.continuous = true; rec.interimResults = true;
+  var base = ta && ta.value ? ta.value.replace(/\s+$/, '') + ' ' : '';
+  rec.onresult = function (e) { var t = ''; for (var z = 0; z < e.results.length; z++) t += e.results[z][0].transcript; var q = $('daiVsT'); if (q) { q.value = (base + t).trim().slice(0, 900); q.dispatchEvent(new Event('input')); } };
+  rec.onerror = function (e) { if (e && (e.error === 'not-allowed' || e.error === 'service-not-allowed')) toast(dai_t('Разрешите доступ к микрофону в настройках браузера')); else if (e && e.error !== 'aborted' && e.error !== 'no-speech') toast(dai_t('Голос не распознан — попробуйте ещё раз или напишите')); };
+  rec.onend = function () { if (DAI_VS.rec === rec) DAI_VS.rec = null; dai_vsUi(false); };
+  try { rec.start(); DAI_VS.rec = rec; dai_vsUi(true); try { navigator.vibrate && navigator.vibrate(8); } catch (x) {} } catch (e) { DAI_VS.rec = null; dai_vsUi(false); toast(dai_t('Голос не распознан — попробуйте ещё раз или напишите')); }
+}
+if (/[?&]w4dbg/.test(location.search)) try { window.__dai.fab = dai_fabSync; window.__dai.vs = dai_vsOpen; } catch (e) {}
 
 
 /* ===== ВОЛНА 4 · 92b-clock.js ===== */

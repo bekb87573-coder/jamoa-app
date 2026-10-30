@@ -149,4 +149,24 @@
     'Помощник сейчас не ответил. Попробуйте ещё раз через минуту.': 'Yordamchi hozir javob bermadi. Bir daqiqadan keyin yana urinib koʻring.'
   };
   window.DAI_UZ = Object.assign(window.DAI_UZ || {}, O);
+  /* v30 — плавающий шар и «График голосом» */
+  window.DAI_UZ = Object.assign(window.DAI_UZ || {}, {
+    'ИИ понял так — проверьте': 'SI shunday tushundi — tekshiring',
+    'Голосом': 'Ovoz bilan',
+    'Скажите, кто когда работает, — помощник составит график': 'Kim qachon ishlashini ayting — yordamchi jadval tuzadi',
+    'Неделя {w}': 'Hafta {w}',
+    'График голосом': 'Jadval ovoz bilan',
+    'Говорить': 'Gapirish',
+    'Нажмите на микрофон и говорите': 'Mikrofonni bosing va gapiring',
+    'Слушаю…': 'Tinglayapman…',
+    'Говорите по-русски или по-узбекски · нажмите ещё раз, чтобы закончить': 'Oʻzbekcha yoki ruscha gapiring · tugatish uchun yana bosing',
+    'Голосовой ввод в этом браузере не поддерживается — нажмите микрофон на клавиатуре телефона и говорите, текст появится в поле.': 'Bu brauzerda ovozli kiritish ishlamaydi — telefon klaviaturasidagi mikrofonni bosing va gapiring, matn maydonda paydo boʻladi.',
+    'Вы сказали': 'Siz aytdingiz',
+    'Например: Барно пн–пт утро, Ибрахим сб и вс с 14 до 23': 'Masalan: Barno du–ju ertalab, Ibroxim sh va ya 14 dan 23 gacha',
+    'Расходует одну команду из {m} · осталось сегодня: {n}': '{m} ta buyruqdan bittasi sarflanadi · bugun qoldi: {n}',
+    'Помощник подготовит карточку — ничего не изменится без вашего «Выполнить».': 'Yordamchi kartochka tayyorlaydi — «Bajarish»ni bosmaguningizcha hech narsa oʻzgarmaydi.',
+    'Составить': 'Tuzish',
+    'Составь график на неделю {a} (с {w}){d}:': 'Haftaga jadval tuz {a} ({w} dan){d}:',
+    ', служба «{d}»': ', xizmat «{d}»'
+  });
 })();
