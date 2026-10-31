@@ -46,6 +46,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-ai.js"></script>
 <script src="uz-w4-card.js"></script>
 <script src="uz-w4-clock.js"></script>
+<script src="uz-w4-close.js"></script>
 <script src="uz-w4-core.js"></script>
 <script src="uz-w4-coremode.js"></script>
 <script src="uz-w4-cyr.js"></script>
@@ -80,6 +81,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-shift2.js"></script>
 <script src="uz-w4-shtat.js"></script>
 <script src="uz-w4-skills.js"></script>
+<script src="uz-w4-stack.js"></script>
 <script src="uz-w4-support.js"></script>
 <script src="uz-w4-tasks2.js"></script>
 <script src="uz-w4-tg.js"></script>
@@ -52740,6 +52742,971 @@ async function dzt_fFill() {
 (function () {
   try { if (typeof dz_fBox === 'function') { var b0 = dz_fBox; dz_fBox = function () { setTimeout(dzt_fFill, 0); return b0.apply(this, arguments) + '<div id="dztF"></div>'; }; } } catch (e) {}
 })();
+
+
+/* ===== ВОЛНА 4 · 92zu-stack.js ===== */
+/* ===== 92zu-stack — 31.10: (1) без дублей ссылок у владельца и руководителя; (2) главный виджет — стопка с пролистыванием (префикс dzu_) =====
+   1. Дубли: каждая функция — в одном главном месте (оперативное «сейчас» — Пульт; люди и их график — Команда; справочники и настройки — Пульт/Разделы).
+      Убираем только кнопки-входы (экраны, переходы из уведомлений и ИИ-помощника не трогаем):
+      - «Команда», ряд быстрых кнопок (92t dt_teamLay): обёртка убирает из ряда кнопки, у которых есть главное место в другом разделе;
+      - «Разделы»: плитка «Табель», если он уже есть в «Команде»;
+      - «Профиль» (владелец, руководитель): «Экстренно», «Словарь», «Помощь и предложения» — они в «Разделах».
+   2. Стопка виджетов (как на iPhone): верхний большой виджет главной листается пальцем влево-вправо (scroll-snap), точки, на компьютере — стрелки.
+      Первая карточка по умолчанию — «Смена»: настоящая карточка отметки 92b (#cbClock) переносится внутрь стопки, все её кнопки работают как раньше.
+      Настройка — шестерёнка у точек или долгое нажатие на стопку: включить/выключить, порядок (стрелки и перетаскивание), «Добавить» из каталога роли.
+      Хранение — на телефоне (localStorage 'dzu-stack-<id участника>'): на сервере нет таблицы настроек участника — синхронизации между устройствами нет.
+      Если карточка есть в стопке, её отдельный двойник на главной скрывается (Штат, Заявки, Ждут решения, Мой заработок, Моя неделя, Мои задачи). */
+var DZU = { idx: 0, seq: 0, tick: null, lang: '' };
+function dzu_t(s, o) { var r = s; try { r = trUi(s); } catch (e) {} if (o) Object.keys(o).forEach(function (k) { r = r.split('{' + k + '}').join(o[k]); }); return r; }
+function dzu_e(s, o) { return h(dzu_t(s, o)); }
+function dzu_s(s, o) { return '<span>' + dzu_e(s, o) + '</span>'; }
+function dzu_uz() { try { return uiLang() === 'uz'; } catch (e) { return false; } }
+function dzu_pl(n, a, b, c) { if (dzu_uz()) return a; n = Math.abs(+n || 0) % 100; var k = n % 10; return n > 10 && n < 20 ? c : k === 1 ? a : k >= 2 && k <= 4 ? b : c; }
+function dzu_core() { return typeof cf_on === 'function' ? cf_on() : window.JAMOA_CORE === true; }
+function dzu_on() { try { return !!S.me && dzu_core(); } catch (e) { return false; } }
+function dzu_dir() { try { return !!isDirector(); } catch (e) { return false; } }
+function dzu_team() { try { return (myTeam() || []).filter(function (e) { return e && e.id !== S.me.id; }); } catch (e) { return []; } }
+function dzu_role() { return dzu_dir() ? 'own' : dzu_team().length ? 'lead' : 'staff'; }
+function dzu_rm() { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
+function dzu_short(e) { return e ? e.first_name + (e.last_name ? ' ' + String(e.last_name).charAt(0) + '.' : '') : ''; }
+function dzu_ini(e) { return e ? (String(e.first_name || '').charAt(0) + String(e.last_name || '').charAt(0)).toUpperCase() : '?'; }
+function dzu_can(v) { try { return typeof canView !== 'function' || canView(v); } catch (e) { return true; } }
+function dzu_dbg() { return /[?&]w4dbg/.test(location.search); }
+
+/* =====================================================================
+   1. Дубли ссылок
+   ===================================================================== */
+/* что убираем из ряда «Команды» — у этих функций главное место в другом разделе */
+function dzu_teamDrop() {
+  var ids = ['jcTeamNow'];                                          /* «Сейчас в заведении» → Разделы (и виджет на главной) */
+  if (dzu_dir()) ids.push('nav_tAtt', 'nav_tTasks', 'nav_tMap', 'dshTeamB'); /* приход и уход, задачи, карта, штат → Пульт */
+  ids.push('nav_tSched', 'toTs');                                   /* «График» — вкладка нижнего меню */
+  return ids.map(function (id) { return $(id); }).filter(Boolean);
+}
+/* копия порядка источников 92t (dt_teamLay) — чтобы найти кнопку ряда по её источнику */
+function dzu_teamSrc(m) {
+  var src = [], nx = $('nav_teamX');
+  if (nx) Array.prototype.slice.call(nx.querySelectorAll('.pl-row')).forEach(function (b) { src.push(b); });
+  if ($('jcTeamNow')) src.push($('jcTeamNow'));
+  Array.prototype.slice.call(m.querySelectorAll(':scope > .grid2')).forEach(function (g) { var bs = g.querySelectorAll('button'); if (bs.length && bs.length <= 2) Array.prototype.forEach.call(bs, function (b) { src.push(b); }); });
+  var tr = $('cdTabRow'); if (tr) src.push(tr.querySelector('button') || tr);
+  return src;
+}
+function dzu_teamDedupe() {
+  var m = $('main'), q = $('dtTq'); if (!m || !q || S.view !== 'team') return;
+  var drop = dzu_teamDrop(); if (!drop.length) return;
+  var src = dzu_teamSrc(m);
+  q.querySelectorAll('[data-dtq]').forEach(function (b) { var s = src[+b.getAttribute('data-dtq')]; if (s && drop.indexOf(s) >= 0) { b.hidden = true; b.setAttribute('data-dzu-dup', '1'); } });
+}
+(function () {
+  if (typeof dt_teamLay !== 'function') return;
+  var tl0 = dt_teamLay;
+  dt_teamLay = function () { var r = tl0.apply(this, arguments); try { dzu_teamDedupe(); } catch (e) { console.warn(e); } return r; };
+})();
+/* «Разделы»: плитка «Табель», когда он есть в «Команде» (владелец — «Табель месяца», руководитель — «Табель» своей команды) */
+function dzu_moreDedupe() {
+  var m = $('main'); if (!m || S.view !== 'more' || (S.sub && S.sub.secEdit)) return;
+  var tabInTeam = dzu_dir() ? (typeof plDeskOk === 'function' && plDeskOk('month')) : dzu_team().length > 0;
+  if (!tabInTeam) return;
+  m.querySelectorAll('[data-sec="cdtab"],[data-navsec="cdtab"]').forEach(function (b) { b.hidden = true; b.style.display = 'none'; b.setAttribute('data-dzu-dup', '1'); });
+}
+/* «Профиль»: «Экстренно», «Словарь», «Помощь и предложения» — главное место «Разделы» */
+function dzu_profDedupe() {
+  var m = $('main'); if (!m || S.view !== 'profile' || !(dzu_dir() || dzu_team().length)) return;
+  ['glP1', 'dzPE'].forEach(function (id) { var b = $(id); if (b && !b.hidden) { b.hidden = true; b.style.display = 'none'; b.setAttribute('data-dzu-dup', '1'); } });
+  Array.prototype.slice.call(m.querySelectorAll('button, .card')).forEach(function (b) {
+    if (b.getAttribute('data-dzu-dup') || b.closest('#layer')) return;
+    var t = (b.textContent || '').replace(/\s+/g, ' ').trim(), em = dzu_t('Экстренно');
+    if (t.indexOf(em) === 0 && t.length < 90 && b.tagName === 'BUTTON') { var c = b.closest('.card') && b.closest('.card').querySelectorAll('button').length === 1 ? b.closest('.card') : b; c.hidden = true; c.style.display = 'none'; c.setAttribute('data-dzu-dup', '1'); }
+  });
+}
+setTimeout(function () {
+  try {
+    var vm0 = vMore;
+    vMore = function () { var r = vm0.apply(this, arguments); try { dzu_moreDedupe(); } catch (e) { console.warn(e); } return r; };
+    if (typeof W3V === 'object' && W3V.more === vm0) W3V.more = vMore;
+    var vp0 = vProfile;
+    vProfile = async function () { var r = await vp0.apply(this, arguments); [0, 200, 700, 1500].forEach(function (ms) { setTimeout(function () { try { dzu_profDedupe(); } catch (e) {} }, ms); }); return r; };
+    if (typeof W3V === 'object' && W3V.profile === vp0) W3V.profile = vProfile;
+  } catch (e) { console.warn('dzu wrap', e); }
+}, 0);
+
+/* =====================================================================
+   2. Стопка виджетов
+   ===================================================================== */
+/* каталог: t — название, ic — значок, go — куда ведёт нажатие, ok — уместно ли для роли, ld — содержимое (асинхронно) */
+var DZU_W = {
+  shift:   { t: 'Смена', ic: 'timer' },
+  shtat:   { t: 'Штат', ic: 'users', ok: function () { return typeof dsh_overview === 'function' && typeof dsh_can === 'function' && dsh_can(); }, go: function () { dsh_open(); } },
+  tasks:   { t: 'Задачи', ic: 'check', go: function () { go('tasks'); } },
+  mytasks: { t: 'Мои задачи', ic: 'check', go: function () { go('tasks'); } },
+  map:     { t: 'Карта сотрудников', ic: 'pin', ok: function () { if (typeof dx_data !== 'function') return false; if (dzu_dir()) return typeof plDeskOk !== 'function' || plDeskOk('map'); return dzu_can('dmmap') && typeof W3V === 'object' && !!W3V.dmmap; },
+             go: function () { if (dzu_dir()) { S.sub.desk = 'map'; go('desk'); } else go('dmmap'); } },
+  honor:   { t: 'Доска почёта', ic: 'trophy', ok: function () { return typeof rateCalc === 'function'; }, go: function () { if (typeof W3V === 'object' && W3V.dvhonor) go('dvhonor'); else { S.sub.fT = 'rate'; go('fun'); } } },
+  decide:  { t: 'Ждут решения', ic: 'clip', ok: function () { return typeof d6Load === 'function' && typeof d6Can === 'function' && d6Can(); }, go: function () { go('decide'); } },
+  req:     { t: 'Заявки', ic: 'tool', ok: function () { return typeof dr_rpc === 'function'; }, go: function () { go('drfix'); } },
+  sched:   { t: 'График сегодня', ic: 'cal', ok: function () { return typeof teamPhases === 'function' && (dzu_dir() || dzu_team().length > 0); }, go: function () { go(dzu_dir() ? 'teamsched' : 'sched'); } },
+  late:    { t: 'Опоздания сегодня', ic: 'alert', ok: function () { return typeof teamPhases === 'function' && (dzu_dir() || dzu_team().length > 0); },
+             go: function () { if (dzu_dir()) { S.sub.desk = 'att'; S.sub.attF = 'all'; S.sub.attDay = today(); go('desk'); } else if (typeof jc_go === 'function') { S.sub.jcF = 'all'; jc_go('jcnow', 'home'); } else go('jcnow'); } },
+  month:   { t: 'Табель месяца', ic: 'cal2', ok: function () { return dzu_dir() || dzu_team().length > 0; }, go: function () { S.sub.cdFrom = 'home'; go('cdtab'); } },
+  myearn:  { t: 'Мой заработок', ic: 'money', ok: function () { return typeof ca_month === 'function' && !dzu_dir(); }, go: function () { S.sub.psYm = typeof ca_ymNow === 'function' ? ca_ymNow() : today().slice(0, 7); go('payslip'); } },
+  week:    { t: 'График на неделю', ic: 'cal', ok: function () { return !dzu_dir(); }, go: function () { go('sched'); } },
+  ai:      { t: 'ИИ-помощник', ic: 'spark', ok: function () { return typeof dai_open === 'function' && dzu_dir(); }, go: function () { dai_open('home'); } },
+  skills:  { t: 'Допуски и навыки', ic: 'medal', ok: function () { return typeof dk_maybe === 'function' && dk_maybe() && typeof dk_go === 'function'; }, go: function () { if (typeof dk_lead === 'function' && dk_lead()) dk_go('dkteam', 'home'); else dk_go('dkmy', 'home'); } }
+};
+var DZU_CAT = {
+  own:   ['shift', 'shtat', 'tasks', 'map', 'honor', 'decide', 'req', 'sched', 'late', 'month', 'ai', 'skills'],
+  lead:  ['shift', 'tasks', 'sched', 'late', 'honor', 'decide', 'map', 'shtat', 'req', 'month', 'skills', 'mytasks', 'myearn', 'week'],
+  staff: ['shift', 'mytasks', 'myearn', 'honor', 'week', 'skills', 'req']
+};
+var DZU_DEF = { own: ['shift', 'shtat', 'tasks', 'map', 'honor'], lead: ['shift', 'tasks', 'sched', 'late', 'honor'], staff: ['shift', 'mytasks', 'myearn', 'honor', 'week'] };
+/* двойники на главной: если карточка в стопке — отдельная карточка скрывается */
+var DZU_TWIN = { shtat: ['dshHome', 'dzrSetup'], req: ['drHome'], decide: ['w3Dec'], myearn: ['cfWg_earn'], week: ['cfWeek'], mytasks: ['myTasks'] };
+function dzu_ok(k) { var W = DZU_W[k]; if (!W) return false; if (!W.ok) return true; try { return !!W.ok(); } catch (e) { return false; } }
+function dzu_cat() { return (DZU_CAT[dzu_role()] || []).filter(dzu_ok); }
+function dzu_key() { return 'dzu-stack-' + (S.me && S.me.id); }
+function dzu_list() {
+  var cat = dzu_cat(), o = null, L;
+  try { o = JSON.parse(localStorage.getItem(dzu_key()) || 'null'); } catch (e) { o = null; }
+  L = o && Array.isArray(o.on) ? o.on : DZU_DEF[dzu_role()];
+  var seen = {}; return L.filter(function (k) { if (seen[k] || cat.indexOf(k) < 0) return false; seen[k] = 1; return true; });
+}
+function dzu_save(L) { try { localStorage.setItem(dzu_key(), JSON.stringify({ v: 1, on: L })); } catch (e) {} }
+function dzu_twins(L) {
+  var de = document.documentElement;
+  Object.keys(DZU_TWIN).forEach(function (k) { de.classList.toggle('dzu-h-' + k, L.indexOf(k) >= 0); });
+}
+
+/* ---------- каркас ---------- */
+function dzu_card(k) {
+  var W = DZU_W[k];
+  return '<div class="shift dzu-c dzu-' + k + '" data-dzc="' + k + '"><div class="dzu-h"><span class="lbl">' + dzu_s(W.t) + '</span><span class="dzu-hi" aria-hidden="true">' + icon(W.ic, 18) + '</span></div>' +
+    '<div class="dzu-b" data-dzb="' + k + '"><div class="dzu-sk"><i></i><i></i><i></i></div></div></div>';
+}
+function dzu_build(L) {
+  var d = document.createElement('div'); d.id = 'dzuStack'; d.className = 'dzu'; d.setAttribute('data-cp', '1');
+  d.innerHTML = '<div class="dzu-sc" id="dzuSc" tabindex="0" role="region" aria-roledescription="' + dzu_e('карусель') + '" aria-label="' + dzu_e('Виджеты главной') + '">' +
+    L.map(function (k, i) { return '<div class="dzu-sl" data-dzs="' + k + '" role="group" aria-label="' + h(dzu_t(DZU_W[k].t)) + ' · ' + (i + 1) + ' / ' + L.length + '">' + (k === 'shift' ? '' : dzu_card(k)) + '</div>'; }).join('') + '</div>' +
+    '<div class="dzu-ft">' +
+      '<button type="button" class="dzu-ar dzu-pv" data-dzua="-1" aria-label="' + dzu_e('Предыдущий виджет') + '">' + icon('back', 18) + '</button>' +
+      '<div class="dzu-dots" role="tablist">' + L.map(function (k, i) { return '<button type="button" class="dzu-d" role="tab" data-dzud="' + i + '" aria-label="' + h(dzu_t(DZU_W[k].t)) + '"><i></i></button>'; }).join('') + '</div>' +
+      '<button type="button" class="dzu-ar dzu-nx" data-dzua="1" aria-label="' + dzu_e('Следующий виджет') + '">' + icon('chev', 18) + '</button>' +
+      '<button type="button" class="dzu-set" id="dzuSet" aria-label="' + dzu_e('Настроить виджеты') + '">' + icon('gear', 18) + '<span class="dzu-st">' + dzu_e('Настроить') + '</span></button>' +
+    '</div>';
+  d._sig = L.join(',') + '|' + (dzu_uz() ? 'uz' : 'ru');
+  return d;
+}
+function dzu_cur(sc) { var w = sc.clientWidth || 1; return Math.max(0, Math.min(sc.children.length - 1, Math.round(sc.scrollLeft / w))); }
+function dzu_setIdx(st, i, smooth) {
+  var sc = st.querySelector('.dzu-sc'); if (!sc) return; i = Math.max(0, Math.min(sc.children.length - 1, i));
+  sc.scrollTo({ left: i * sc.clientWidth, behavior: smooth && !dzu_rm() ? 'smooth' : 'auto' });
+  dzu_mark(st, i);
+}
+function dzu_mark(st, i) {
+  var sc = st.querySelector('.dzu-sc'); if (!sc) return; var was = DZU.idx; DZU.idx = i;
+  st.querySelectorAll('.dzu-d').forEach(function (d, k) { d.classList.toggle('on', k === i); d.setAttribute('aria-selected', k === i ? 'true' : 'false'); });
+  Array.prototype.forEach.call(sc.children, function (s, k) {
+    var on = k === i; s.setAttribute('aria-hidden', on ? 'false' : 'true');
+    if (on && !s.classList.contains('dzu-on')) { void s.offsetWidth; s.classList.add('dzu-on'); dzu_count(s); }
+    else if (!on && s.classList.contains('dzu-on') && (was !== i || !st._marked)) s.classList.remove('dzu-on');
+  });
+  st._marked = true;
+  var pv = st.querySelector('.dzu-pv'), nx = st.querySelector('.dzu-nx'); if (pv) pv.disabled = i <= 0; if (nx) nx.disabled = i >= sc.children.length - 1;
+}
+/* числа «досчитываются» при показе карточки (без анимации — сразу итог) */
+function dzu_count(root) {
+  if (dzu_rm()) return;
+  root.querySelectorAll('[data-dzcu]').forEach(function (el) {
+    var v = +el.getAttribute('data-dzcu') || 0, mon = el.hasAttribute('data-dzm'); if (v <= 0) return;
+    var t0 = performance.now(), D = 700;
+    (function step(t) { var p = Math.min(1, (t - t0) / D), e = 1 - Math.pow(1 - p, 3), x = Math.round(v * e); el.textContent = mon ? money(x) : String(x); if (p < 1 && el.isConnected) requestAnimationFrame(step); })(t0);
+  });
+}
+function dzu_bind(st) {
+  var sc = st.querySelector('.dzu-sc'), raf = 0;
+  sc.addEventListener('scroll', function () { if (raf) return; raf = requestAnimationFrame(function () { raf = 0; var i = dzu_cur(sc); if (i !== DZU.idx) dzu_mark(st, i); }); }, { passive: true });
+  st.querySelectorAll('[data-dzud]').forEach(function (d) { d.onclick = function () { dzu_setIdx(st, +d.getAttribute('data-dzud'), true); }; });
+  st.querySelectorAll('[data-dzua]').forEach(function (b) { b.onclick = function () { dzu_setIdx(st, dzu_cur(sc) + (+b.getAttribute('data-dzua')), true); }; });
+  sc.addEventListener('keydown', function (e) { if (e.target !== sc) return; if (e.key === 'ArrowRight') { e.preventDefault(); dzu_setIdx(st, dzu_cur(sc) + 1, true); } if (e.key === 'ArrowLeft') { e.preventDefault(); dzu_setIdx(st, dzu_cur(sc) - 1, true); } });
+  $('dzuSet').onclick = function () { dzu_settings(); };
+  /* долгое нажатие на карточку (не на кнопку) — настройка */
+  if (typeof longPress === 'function') longPress(sc, function (e) { if (e && e.target && e.target.closest && e.target.closest('button,a,input,select,textarea,label')) return; try { haptic(); } catch (x) {} dzu_settings(); });
+  /* нажатие на карточку — в её раздел (кнопки внутри — свои действия) */
+  sc.addEventListener('click', function (e) {
+    if (S._lp) return;
+    var b = e.target.closest('[data-dzgo]');
+    var c = e.target.closest('[data-dzc]'); if (!c) return;
+    if (!b && e.target.closest('button,a,input,select,textarea,label')) return;
+    var W = DZU_W[(b && b.getAttribute('data-dzgo')) || c.getAttribute('data-dzc')]; if (W && W.go) { try { W.go(); } catch (x) { console.warn(x); } }
+  });
+}
+/* поставить стопку на главную (идемпотентно): вызывается после каждой отрисовки карточки смены 92b и главной */
+function dzu_mount() {
+  var m = $('main');
+  if (!m || S.view !== 'home' || !dzu_on()) { dzu_twins([]); return; }
+  var L = dzu_list(), st = $('dzuStack'), cb = $('cbClock');
+  dzu_twins(L);
+  var sig = L.join(',') + '|' + (dzu_uz() ? 'uz' : 'ru');
+  if (st && (st.parentNode !== m || st._sig !== sig || !L.length)) { if (cb && st.contains(cb)) m.insertBefore(cb, st); st.remove(); st = null; }
+  if (!L.length) return;
+  var fresh = false;
+  if (!st) { st = dzu_build(L); m.insertBefore(st, cb && cb.parentNode === m ? cb : m.firstChild); dzu_bind(st); fresh = true; }
+  var slot = st.querySelector('[data-dzs="shift"]');
+  if (slot && cb && cb.parentNode !== slot) { slot.innerHTML = ''; slot.appendChild(cb); }
+  if (!slot && cb && st.contains(cb)) m.insertBefore(cb, st.nextSibling);
+  if (slot && cb) dzu_clockDeco(cb);
+  if (st.previousElementSibling && st.previousElementSibling.id !== 'nav_onL') { /* стопка — первая на главной (сортировка 92f держит data-cp=1 наверху) */ }
+  if (fresh) {
+    var i = Math.min(DZU.idx || 0, L.length - 1);
+    requestAnimationFrame(function () { if (st.isConnected) { dzu_setIdx(st, i, false); st._marked = false; dzu_mark(st, i); } });
+    dzu_fill(st);
+    try { if (typeof cf_homeSort === 'function') setTimeout(cf_homeSort, 0); } catch (e) {}
+  }
+}
+function dzu_fill(st) {
+  var seq = ++DZU.seq;
+  st.querySelectorAll('[data-dzb]').forEach(function (el) {
+    var k = el.getAttribute('data-dzb'), fn = DZU_LD[k]; if (!fn) return;
+    Promise.resolve().then(function () { return fn(); }).then(function (html) {
+      if (seq !== DZU.seq || !el.isConnected || html == null) return;
+      if (el._h === html) return; el._h = html; el.innerHTML = html;
+      var s = el.closest('.dzu-sl'); if (s && s.classList.contains('dzu-on')) { s.classList.remove('dzu-on'); void s.offsetWidth; s.classList.add('dzu-on'); dzu_count(s); }
+      var bind = DZU_BIND[k]; if (bind) try { bind(el); } catch (x) { console.warn(x); }
+    }).catch(function (e) { console.warn('dzu ' + k, e); if (el.isConnected && seq === DZU.seq) el.innerHTML = '<div class="dzu-m">' + dzu_s('Не удалось загрузить — проверьте интернет') + '</div>'; });
+  });
+}
+/* «Смена»: живые часы с кольцом в строке «Сегодня · 31.10» (на смене — кольцо пульсирует изумрудом, вне смены — золото «дышит») */
+function dzu_clockDeco(cb) {
+  var r1 = cb.querySelector('.hm-sh1'); if (!r1) return;
+  var on = !!(S.att && !S.att.clock_out), cls = 'dzu-clk ' + (on ? 'on' : 'off');
+  var d = r1.querySelector('.dzu-clk');
+  if (!d) {
+    d = document.createElement('span'); d.setAttribute('aria-hidden', 'true');
+    d.innerHTML = '<svg viewBox="0 0 40 40" width="34" height="34"><circle class="r2" cx="20" cy="20" r="15"/><circle class="r1" cx="20" cy="20" r="15"/><circle class="fc" cx="20" cy="20" r="11"/>' +
+      '<line class="hh" x1="20" y1="20" x2="20" y2="14"/><line class="mh" x1="20" y1="20" x2="26" y2="20"/><line class="sh" x1="20" y1="21.5" x2="20" y2="11"/><circle class="cn" cx="20" cy="20" r="1.6"/></svg>';
+    var chip = r1.querySelector('.hm-shc'); r1.insertBefore(d, chip || null);
+  }
+  if (d.className !== cls) d.className = cls;
+  var now = new Date(), hr = (now.getHours() % 12) * 30 + now.getMinutes() * 0.5, mi = now.getMinutes() * 6;
+  var hh = d.querySelector('.hh'), mh = d.querySelector('.mh'); if (hh) hh.setAttribute('transform', 'rotate(' + hr + ' 20 20)'); if (mh) mh.setAttribute('transform', 'rotate(' + (mi - 90) + ' 20 20)');
+}
+
+/* ---------- данные карточек ---------- */
+function dzu_btn(k, txt, cls) { return '<button type="button" class="btn ' + (cls || 'gold') + ' sm dzu-go" data-dzgo="' + k + '">' + dzu_s(txt) + icon('chev', 14) + '</button>'; }
+function dzu_n(v, mon) { v = Math.round(+v || 0); return '<b class="num" data-dzcu="' + v + '"' + (mon ? ' data-dzm' : '') + '>' + (mon ? money(v) : v) + '</b>'; }
+function dzu_cut(s, n) { s = String(s || '').replace(/\s+/g, ' ').trim(); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+function dzu_people() { return dzu_dir() ? (S.emps || []).filter(function (e) { return e.active !== false && e.role !== 'director'; }) : dzu_team(); }
+async function dzu_tasksData(mine) {
+  var r = await qSafe(sb.from('tasks').select('*').lte('day', today()).gte('day', addDays(today(), -30)));
+  var L = ((r && r.data) || []).filter(function (t) { return t && t.status !== 'cancelled' && !t.deleted; });
+  if (mine) L = L.filter(function (t) { return t.assignee_id === S.me.id; });
+  else if (!dzu_dir()) { var ids = {}; try { ids = teamIds(); } catch (e) {} ids[S.me.id] = 1; L = L.filter(function (t) { return ids[t.assignee_id] || t.created_by === S.me.id; }); }
+  var fin = function (t) { return t.status === 'done' || t.status === 'review'; };
+  var td = L.filter(function (t) { return t.day === today(); }), d = td.filter(fin).length;
+  var od = L.filter(function (t) { return !fin(t) && overdue(t); }).length;
+  var nx = L.filter(function (t) { return !fin(t) && (t.day === today() || overdue(t)); }).sort(function (a, b) { return (overdue(b) - overdue(a)) || byTime(a, b); }).slice(0, 3);
+  return { n: td.length, d: d, od: od, nx: nx, mine: mine };
+}
+function dzu_ring(p, cls) {
+  var C = 2 * Math.PI * 34, off = C * (1 - Math.max(0, Math.min(1, p)));
+  return '<svg class="dzu-ring ' + (cls || '') + '" viewBox="0 0 84 84" width="84" height="84" aria-hidden="true"><circle cx="42" cy="42" r="34" class="bg"/><circle cx="42" cy="42" r="34" class="fg" style="--c:' + C.toFixed(1) + ';--o:' + off.toFixed(1) + ';stroke-dasharray:' + C.toFixed(1) + ';stroke-dashoffset:' + off.toFixed(1) + '" transform="rotate(-90 42 42)"/></svg>';
+}
+function dzu_tasksHtml(D, k) {
+  var p = D.n ? D.d / D.n : 0;
+  var head = '<div class="dzu-row"><div class="dzu-rw">' + dzu_ring(p, D.od ? 'warn' : '') + '<div class="dzu-rc"><b class="num">' + D.d + '</b><span>/' + D.n + '</span></div></div>' +
+    '<div class="dzu-kv dzu-kvl"><div><span>' + dzu_e('Сегодня') + '</span>' + dzu_n(D.n) + '</div><div class="ok"><span>' + dzu_e('Сделано') + '</span>' + dzu_n(D.d) + '</div><div class="' + (D.od ? 'bad' : '') + '"><span>' + dzu_e('Просрочено') + '</span>' + dzu_n(D.od) + '</div></div></div>';
+  var list = D.nx.length ? '<div class="dzu-ls">' + D.nx.map(function (t, i) {
+    var e = !D.mine && t.assignee_id ? emp(t.assignee_id) : null, od = overdue(t);
+    return '<div class="dzu-li" style="--i:' + i + '"><i class="' + (od ? 'bad' : t.status === 'work' ? 'info' : '') + '"></i><span class="grow">' + h(dzu_cut(t.title, 44)) + '</span><span class="dzu-lm">' + (t.due_time ? '<span class="num">' + h(String(t.due_time).slice(0, 5)) + '</span>' : '') + (e ? ' · ' + h(e.first_name) : '') + '</span></div>';
+  }).join('') + '</div>' : '<div class="dzu-m">' + dzu_s(D.n ? 'На сегодня всё сделано' : 'На сегодня задач нет') + '</div>';
+  return head + list + '<div class="dzu-act">' + dzu_btn(k, 'Все задачи') + '</div>';
+}
+var DZU_LD = {
+  tasks: async function () { return dzu_tasksHtml(await dzu_tasksData(false), 'tasks'); },
+  mytasks: async function () { return dzu_tasksHtml(await dzu_tasksData(true), 'mytasks'); },
+  shtat: async function () {
+    var D = await dsh_overview(true), T = D.totals, seats = Math.max(T.seats, T.filled), nx = dsh_next(D);
+    var N = Math.min(24, Math.max(seats, T.people, 1)), fill = seats ? Math.round(T.filled / seats * N) : Math.min(N, T.people), vac = seats ? Math.min(N - fill, Math.ceil(T.vacancies / seats * N)) : 0;
+    var desk = ''; for (var i = 0; i < N; i++) desk += '<i class="' + (i < fill ? 'f' : i < fill + vac ? 'v' : '') + '" style="--i:' + i + '"></i>';
+    var pc = seats ? Math.round(T.filled / seats * 100) : 0;
+    return '<div class="dzu-row dzu-top"><div class="dzu-office" aria-hidden="true">' + desk + '</div>' +
+      '<div class="dzu-kv dzu-kvl"><div><span>' + dzu_e(dzu_pl(T.people, 'человек', 'человека', 'человек')) + '</span>' + dzu_n(T.people) + '</div><div><span>' + dzu_e(dzu_pl(T.depts, 'служба', 'службы', 'служб')) + '</span>' + dzu_n(T.depts) + '</div><div class="' + (T.vacancies ? 'warn' : '') + '"><span>' + dzu_e(dzu_pl(T.vacancies, 'вакансия', 'вакансии', 'вакансий')) + '</span>' + dzu_n(T.vacancies) + '</div></div></div>' +
+      (seats ? '<div class="dzu-bar"><i style="--w:' + pc + '%"></i></div><div class="dzu-m">' + dzu_e('{a} из {b} мест занято', { a: T.filled, b: seats }) + '</div>' : '<div class="dzu-m">' + dzu_s('Численность по должностям не задана') + '</div>') +
+      '<div class="dzu-m dzu-nx">' + (nx && nx.t ? '<b>' + dzu_e('Следующий шаг:') + '</b> ' + h(nx.t) : '') + '</div>' +
+      '<div class="dzu-act">' + dzu_btn('shtat', 'Открыть штат') + (nx && nx.k === 'inv' && nx.p ? '<button type="button" class="btn ghost sm dzu-gh" id="dzuInv">' + dzu_s('+ Пригласить') + '</button>' : '') + '</div>';
+  },
+  map: async function () {
+    var people = dx_people(), D = await dx_data(today(), '', people);
+    var V = D ? dx_view(D, '', today()) : { P: [] }, P = V.P || [], on = D ? Object.keys(D.on || {}).length : 0;
+    var nIn = P.filter(function (p) { return p.zone && !p.out; }).length, nOut = P.filter(function (p) { return p.out; }).length;
+    var W = 300, H = 132, c = D && (D.v || D.center) || (P[0] ? { lat: P[0].lat, lng: P[0].lng } : null), dots = '';
+    if (c) {
+      var kx = 111320 * Math.cos(c.lat * Math.PI / 180), ky = 111320, maxd = (D.v ? D.v.rad : 60) * 1.3;
+      P.forEach(function (p) { maxd = Math.max(maxd, Math.abs((p.lng - c.lng) * kx) * 1.15, Math.abs((p.lat - c.lat) * ky) * 1.15); });
+      var s = (H / 2 - 10) / maxd;
+      P.slice(0, 40).forEach(function (p, i) {
+        var x = W / 2 + Math.max(-W / 2 + 8, Math.min(W / 2 - 8, (p.lng - c.lng) * kx * s)), y = H / 2 - Math.max(-H / 2 + 8, Math.min(H / 2 - 8, (p.lat - c.lat) * ky * s));
+        dots += '<g class="dzu-pt ' + (p.zone == null ? 'info' : p.out ? 'bad' : 'ok') + '" style="--i:' + i + ';transform-origin:' + x.toFixed(1) + 'px ' + y.toFixed(1) + 'px"><circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="5.5"/><title>' + h(dzu_short(p.e)) + '</title></g>';
+      });
+    }
+    var grid = ''; for (var g = 1; g < 6; g++) grid += '<line x1="' + g * 50 + '" y1="0" x2="' + g * 50 + '" y2="' + H + '"/>'; for (g = 1; g < 3; g++) grid += '<line x1="0" y1="' + g * 44 + '" x2="' + W + '" y2="' + g * 44 + '"/>';
+    var svg = '<svg class="dzu-map" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><g class="gr">' + grid + '</g>' +
+      '<circle class="wv" cx="' + W / 2 + '" cy="' + H / 2 + '" r="14"/><circle class="wv w2" cx="' + W / 2 + '" cy="' + H / 2 + '" r="14"/><circle class="wv w3" cx="' + W / 2 + '" cy="' + H / 2 + '" r="14"/>' +
+      '<circle class="zn" cx="' + W / 2 + '" cy="' + H / 2 + '" r="' + (D && D.v ? 30 : 0) + '"/><circle class="vc" cx="' + W / 2 + '" cy="' + H / 2 + '" r="4.5"/>' + dots + '</svg>';
+    return '<div class="dzu-mapw">' + svg + '</div>' +
+      '<div class="dzu-kv dzu-kv3"><div class="ok"><span>' + dzu_e('На смене') + '</span>' + dzu_n(on) + '</div><div class="ok"><span>' + dzu_e('В зоне') + '</span>' + dzu_n(nIn) + '</div><div class="' + (nOut ? 'bad' : '') + '"><span>' + dzu_e('Вне зоны') + '</span>' + dzu_n(nOut) + '</div></div>' +
+      (P.length ? '' : '<div class="dzu-m">' + dzu_s('Точки появятся, когда сотрудники отметят приход') + '</div>') +
+      '<div class="dzu-act">' + dzu_btn('map', 'Открыть карту') + '</div>';
+  },
+  honor: async function () {
+    var dow = (new Date(today() + 'T12:00:00').getDay() + 6) % 7, from = addDays(today(), -dow), wk = true;
+    var r = await qSafe(sb.rpc('staff_rating', { p_from: from, p_to: today() })), R = r ? rateCalc(r.data || []) : [];
+    var top = R.filter(function (x) { return x.eligible; }).sort(function (a, b) { return a.gpl - b.gpl; }).slice(0, 3);
+    if (!top.length) { wk = false; var ym = today().slice(0, 7); r = await qSafe(sb.rpc('staff_rating', { p_from: ym + '-01', p_to: today() })); R = r ? rateCalc(r.data || []) : []; top = R.filter(function (x) { return x.eligible; }).sort(function (a, b) { return a.gpl - b.gpl; }).slice(0, 3); }
+    if (!top.length) return '<div class="dzu-pod dzu-pod0" aria-hidden="true"><i class="p2"></i><i class="p1"></i><i class="p3"></i></div><div class="dzu-m">' + dzu_s('Рейтинг появится после первых смен и задач') + '</div><div class="dzu-act">' + dzu_btn('honor', 'Вся доска') + '</div>';
+    var ord = [top[1], top[0], top[2]], pl = [2, 1, 3];
+    var mine = R.filter(function (x) { return x.id === S.me.id && x.eligible; })[0];
+    return '<div class="dzu-pod">' + ord.map(function (x, i) {
+      if (!x) return '<div class="dzu-pc p' + pl[i] + ' empty"><div class="dzu-col"></div></div>';
+      var e = emp(x.id) || { first_name: x.name || '—', last_name: '' };
+      return '<div class="dzu-pc p' + pl[i] + '" style="--i:' + i + '"><span class="dzu-md m' + pl[i] + '"><b class="num">' + pl[i] + '</b></span><span class="dzu-av">' + h(dzu_ini(e)) + '</span><span class="dzu-pn">' + h(dzu_short(e)) + '</span><span class="dzu-ps num">' + h(String(x.score).replace('.', ',')) + '</span><div class="dzu-col"></div></div>';
+    }).join('') + '</div>' +
+      '<div class="dzu-m">' + dzu_s(wk ? 'Лучшие за неделю' : 'Лучшие за месяц') + (mine && mine.gpl > 3 ? ' · ' + dzu_s('вы — {n} место', { n: mine.gpl }) : '') + '</div>' +
+      '<div class="dzu-act">' + dzu_btn('honor', 'Вся доска') + '</div>';
+  },
+  decide: async function () {
+    var L = await d6Load(); L = L || [];
+    var old = L[0] && L[0].at ? Math.max(0, Math.round((Date.now() - Date.parse(L[0].at)) / 36e5)) : null;
+    return '<div class="dzu-row dzu-top"><div class="dzu-big' + (L.length ? ' warn' : '') + '">' + dzu_n(L.length) + '<span class="dzu-bell" aria-hidden="true">' + icon('clip', 22) + '</span></div><div class="dzu-m" style="flex:1">' + dzu_s(L.length ? 'Ждут вашего ответа' : 'Всё решено') + (old != null && L.length ? '<br>' + dzu_s('самое старое — {n} ч', { n: old }) : '') + '</div></div>' +
+      (L.length ? '<div class="dzu-ls">' + L.slice(0, 3).map(function (i, k) { return '<div class="dzu-li" style="--i:' + k + '"><i class="warn"></i><span class="grow">' + dzu_e(i.what || '') + (i.e ? ' · ' + h(dzu_short(i.e)) : '') + '</span></div>'; }).join('') + '</div>' : '') +
+      '<div class="dzu-act">' + dzu_btn('decide', 'Все решения') + '</div>';
+  },
+  req: async function () {
+    var r = await dr_rpc('requests_home'), d = (r && !r.error && r.data) || {};
+    var L = [['Ремонт — без исполнителя', +d.repair_nobody || 0, 'warn'], ['Ремонт — назначено вам', +d.repair_todo || 0, 'info'], ['Закупки ждут решения', +d.buy_new || 0, 'warn'], ['Одобрено — купить', +d.buy_to_buy || 0, 'info'], ['Находки на хранении', +d.found_stored || 0, '']].filter(function (x) { return x[1] > 0; });
+    var tot = L.reduce(function (a, x) { return a + x[1]; }, 0);
+    return '<div class="dzu-row dzu-top"><div class="dzu-big' + (+d.repair_urgent ? ' bad' : '') + '">' + dzu_n(tot) + '<span class="dzu-wr" aria-hidden="true">' + icon('tool', 22) + '</span></div><div class="dzu-m" style="flex:1">' + dzu_s(tot ? 'Открытые заявки' : 'Открытых заявок нет') + (+d.repair_urgent ? '<br><b class="dzu-badt">' + dzu_e('срочно: {n}', { n: +d.repair_urgent }) + '</b>' : '') + '</div></div>' +
+      (L.length ? '<div class="dzu-ls">' + L.slice(0, 3).map(function (x, k) { return '<div class="dzu-li" style="--i:' + k + '"><i class="' + x[2] + '"></i><span class="grow">' + dzu_e(x[0]) + '</span><b class="num">' + x[1] + '</b></div>'; }).join('') + '</div>' : '') +
+      '<div class="dzu-act">' + dzu_btn('req', 'Открыть заявки') + '</div>';
+  },
+  sched: async function () {
+    var R = await teamPhases(dzu_people()), L = (R && R.list) || [];
+    var work = L.filter(function (x) { return !/^(off|nosched|skip)$/.test(x.p.st); }), off = L.filter(function (x) { return x.p.st === 'off'; }).length;
+    var inN = work.filter(function (x) { return x.p.st === 'in' || x.p.st === 'late'; }).length;
+    var grp = {}; work.forEach(function (x) { var k = x.p.start ? x.p.start : '—'; (grp[k] = grp[k] || []).push(x); });
+    var keys = Object.keys(grp).filter(function (k) { return k !== '—'; }).sort();
+    var av = work.slice(0, 14).map(function (x, i) { return '<span class="dzu-ab ' + (x.p.st === 'in' ? 'ok' : x.p.st === 'late' ? 'warn' : /missing|absent/.test(x.p.st) ? 'bad' : '') + '" style="--i:' + i + '" title="' + h(dzu_short(x.e)) + '">' + h(dzu_ini(x.e)) + '</span>'; }).join('') + (work.length > 14 ? '<span class="dzu-ab more">+' + (work.length - 14) + '</span>' : '');
+    return '<div class="dzu-kv dzu-kv3"><div><span>' + dzu_e('Работают') + '</span>' + dzu_n(work.length) + '</div><div class="ok"><span>' + dzu_e('Уже на месте') + '</span>' + dzu_n(inN) + '</div><div><span>' + dzu_e('Выходной') + '</span>' + dzu_n(off) + '</div></div>' +
+      (work.length ? '<div class="dzu-abs">' + av + '</div>' : '<div class="dzu-m">' + dzu_s('Сегодня по графику никто не работает') + '</div>') +
+      (keys.length ? '<div class="dzu-m dzu-sg">' + keys.slice(0, 3).map(function (k) { return (k === '—' ? dzu_e('без времени') : dzu_e('с {t}', { t: h(k) })) + ': <b class="num">' + grp[k].length + '</b>'; }).join(' · ') + '</div>' : '') +
+      '<div class="dzu-act">' + dzu_btn('sched', 'Открыть график') + '</div>';
+  },
+  late: async function () {
+    var R = await teamPhases(dzu_people()), L = (R && R.list) || [];
+    var late = L.filter(function (x) { return x.p.st === 'late' || (x.a && x.a.is_late && x.a.late_min > 0); }), miss = L.filter(function (x) { return /missing|absent/.test(x.p.st); });
+    var mx = Math.max.apply(null, [15].concat(late.map(function (x) { return +(x.p.lateMin || (x.a && x.a.late_min) || 0); })));
+    var rows = late.slice().sort(function (a, b) { return (+(b.p.lateMin || (b.a && b.a.late_min) || 0)) - (+(a.p.lateMin || (a.a && a.a.late_min) || 0)); }).slice(0, 3).map(function (x, i) {
+      var v = +(x.p.lateMin || (x.a && x.a.late_min) || 0);
+      return '<div class="dzu-lb" style="--i:' + i + '"><span class="n">' + h(dzu_short(x.e)) + '</span><span class="b"><i style="--w:' + Math.max(6, Math.round(v / mx * 100)) + '%"></i></span><span class="num">' + h(fmtMin(v)) + '</span></div>';
+    }).join('');
+    return '<div class="dzu-kv"><div class="' + (late.length ? 'warn' : 'ok') + '"><span>' + dzu_e('Опоздали') + '</span>' + dzu_n(late.length) + '</div><div class="' + (miss.length ? 'bad' : 'ok') + '"><span>' + dzu_e('Не пришли') + '</span>' + dzu_n(miss.length) + '</div></div>' +
+      (rows ? '<div class="dzu-lbs">' + rows + '</div>' : '<div class="dzu-m">' + dzu_s(miss.length ? 'Опозданий нет' : 'Все вовремя') + '</div>') +
+      (miss.length ? '<div class="dzu-m"><b class="dzu-badt">' + dzu_e('Не пришли:') + '</b> ' + miss.slice(0, 4).map(function (x) { return h(dzu_short(x.e)); }).join(', ') + (miss.length > 4 ? ' …' : '') + '</div>' : '') +
+      '<div class="dzu-act">' + dzu_btn('late', dzu_dir() ? 'Приход и уход' : 'Сейчас в заведении') + '</div>';
+  },
+  month: async function () {
+    var ym = today().slice(0, 7), ppl = dzu_people(), ids = {}; ppl.forEach(function (e) { ids[e.id] = 1; });
+    var r = await qSafe(sb.from('attendance').select('*').gte('day', ym + '-01').lte('day', today()));
+    var A = ((r && r.data) || []).filter(function (a) { return ids[a.employee_id] && a.clock_in; });
+    var min = A.reduce(function (t, a) { return t + (+a.worked_min || 0); }, 0), late = A.filter(function (a) { return a.is_late; }).length;
+    var wk = [0, 0, 0, 0, 0]; A.forEach(function (a) { var d = +String(a.day).slice(8, 10) || 1; wk[Math.min(4, Math.floor((d - 1) / 7))] += (+a.worked_min || 0); });
+    var mx = Math.max.apply(null, wk.concat([1])), nw = Math.min(5, Math.floor((+today().slice(8, 10) - 1) / 7) + 1);
+    var bars = wk.slice(0, nw).map(function (v, i) { return '<span class="dzu-wb" style="--i:' + i + '"><i style="--h:' + Math.max(4, Math.round(v / mx * 100)) + '%"></i><small class="num">' + (i + 1) + '</small></span>'; }).join('');
+    return '<div class="dzu-row dzu-top"><div class="dzu-wbs" aria-hidden="true">' + bars + '</div><div class="dzu-kv dzu-kvl"><div><span>' + dzu_e('Смен') + '</span>' + dzu_n(A.length) + '</div><div><span>' + dzu_e('Часов') + '</span>' + dzu_n(Math.round(min / 60)) + '</div><div class="' + (late ? 'warn' : 'ok') + '"><span>' + dzu_e('Опозданий') + '</span>' + dzu_n(late) + '</div></div></div>' +
+      '<div class="dzu-m">' + dzu_e('{m}: часы, опоздания и «К выплате» — в табеле', { m: dzu_t(['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'][+ym.slice(5, 7) - 1]) }) + '</div>' +
+      '<div class="dzu-act">' + dzu_btn('month', 'Открыть табель') + '</div>';
+  },
+  myearn: async function () {
+    var X = null; try { X = await ca_month(S.me, typeof ca_ymNow === 'function' ? ca_ymNow() : today().slice(0, 7)); } catch (e) { X = null; }
+    var td = await qSafe(sb.rpc('earn_today')), T = (td && td.data) || {};
+    var acc = X ? +X.acc || 0 : 0, mn = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'][+today().slice(5, 7) - 1];
+    return '<div class="dzu-money"><span class="dzu-coin" aria-hidden="true"><i></i><i></i><i></i></span><div><div class="dzu-m">' + dzu_e('{m} на сегодня', { m: dzu_t(mn) }) + '</div><div class="dzu-mv">' + dzu_n(acc, true) + ' <small>' + dzu_e('сум') + '</small></div></div></div>' +
+      '<div class="dzu-kv"><div><span>' + dzu_e('Сегодня') + '</span><b class="num">' + money(+T.amount || 0) + '</b></div>' + (X && X.shifts != null ? '<div><span>' + dzu_e('Смен') + '</span>' + dzu_n(X.shifts) + '</div>' : '') + '</div>' +
+      '<div class="dzu-act">' + dzu_btn('myearn', 'Подробнее') + '</div>';
+  },
+  week: async function () {
+    var to = addDays(today(), 6), r = await qSafe(sb.from('schedule').select('*').eq('employee_id', S.me.id).gte('day', today()).lte('day', to)), by = {};
+    ((r && r.data) || []).forEach(function (x) { by[x.day] = x; });
+    var DW = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'], nW = 0;
+    var cells = [0, 1, 2, 3, 4, 5, 6].map(function (i) {
+      var d = addDays(today(), i), sh = null; try { sh = myShiftToday(S.me, d, by[d] !== undefined ? by[d] : (i === 0 ? undefined : null)); } catch (e) { sh = null; }
+      var off = !sh || sh.off || sh.src === 'none', t = sh && sh.start ? String(sh.start).slice(0, 5) : ''; if (!off) nW++;
+      return '<div class="dzu-dy' + (i === 0 ? ' td' : '') + (off ? ' off' : '') + '" style="--i:' + i + '"><small>' + dzu_e(DW[new Date(d + 'T12:00:00').getDay()]) + '</small><b class="num">' + +d.slice(8, 10) + '</b><span class="num">' + (off ? dzu_e('вых') : h(t || '•')) + '</span></div>';
+    }).join('');
+    return '<div class="dzu-wk">' + cells + '</div><div class="dzu-m">' + dzu_e('Смен на 7 дней: {n}', { n: nW }) + '</div><div class="dzu-act">' + dzu_btn('week', 'Мой график') + '</div>';
+  },
+  ai: async function () {
+    var ex = ['Кто сегодня опоздал?', 'Поставь задачу на завтра', 'Составь график на неделю'];
+    return '<div class="dzu-ai"><span class="dzu-typ" aria-hidden="true"><i></i><i></i><i></i></span><div class="dzu-m">' + dzu_s('Скажите или напишите — помощник покажет, что сделает, а вы подтвердите') + '</div></div>' +
+      '<div class="dzu-chips">' + ex.map(function (q, i) { return '<button type="button" class="dzu-chip" data-dzaq="' + i + '" style="--i:' + i + '">' + dzu_s(q) + '</button>'; }).join('') + '</div>' +
+      '<div class="dzu-act">' + dzu_btn('ai', 'Спросить помощника') + '</div>';
+  },
+  skills: async function () {
+    var lead = typeof dk_lead === 'function' && dk_lead(), X = lead ? await dk_teamCache() : await dk_myCache(); X = X || {};
+    if (lead) return '<div class="dzu-row dzu-top"><div class="dzu-rw">' + dzu_ring(X.n ? Math.min(1, (X.ok || X.done || 0) / X.n) : 0) + '<div class="dzu-rc"><span class="dzu-ic">' + icon('medal', 22) + '</span></div></div><div class="dzu-kv"><div><span>' + dzu_e('Навыков у команды') + '</span>' + dzu_n(X.n || 0) + '</div><div class="' + (X.p ? 'warn' : '') + '"><span>' + dzu_e('Ждут проверки') + '</span>' + dzu_n(X.p || 0) + '</div></div></div>' +
+      '<div class="dzu-act">' + dzu_btn('skills', 'Кто что умеет') + '</div>';
+    var lv = X.lv || null;
+    return '<div class="dzu-row dzu-top"><div class="dzu-rw">' + dzu_ring(lv && lv.total ? lv.approved / lv.total : 0) + '<div class="dzu-rc"><b class="num">' + (lv ? lv.level : 1) + '</b></div></div><div class="dzu-kv"><div><span>' + dzu_e('Допусков') + '</span><b class="num">' + (lv ? lv.approved + '/' + lv.total : '0') + '</b></div></div></div>' +
+      '<div class="dzu-act">' + dzu_btn('skills', 'Мои допуски') + '</div>';
+  }
+};
+var DZU_BIND = {
+  shtat: function (el) { var b = el.querySelector('#dzuInv'); if (b) b.onclick = function () { try { var D = DSH && DSH.data, nx = D ? dsh_next(D) : null; if (nx && nx.p) dsh_invite(nx.p.id); else dsh_open(); } catch (e) { dsh_open(); } }; },
+  ai: function (el) {
+    el.querySelectorAll('[data-dzaq]').forEach(function (b) { b.onclick = function () {
+      var q = b.textContent.trim(); dai_open('home');
+      var n = 0, t = setInterval(function () { var ta = $('daiQ'); if (ta || ++n > 30) { clearInterval(t); if (ta) { ta.value = q; try { ta.dispatchEvent(new Event('input', { bubbles: true })); ta.focus(); } catch (e) {} } } }, 100);
+    }; });
+  }
+};
+
+/* ---------- лист «Виджеты главной» ---------- */
+function dzu_settings() {
+  var on = dzu_list(), cat = dzu_cat(), off = cat.filter(function (k) { return on.indexOf(k) < 0; });
+  function row(k, inn, i) {
+    var W = DZU_W[k];
+    return '<div class="ed-row dzu-er" data-k="' + k + '">' +
+      (inn ? '<button type="button" class="ed-add ed-del" data-dzdel="' + k + '" aria-label="' + dzu_e('Выключить') + '">−</button>' : '<button type="button" class="ed-add" data-dzadd="' + k + '" aria-label="' + dzu_e('Добавить') + '">+</button>') +
+      '<span class="ed-ic">' + icon(W.ic, 20) + '</span><span class="grow">' + dzu_s(W.t) + '</span>' +
+      (inn ? '<button type="button" class="dzu-mv" data-dzup="' + k + '"' + (i === 0 ? ' disabled' : '') + ' aria-label="' + dzu_e('Выше') + '">' + icon('chev', 16) + '</button><button type="button" class="dzu-mv dn" data-dzdn="' + k + '"' + (i === on.length - 1 ? ' disabled' : '') + ' aria-label="' + dzu_e('Ниже') + '">' + icon('chev', 16) + '</button><span class="ed-grip" aria-hidden="true"><i></i><i></i><i></i></span>' : '') + '</div>';
+  }
+  sheet(sheetHead('Виджеты главной', 'Виджеты листаются влево-вправо. Красная кнопка — выключить, золотая — добавить. Порядок — стрелками или перетащите за ≡.') +
+    '<div class="ed-cap">' + dzu_s('В стопке') + '</div><div class="ed-list" id="dzuOn">' + (on.length ? on.map(function (k, i) { return row(k, true, i); }).join('') : '<div class="ed-row"><span class="grow meta" style="font-weight:400">' + dzu_s('Стопка выключена — добавьте виджет ниже') + '</span></div>') + '</div>' +
+    (off.length ? '<div class="ed-cap" style="margin-top:14px">' + dzu_s('Добавить') + '</div><div class="ed-list">' + off.map(function (k) { return row(k, false); }).join('') + '</div>' : '') +
+    '<div class="meta" style="margin:10px 2px 0;white-space:normal">' + dzu_s('Настройка хранится на этом телефоне.') + '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:12px"><button type="button" class="btn ghost" id="dzuRst" style="flex:1">' + dzu_s('Как было') + '</button><button type="button" class="btn gold" id="dzuOk" style="flex:2">' + dzu_s('Готово') + '</button></div>');
+  var box = $('dzuOn'), L = $('layer');
+  function collect() { return Array.prototype.map.call(box.querySelectorAll('.ed-row[data-k]'), function (x) { return x.getAttribute('data-k'); }); }
+  function apply(nw) { dzu_save(nw); try { haptic(); } catch (e) {} dzu_mount(); dzu_settings(); }
+  if (typeof sortable === 'function') sortable(box, '.ed-row[data-k]', { handle: '.ed-grip', axis: 'y' });
+  box.addEventListener('pointerup', function (e) { if (!(e.target.closest && e.target.closest('.ed-grip'))) return; setTimeout(function () { if (!box.isConnected) return; var c = collect(); if (c.join() !== dzu_list().join()) { dzu_save(c); dzu_mount(); } }, 60); });
+  L.querySelectorAll('[data-dzdel]').forEach(function (b) { b.onclick = function () { var k = b.getAttribute('data-dzdel'); apply(collect().filter(function (x) { return x !== k; })); }; });
+  L.querySelectorAll('[data-dzadd]').forEach(function (b) { b.onclick = function () { apply(collect().concat([b.getAttribute('data-dzadd')])); }; });
+  L.querySelectorAll('[data-dzup],[data-dzdn]').forEach(function (b) { b.onclick = function () {
+    var k = b.getAttribute('data-dzup') || b.getAttribute('data-dzdn'), c = collect(), i = c.indexOf(k), j = i + (b.hasAttribute('data-dzup') ? -1 : 1);
+    if (i < 0 || j < 0 || j >= c.length) return; c[i] = c[j]; c[j] = k; apply(c);
+  }; });
+  $('dzuRst').onclick = function () { try { localStorage.removeItem(dzu_key()); } catch (e) {} DZU.idx = 0; dzu_mount(); dzu_settings(); };
+  $('dzuOk').onclick = function () { var c = collect(); if (c.join() !== dzu_list().join()) dzu_save(c); closeLayer(); dzu_mount(); };
+}
+
+/* ---------- обёртки ---------- */
+(function () {
+  /* в стопке карточка смены всегда полная (сжатая строка 92t — только без стопки) */
+  if (typeof cb_cardHtml === 'function') {
+    var ch0 = cb_cardHtml;
+    cb_cardHtml = function () {
+      var inS = false; try { inS = dzu_on() && S.view === 'home' && dzu_list().indexOf('shift') >= 0; } catch (e) {}
+      if (inS && typeof DT === 'object' && DT) DT.cbOpen = true;
+      var html = ch0.apply(this, arguments);
+      if (inS) html = html.replace(/<button type="button" class="cb-lk" id="dtCbClose">[\s\S]*?<\/button>/, '');
+      return html;
+    };
+  }
+  if (typeof cb_mount === 'function') {
+    var cm0 = cb_mount;
+    cb_mount = function () { var r = cm0.apply(this, arguments); try { dzu_mount(); } catch (e) { console.warn('dzu', e); } return r; };
+  }
+  /* «Профиль → Виджеты на главной» — тот же лист */
+  if (typeof wgSettings === 'function') { var ws0 = wgSettings; wgSettings = function () { if (dzu_on()) return dzu_settings(); return ws0.apply(this, arguments); }; }
+  W3.home.push(function () { [0, 300, 1200].forEach(function (ms) { setTimeout(function () { try { dzu_mount(); } catch (e) { console.warn('dzu', e); } }, ms); }); });
+  /* живые данные: раз в минуту, пока открыта главная; часы — каждые 20 с */
+  setInterval(function () { try { var st = $('dzuStack'); if (st && S.view === 'home' && !document.hidden) dzu_fill(st); } catch (e) {} }, 60000);
+  setInterval(function () { try { var cb = $('cbClock'); if (cb && $('dzuStack') && $('dzuStack').contains(cb)) dzu_clockDeco(cb); } catch (e) {} }, 20000);
+  addEventListener('resize', function () { var st = $('dzuStack'); if (st) dzu_setIdx(st, DZU.idx, false); });
+})();
+
+/* ---------- стили (фирменное золото; карточки — как «Смена»; без анимаций при «уменьшить движение») ---------- */
+(function () {
+  var st = document.createElement('style'); st.id = 'dzuCss';
+  st.textContent =
+    '.dzu{display:flex;flex-direction:column;gap:6px;margin:0 0 14px;min-width:0}' +
+    '.dzu-sc{display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;border-radius:18px;outline:none;-webkit-overflow-scrolling:touch}' +
+    '.dzu-sc::-webkit-scrollbar{display:none}.dzu-sc:focus-visible{box-shadow:0 0 0 2px var(--gold)}' +
+    '.dzu-sl{flex:0 0 100%;min-width:0;scroll-snap-align:start;scroll-snap-stop:always;box-sizing:border-box;padding:0 1px;display:flex;flex-direction:column}' +
+    '.dzu-sl>.cb-w{flex:1;display:flex;flex-direction:column;margin:0!important;min-width:0}.dzu-sl>.cb-w>.shift{flex:1}' +
+    '.dzu-c{flex:1;min-height:262px;gap:10px!important;cursor:pointer;-webkit-tap-highlight-color:transparent}' +
+    '.dzu-h{display:flex;align-items:center;justify-content:space-between;gap:8px}.dzu-hi{color:#D1A958;display:flex;opacity:.9}' +
+    '.dzu-b{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0}' +
+    '.dzu-m{font-size:13.5px;color:#C9C3B8;line-height:1.4;white-space:normal}.dzu-m b{color:#F3EEE4}' +
+    '.dzu-act{margin-top:auto;display:flex;gap:8px;flex-wrap:wrap}.dzu-go{display:inline-flex;align-items:center;gap:4px;min-height:44px}.dzu-go svg{flex:none}' +
+    '.dzu-gh{min-height:44px;color:#F3EEE4!important;border-color:rgba(209,169,88,.4)!important;background:rgba(255,255,255,.04)!important}' +
+    '.dzu-sk{display:flex;flex-direction:column;gap:8px;padding-top:6px}.dzu-sk i{display:block;height:14px;border-radius:7px;background:linear-gradient(90deg,rgba(255,255,255,.05),rgba(209,169,88,.14),rgba(255,255,255,.05));background-size:200% 100%;animation:dzuSk 1.4s linear infinite}.dzu-sk i:nth-child(2){width:70%}.dzu-sk i:nth-child(3){width:45%}' +
+    '@keyframes dzuSk{to{background-position:-200% 0}}' +
+    '.dzu-row{display:flex;align-items:center;gap:14px;min-width:0}.dzu-top{align-items:flex-start}' +
+    '.dzu-kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(70px,1fr));gap:8px;flex:1;min-width:0}.dzu-kv3{grid-template-columns:repeat(3,1fr)}' +
+    '.dzu-kv>div{background:rgba(255,255,255,.05);border:1px solid rgba(209,169,88,.18);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column-reverse;gap:2px;min-width:0}' +
+    '.dzu-kv b{font-family:var(--serif,inherit);font-size:28px;line-height:1.05;color:#F3EEE4}.dzu-kv span{font-size:12px;color:#A39E94;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.dzu-b>.dzu-kv{flex:none}.dzu-kvl{grid-template-columns:1fr;gap:4px}.dzu-kvl>div{flex-direction:row;align-items:center;justify-content:space-between;padding:6px 10px;gap:8px}.dzu-kvl b{font-size:22px}.dzu-kvl span{font-size:12.5px;color:#C9C3B8}' +
+    '.dzu-kv .ok b{color:var(--dj-okf,#38C98D)}.dzu-kv .warn b{color:var(--dj-warnf,#F0B13D)}.dzu-kv .bad b{color:var(--dj-badf,#FF6B5E)}.dzu-badt{color:var(--dj-badf,#FF6B5E)!important}' +
+    /* круг прогресса */
+    '.dzu-rw{position:relative;flex:none;width:84px;height:84px}.dzu-rc{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:1px;color:#F3EEE4}.dzu-rc b{font-family:var(--serif,inherit);font-size:28px}.dzu-rc span{font-size:14px;color:#A39E94;margin-top:6px}.dzu-rc .dzu-ic{color:#D1A958;margin:0}' +
+    '.dzu-ring .bg{fill:none;stroke:rgba(255,255,255,.08);stroke-width:8}.dzu-ring .fg{fill:none;stroke:#D1A958;stroke-width:8;stroke-linecap:round}.dzu-ring.warn .fg{stroke:url(#none);stroke:#D1A958}' +
+    '.dzu-on .dzu-ring .fg{animation:dzuRing 1.1s cubic-bezier(.3,.7,0,1) both}@keyframes dzuRing{from{stroke-dashoffset:var(--c)}}' +
+    /* списки */
+    '.dzu-ls{display:flex;flex-direction:column;gap:6px}.dzu-li{display:flex;align-items:center;gap:8px;font-size:14px;color:#F3EEE4;min-width:0}.dzu-li .grow{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dzu-li>i{flex:none;width:7px;height:7px;border-radius:50%;background:#D1A958}' +
+    '.dzu-li>i.bad{background:var(--dj-badf,#FF6B5E)}.dzu-li>i.warn{background:var(--dj-warnf,#F0B13D)}.dzu-li>i.info{background:var(--dj-infof,#6FA8FF)}.dzu-lm{flex:none;font-size:12.5px;color:#A39E94}' +
+    '.dzu-on .dzu-li{animation:dzuUp .5s calc(var(--i,0)*90ms + 150ms) both}@keyframes dzuUp{from{opacity:0;transform:translateY(6px)}}' +
+    /* штат: мини-офис */
+    '.dzu-office{flex:none;display:grid;grid-template-columns:repeat(6,14px);gap:5px;padding:8px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(209,169,88,.18)}' +
+    '.dzu-office i{width:14px;height:14px;border-radius:4px;background:rgba(255,255,255,.08)}.dzu-office i.f{background:#D1A958}.dzu-office i.v{background:transparent;box-shadow:inset 0 0 0 1.5px var(--dj-warnf,#F0B13D)}' +
+    '.dzu-on .dzu-office i.f{animation:dzuSeat .4s calc(var(--i)*40ms) both}.dzu-on .dzu-office i.v{animation:dzuSeat .4s calc(var(--i)*40ms) both,dzuVac 1.6s 1.2s ease-in-out infinite}' +
+    '@keyframes dzuSeat{from{transform:scale(.2);opacity:0}}@keyframes dzuVac{50%{box-shadow:inset 0 0 0 1.5px var(--dj-warnf,#F0B13D),0 0 10px rgba(240,177,61,.6)}}' +
+    '.dzu-bar{height:6px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}.dzu-bar i{display:block;height:100%;width:var(--w);background:linear-gradient(90deg,#B8913F,#E6C987);border-radius:inherit}.dzu-on .dzu-bar i{animation:dzuW 1s .2s cubic-bezier(.3,.7,0,1) both}@keyframes dzuW{from{width:0}}' +
+    '.dzu-nx:empty{display:none}' +
+    /* карта */
+    '.dzu-mapw{border-radius:12px;overflow:hidden;background:rgba(255,255,255,.03);border:1px solid rgba(209,169,88,.18)}.dzu-map{display:block;width:100%;height:132px}' +
+    '.dzu-map .gr line{stroke:rgba(255,255,255,.06);stroke-width:1}.dzu-map .zn{fill:rgba(209,169,88,.12);stroke:#D1A958;stroke-width:1.5}.dzu-map .vc{fill:#D1A958}' +
+    '.dzu-map .wv{fill:none;stroke:#D1A958;stroke-width:1.2;opacity:0;transform-origin:150px 66px}.dzu-on .dzu-map .wv{animation:dzuWave 3s ease-out infinite}.dzu-on .dzu-map .w2{animation-delay:1s}.dzu-on .dzu-map .w3{animation-delay:2s}' +
+    '@keyframes dzuWave{0%{transform:scale(.4);opacity:.7}100%{transform:scale(5.5);opacity:0}}' +
+    '.dzu-pt circle{stroke:#1E2124;stroke-width:2}.dzu-pt.ok circle{fill:var(--dj-okf,#38C98D)}.dzu-pt.bad circle{fill:var(--dj-badf,#FF6B5E)}.dzu-pt.info circle{fill:var(--dj-infof,#6FA8FF)}' +
+    '.dzu-on .dzu-pt{animation:dzuPop .5s calc(var(--i)*110ms + 250ms) cubic-bezier(.3,1.6,.5,1) both}@keyframes dzuPop{from{transform:scale(0);opacity:0}}' +
+    /* доска почёта: подиум */
+    '.dzu-pod{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-items:end;min-height:132px}.dzu-pc{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}' +
+    '.dzu-col{width:100%;border-radius:10px 10px 4px 4px;background:linear-gradient(180deg,rgba(209,169,88,.35),rgba(209,169,88,.08));border:1px solid rgba(209,169,88,.3);border-bottom:0}' +
+    '.dzu-pc.p1 .dzu-col{height:46px}.dzu-pc.p2 .dzu-col{height:30px}.dzu-pc.p3 .dzu-col{height:20px}.dzu-pc.empty{opacity:.35}' +
+    '.dzu-on .dzu-col{animation:dzuRise .7s calc(var(--i,0)*120ms) cubic-bezier(.3,.7,0,1) both;transform-origin:bottom}@keyframes dzuRise{from{transform:scaleY(0)}}' +
+    '.dzu-md{position:relative;overflow:hidden;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;color:#1b1610;font-size:13px}.dzu-md b{font-family:inherit}' +
+    '.dzu-md.m1{background:radial-gradient(circle at 35% 30%,#F6E2A8,#D1A958 55%,#9C7630)}.dzu-md.m2{background:radial-gradient(circle at 35% 30%,#F1F3F5,#A9B0B7 55%,#6E757C)}.dzu-md.m3{background:radial-gradient(circle at 35% 30%,#F0C9A5,#B87A4B 55%,#7D4E2C)}' +
+    '.dzu-md::after{content:"";position:absolute;top:-30%;left:-60%;width:40%;height:160%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.75),transparent);transform:rotate(25deg);opacity:0}' +
+    '.dzu-on .dzu-md::after{animation:dzuSheen 2.8s calc(var(--i,0)*300ms + 900ms) ease-in-out infinite}@keyframes dzuSheen{0%{left:-60%;opacity:0}10%{opacity:1}35%{left:130%;opacity:0}100%{left:130%;opacity:0}}' +
+    '.dzu-av{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;color:#F3EEE4;background:rgba(255,255,255,.08);border:1.5px solid rgba(209,169,88,.5)}.dzu-pc.p1 .dzu-av{width:46px;height:46px;border-color:#D1A958}' +
+    '.dzu-pn{font-size:12.5px;color:#F3EEE4;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dzu-ps{font-size:11.5px;color:#A39E94}' +
+    '.dzu-pod0{display:flex;justify-content:center;gap:8px;min-height:60px;align-items:flex-end}.dzu-pod0 i{width:56px;border-radius:8px 8px 3px 3px;background:rgba(209,169,88,.14);border:1px solid rgba(209,169,88,.25)}.dzu-pod0 .p1{height:46px}.dzu-pod0 .p2{height:30px}.dzu-pod0 .p3{height:20px}' +
+    /* большие числа */
+    '.dzu-big{display:flex;align-items:center;gap:8px;color:#F3EEE4}.dzu-big b{font-family:var(--serif,inherit);font-size:52px;line-height:1}.dzu-big.warn b{color:var(--dj-warnf,#F0B13D)}.dzu-big.bad b{color:var(--dj-badf,#FF6B5E)}' +
+    '.dzu-bell,.dzu-wr{color:#D1A958;display:flex}.dzu-on .dzu-bell{animation:dzuBell 2.4s 0.6s ease-in-out infinite;transform-origin:50% 0}@keyframes dzuBell{0%,60%,100%{transform:rotate(0)}10%{transform:rotate(14deg)}20%{transform:rotate(-10deg)}30%{transform:rotate(6deg)}40%{transform:rotate(-3deg)}}' +
+    '.dzu-on .dzu-wr{animation:dzuWr 3s .5s ease-in-out infinite}@keyframes dzuWr{0%,70%,100%{transform:rotate(0)}80%{transform:rotate(-25deg)}90%{transform:rotate(10deg)}}' +
+    /* график сегодня */
+    '.dzu-abs{display:flex;flex-wrap:wrap;gap:6px}.dzu-ab{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:700;color:#F3EEE4;background:rgba(255,255,255,.07);border:1.5px solid rgba(255,255,255,.14)}' +
+    '.dzu-ab.ok{border-color:var(--dj-okf,#38C98D)}.dzu-ab.warn{border-color:var(--dj-warnf,#F0B13D)}.dzu-ab.bad{border-color:var(--dj-badf,#FF6B5E)}.dzu-ab.more{font-weight:600;color:#D1A958}' +
+    '.dzu-on .dzu-ab{animation:dzuPop .45s calc(var(--i,0)*55ms + 120ms) cubic-bezier(.3,1.6,.5,1) both}.dzu-sg{font-size:12.5px}' +
+    /* опоздания */
+    '.dzu-lbs{display:flex;flex-direction:column;gap:7px}.dzu-lb{display:grid;grid-template-columns:minmax(0,92px) 1fr auto;gap:8px;align-items:center;font-size:13px;color:#F3EEE4}.dzu-lb .n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.dzu-lb .b{height:8px;border-radius:99px;background:rgba(255,255,255,.07);overflow:hidden}.dzu-lb .b i{display:block;height:100%;width:var(--w);background:var(--dj-warnf,#F0B13D);border-radius:inherit}.dzu-on .dzu-lb .b i{animation:dzuW .8s calc(var(--i)*120ms + 200ms) cubic-bezier(.3,.7,0,1) both}' +
+    /* табель: недели */
+    '.dzu-wbs{flex:none;display:flex;align-items:flex-end;gap:6px;height:92px;padding:6px 8px 0;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(209,169,88,.18)}' +
+    '.dzu-wb{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:3px;width:16px}.dzu-wb i{display:block;width:12px;height:var(--h);max-height:62px;border-radius:4px 4px 2px 2px;background:linear-gradient(180deg,#E6C987,#B8913F)}.dzu-wb small{font-size:9.5px;color:#A39E94;white-space:nowrap}' +
+    '.dzu-on .dzu-wb i{animation:dzuRise .7s calc(var(--i)*100ms + 100ms) cubic-bezier(.3,.7,0,1) both;transform-origin:bottom}' +
+    /* заработок */
+    '.dzu-money{display:flex;align-items:center;gap:14px}.dzu-mv{color:#F3EEE4}.dzu-mv b{font-family:var(--serif,inherit);font-size:36px;line-height:1.05}.dzu-mv small{font-size:13px;color:#A39E94}' +
+    '.dzu-coin{position:relative;flex:none;width:46px;height:52px}.dzu-coin i{position:absolute;left:3px;width:40px;height:12px;border-radius:50%;background:linear-gradient(180deg,#F1D58E,#B8913F);box-shadow:0 2px 0 #8C6B2A}' +
+    '.dzu-coin i:nth-child(1){bottom:0}.dzu-coin i:nth-child(2){bottom:10px}.dzu-coin i:nth-child(3){bottom:20px}.dzu-on .dzu-coin i{animation:dzuCoin .5s cubic-bezier(.3,1.5,.5,1) both}.dzu-on .dzu-coin i:nth-child(2){animation-delay:.15s}.dzu-on .dzu-coin i:nth-child(3){animation-delay:.3s}' +
+    '@keyframes dzuCoin{from{transform:translateY(-26px);opacity:0}}' +
+    /* неделя */
+    '.dzu-wk{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}.dzu-dy{display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 2px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(209,169,88,.18);min-width:0}' +
+    '.dzu-dy small{font-size:11px;color:#A39E94}.dzu-dy b{font-size:17px;color:#F3EEE4}.dzu-dy span{font-size:11px;color:#D1A958;white-space:nowrap;overflow:hidden;max-width:100%}.dzu-dy.off span{color:#77726A}.dzu-dy.td{border-color:#D1A958;background:rgba(209,169,88,.14)}' +
+    '.dzu-on .dzu-dy{animation:dzuUp .45s calc(var(--i)*60ms + 100ms) both}' +
+    /* ИИ */
+    '.dzu-ai{display:flex;align-items:flex-start;gap:12px}.dzu-typ{flex:none;display:flex;gap:4px;padding:12px 12px;border-radius:14px 14px 14px 4px;background:rgba(209,169,88,.14)}.dzu-typ i{width:7px;height:7px;border-radius:50%;background:#D1A958;opacity:.4}' +
+    '.dzu-on .dzu-typ i{animation:dzuTyp 1.2s ease-in-out infinite}.dzu-on .dzu-typ i:nth-child(2){animation-delay:.2s}.dzu-on .dzu-typ i:nth-child(3){animation-delay:.4s}@keyframes dzuTyp{30%{opacity:1;transform:translateY(-3px)}}' +
+    '.dzu-chips{display:flex;flex-direction:column;gap:6px}.dzu-chip{text-align:left;border:1px solid rgba(209,169,88,.3);background:rgba(255,255,255,.04);color:#F3EEE4;border-radius:12px;padding:8px 12px;min-height:40px;font:inherit;font-size:13.5px;cursor:pointer}.dzu-on .dzu-chip{animation:dzuUp .45s calc(var(--i)*90ms + 150ms) both}' +
+    /* часы на карточке смены */
+    '.dzu-clk{margin-left:auto;margin-right:6px;display:flex;flex:none}.dzu-clk svg{overflow:visible}.dzu-clk .fc{fill:rgba(255,255,255,.05);stroke:#D1A958;stroke-width:1.6}.dzu-clk .hh,.dzu-clk .mh{stroke:#F3EEE4;stroke-width:2;stroke-linecap:round}.dzu-clk .sh{stroke:#D1A958;stroke-width:1;stroke-linecap:round;transform-origin:20px 20px}.dzu-clk .cn{fill:#D1A958}' +
+    '.dzu-clk .r1,.dzu-clk .r2{fill:none;stroke:#D1A958;stroke-width:1.4;opacity:0;transform-origin:20px 20px}.dzu-clk.on .r1,.dzu-clk.on .r2{stroke:var(--dj-okf,#38C98D)}.dzu-clk.on .fc{stroke:var(--dj-okf,#38C98D)}' +
+    '.dzu-clk .sh{animation:dzuSec 60s steps(60) infinite}.dzu-clk.on .r1{animation:dzuPulse 2s ease-out infinite}.dzu-clk.on .r2{animation:dzuPulse 2s 1s ease-out infinite}.dzu-clk.off .r1{animation:dzuBreath 3.6s ease-in-out infinite}' +
+    '@keyframes dzuSec{to{transform:rotate(360deg)}}@keyframes dzuPulse{0%{transform:scale(.75);opacity:.85}100%{transform:scale(1.45);opacity:0}}@keyframes dzuBreath{0%,100%{transform:scale(.8);opacity:0}50%{transform:scale(1.15);opacity:.5}}' +
+    '.dzu-sl .hm-sh1{display:flex;align-items:center}' +
+    /* нижняя строка: точки, стрелки, настройка */
+    '.dzu-ft{display:flex;align-items:center;justify-content:center;gap:4px;position:relative;min-height:32px}' +
+    '.dzu-dots{display:flex;align-items:center;gap:2px}.dzu-d{border:0;background:none;padding:12px 3px;min-height:32px;cursor:pointer;display:flex;align-items:center}.dzu-d i{display:block;width:6px;height:6px;border-radius:3px;background:var(--line);transition:width .25s,background .25s}.dzu-d.on i{width:20px;background:var(--gold)}' +
+    '.dzu-ar{border:1px solid var(--line);background:var(--card);color:var(--ink);width:32px;height:32px;border-radius:50%;display:grid;place-items:center;cursor:pointer;padding:0}.dzu-ar svg{width:16px;height:16px}.dzu-ar:disabled{opacity:.35;cursor:default}' +
+    '.dzu-set{position:absolute;right:0;top:50%;transform:translateY(-50%);border:0;background:none;color:var(--muted);min-height:40px;min-width:40px;padding:0 4px;display:flex;align-items:center;justify-content:flex-end;gap:4px;cursor:pointer;font:inherit;font-size:12.5px}.dzu-set svg{width:18px;height:18px}' +
+    '.dzu-st{display:none}@media (min-width:700px){.dzu-st{display:inline}}' +
+    '@media (hover:none) and (pointer:coarse){.dzu-ar{display:none}}' +
+    '@media (max-width:360px){.dzu-kv b{font-size:24px}.dzu-office{grid-template-columns:repeat(6,11px);gap:4px}.dzu-office i{width:11px;height:11px}.dzu-rw{width:72px;height:72px}.dzu-ring{width:72px;height:72px}.dzu-big b{font-size:44px}.dzu-mv b{font-size:30px}.dzu-c{min-height:250px}}' +
+    '[data-lx="light"] .dzu-c{box-shadow:0 10px 26px -12px rgba(60,45,20,.45)}' +
+    /* лист настройки */
+    '.dzu-er{gap:8px}.dzu-mv{flex:none;width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);display:grid;place-items:center;padding:0;cursor:pointer}.dzu-mv svg{transform:rotate(-90deg)}.dzu-mv.dn svg{transform:rotate(90deg)}.dzu-mv:disabled{opacity:.3;cursor:default}' +
+    /* двойники стопки на главной */
+    'html.dzu-h-shtat #dshHome,html.dzu-h-shtat #dzrSetup,html.dzu-h-req #drHome,html.dzu-h-decide #w3Dec,html.dzu-h-myearn #cfWg_earn,html.dzu-h-week #cfWeek,html.dzu-h-mytasks #myTasks{display:none!important}' +
+    '@media (prefers-reduced-motion: reduce){.dzu *,.dzu *::before,.dzu *::after{animation:none!important;transition:none!important}.dzu-sc{scroll-behavior:auto}}';
+  document.head.appendChild(st);
+})();
+
+if (dzu_dbg()) window.__dzu = { mount: dzu_mount, list: dzu_list, cat: dzu_cat, save: dzu_save, settings: function () { return dzu_settings(); }, idx: function () { return DZU.idx; }, role: dzu_role, go: function (v) { return go(v); }, S: function () { return S; }, plOpen: function (id) { return plOpen(id); } };
+
+
+/* ===== ВОЛНА 4 · 92zw-close.js ===== */
+/* ===== 92zw «Закрыть заведение» (префикс dvc_). Решение владельца продукта 31.10. Журнал w4/log/dvc.md =====
+   1. Владелец (только owner своего заведения): «Пульт» → под группой «Настройки» красная строка «Закрыть заведение».
+   2. Экран подтверждения (вид dvc): что пропадёт (рубиновое предупреждение), «Скачать табели и заработок» (CSV для Excel, за всё время
+      по месяцам), ввод названия заведения (без учёта регистра и пробелов) и пароля владельца (повторный вход signInWithPassword с его
+      почтой; ошибка — «Неверный пароль»), кнопка «Закрыть заведение».
+   3. После закрытия: сотрудники и руководители — экран «Заведение закрыто владельцем» (только «Выйти»); владелец — «Заведение закрыто ·
+      данные будут удалены после ДД.ММ.ГГГГ» с «Восстановить заведение», «Скачать табели», «Выйти».
+   4. Кабинет основателя (98 демо / 92p сервер): в «Заведения» фильтр «Закрытые» — дата закрытия, дата удаления, «Восстановить».
+   Сервер: 0035_venue_close.sql (venue_close, venue_restore, my_closed_venues, venue_export, founder_closed_venues, founder_venue_restore),
+   переходник — блок 92zw в sv-adapter.js (SV.closedVenues при входе, SV.ui.closedNow при ошибке venue_closed).
+   Демо: закрытие хранится в этом браузере (localStorage jamoa-dvc-v1, по названию заведения), пароль владельца в демо — pass123. */
+var DVC = { busy: false, gate: null, nowAt: 0 };
+var DVC_K = 'jamoa-dvc-v1', DVC_FK = 'jamoa-dvc-fd-v1', DVC_DEMO_PW = 'pass123';
+
+function dvc_uz() { try { return uiLang() === 'uz'; } catch (e) { return false; } }
+function dvc_t(s, o) {
+  var r = s;
+  if (dvc_uz()) { var X = window.MLX_UZ_EXTRA || {}; if (X[s] != null) r = X[s]; else { try { r = trUi(s); } catch (e) {} } }
+  if (o) Object.keys(o).forEach(function (k) { r = String(r).split('{' + k + '}').join(o[k]); });
+  try { if (window.MLX_I18N && MLX_I18N.cy) r = MLX_I18N.cy(r); } catch (e) {}
+  return r;
+}
+function dvc_h(s, o) { return h(dvc_t(s, o)); }
+function dvc_sv() { return typeof sv_on === 'function' && sv_on(); }
+function dvc_SV() { return window.JAMOA_DEMO === false && window.JAMOA_SV ? window.JAMOA_SV : null; }
+function dvc_fdOn() { try { return typeof FD_ON !== 'undefined' && !!FD_ON; } catch (e) { return false; } }
+function dvc_err(e) { var m = ''; try { m = err(e); } catch (x) { m = (e && e.message) || String(e); } return dvc_t(m); }
+function dvc_code(e) { return e ? String(e.details || e.detail || e.code || '') + ' ' + String(e.message || '') : ''; }
+function dvc_key(s) { return String(s || '').toLowerCase().replace(/\s+/g, ''); }
+function dvc_date(ts) { if (!ts) return '—'; try { var p = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tashkent', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(ts)); return p.replace(/\//g, '.'); } catch (e) { return String(ts).slice(0, 10); } }
+function dvc_ls(k, d) { try { var v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } }
+function dvc_lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+
+/* ---------- кто и что ---------- */
+function dvc_owner() {
+  try {
+    if (dvc_fdOn()) return false;
+    if (dvc_sv()) { var X = dvc_SV(); return !!(X && X.me && X.me.role === 'owner'); }
+    return !!(S.me && S.me.role === 'director');
+  } catch (e) { return false; }
+}
+function dvc_vname() {
+  try { if (dvc_sv()) { var X = dvc_SV(); return (X && X.venue && X.venue.name) || ''; } } catch (e) {}
+  var n = ''; try { n = orgName(); } catch (e) {}
+  return n || 'Mir Luxe Plaza';
+}
+
+/* ---------- демо: закрытие в этом браузере ---------- */
+function dvc_demoAll() { var o = dvc_ls(DVC_K, {}); return o && typeof o === 'object' ? o : {}; }
+function dvc_demoGet() { return dvc_demoAll()[dvc_vname()] || null; }
+function dvc_demoSet(v) { var o = dvc_demoAll(), n = dvc_vname(); if (v) o[n] = v; else delete o[n]; dvc_lsSet(DVC_K, o); }
+
+/* ---------- данные: выгрузка табелей и заработка ---------- */
+async function dvc_exportRows() {
+  if (dvc_sv()) {
+    var X = dvc_SV(), r = await X.real.rpc('venue_export', {});
+    if (r.error) throw r.error;
+    return ((r.data && r.data.rows) || []).map(function (x) {
+      return { ym: x.ym, name: x.name, pos: x.position || '', dept: x.dept || '', days: +x.days || 0, hours: +x.hours || 0, late: +x.late_n || 0, lateMin: +x.late_min || 0,
+        earned: +x.earned_days || 0, bonus: +x.bonus || 0, fine: +x.fine || 0, adv: +x.advance || 0, acc: +x.accrued || 0, pay: x.to_pay == null ? '' : +x.to_pay };
+    });
+  }
+  var DB = window.__DB || {}, A = DB.attendance || [], E = (typeof S !== 'undefined' && S.emps) || DB.employees || [], out = [];
+  var yms = {}; A.forEach(function (a) { if (a.day) yms[String(a.day).slice(0, 7)] = 1; });
+  try { (typeof ca_adjAll === 'function' ? ca_adjAll() : []).forEach(function (a) { if (a.day) yms[String(a.day).slice(0, 7)] = 1; }); } catch (e) {}
+  yms[today().slice(0, 7)] = 1;
+  var L = Object.keys(yms).sort().slice(-12);
+  var posN = function (id) { var p = (S.pos || []).filter(function (x) { return x.id === id; })[0]; return p ? p.name : ''; };
+  var depN = function (id) { var d = (S.depts || []).filter(function (x) { return x.id === id; })[0]; return d ? d.name : ''; };
+  for (var i = 0; i < L.length; i++) {
+    var ym = L[i];
+    for (var j = 0; j < E.length; j++) {
+      var em = E[j]; if (em.colleague) continue;
+      var rows = A.filter(function (a) { return a.employee_id === em.id && String(a.day).slice(0, 7) === ym; });
+      var adj = []; try { adj = ca_adjOf(em.id, ym); } catch (e) {}
+      if (!rows.length && !adj.length) continue;
+      var days = {}, mins = 0, late = 0, lateMin = 0;
+      rows.forEach(function (a) { days[a.day] = 1; var e2 = a.clock_out ? Date.parse(a.clock_out) : Math.min(Date.now(), Date.parse(a.clock_in) + 9 * 3600e3); mins += Math.max(0, Math.round((e2 - Date.parse(a.clock_in)) / 6e4)); if (+a.late_min > 0) { late++; lateMin += +a.late_min; } });
+      var M = null; try { if (typeof ca_month === 'function') M = await ca_month(em, ym); } catch (e) { M = null; }
+      var bonus = adj.filter(function (x) { return x.kind === 'bonus'; }).reduce(function (s, x) { return s + (+x.amount || 0); }, 0);
+      var fine = adj.filter(function (x) { return x.kind === 'fine'; }).reduce(function (s, x) { return s + (+x.amount || 0); }, 0);
+      var earned = M ? Math.round(M.sumDays || 0) : 0;
+      out.push({ ym: ym, name: (em.first_name + ' ' + (em.last_name || '')).trim(), pos: posN(em.position_id), dept: depN(em.dept_id), days: Object.keys(days).length,
+        hours: Math.round(mins / 6) / 10, late: late, lateMin: lateMin, earned: earned, bonus: bonus, fine: fine, adv: M ? Math.round(M.advSum || 0) : 0,
+        acc: M ? Math.round(M.acc || 0) : earned + bonus - fine, pay: '' });
+    }
+  }
+  return out;
+}
+function dvc_csvText(rows) {
+  var q = function (s) { s = String(s == null ? '' : s); return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  var n = function (x) { return x === '' || x == null ? '' : String(x).replace('.', ','); };
+  var head = ['Месяц', 'Сотрудник', 'Должность', 'Служба', 'Дней отработано', 'Часов', 'Опозданий', 'Минут опозданий', 'Начислено за смены', 'Премии', 'Штрафы', 'Начислено итого', 'Аванс', 'К выплате (лист)'].map(function (s) { return dvc_t(s); });
+  var L = [head].concat(rows.map(function (r) { return [r.ym, r.name, r.pos, r.dept, r.days, n(r.hours), r.late, r.lateMin, r.earned, r.bonus, r.fine, r.acc, r.adv, n(r.pay)]; }));
+  return '﻿' + L.map(function (r) { return r.map(q).join(';'); }).join('\r\n');
+}
+function dvc_fileName() { return 'jamoa-tabel-' + dvc_vname().replace(/[^\wА-Яа-яЁёЎўҚқҒғҲҳ-]+/g, '_').slice(0, 40) + '-' + today() + '.csv'; }
+async function dvc_download(btn) {
+  if (DVC.busy) return; DVC.busy = true;
+  var t0 = btn ? btn.innerHTML : ''; if (btn) { btn.disabled = true; btn.innerHTML = '<span>' + dvc_h('Готовим файл…') + '</span>'; }
+  try {
+    var rows = await dvc_exportRows(), csv = dvc_csvText(rows);
+    window.__dvcCsv = csv;
+    var b = new Blob([csv], { type: 'text/csv;charset=utf-8' }), u = URL.createObjectURL(b), a = document.createElement('a');
+    a.href = u; a.download = dvc_fileName(); document.body.appendChild(a); a.click();
+    setTimeout(function () { try { URL.revokeObjectURL(u); a.remove(); } catch (e) {} }, 1500);
+    try { toast(rows.length ? dvc_t('Файл скачан: строк {n}', { n: rows.length }) : dvc_t('Файл скачан: отметок и начислений пока нет')); } catch (e) {}
+  } catch (e) { try { toast(dvc_err(e), 4000); } catch (x) {} }
+  DVC.busy = false; if (btn) { btn.disabled = false; btn.innerHTML = t0; }
+}
+
+/* ---------- стили ---------- */
+(function () {
+  if (document.getElementById('dvcCss')) return;
+  var st = document.createElement('style'); st.id = 'dvcCss';
+  st.textContent = '.dvc-list{margin:8px 0 0;padding:0 0 0 18px;line-height:1.55;font-size:14px}.dvc-list li{margin:1px 0}' +
+    '.dvc-ttl{font-size:22px;font-weight:700;line-height:1.2;color:var(--bad,#C62A25)}' +
+    '.dvc-bad{color:var(--bad,#C62A25)!important}.pl-row.dvc-row .pl-tt{color:var(--bad,#C62A25);font-weight:600}.pl-ic.dvc-ic{background:var(--dj-fbad,#C62A25);color:#fff}' +
+    '.dvc-f{display:flex;flex-direction:column;gap:12px}.dvc-f .btn{min-height:48px}.dvc-err{display:none}' +
+    '.dvc-gate{position:fixed;inset:0;z-index:2147483100;overflow:auto;background:var(--bg)}.dvc-gate .login{max-width:440px}' +
+    '.btn.red.dvc-go{background:var(--dj-fbad,#C62A25)!important;color:#fff!important;box-shadow:none!important;border:0!important}.btn.red.dvc-go svg{color:#fff}' +
+    '.dvc-dt{display:inline-block;font-weight:700;white-space:nowrap}' +
+    '.dvc-fc{display:flex;flex-direction:column;gap:2px;padding:12px 0;border-top:1px solid var(--line2,var(--line))}.dvc-fc:first-of-type{border-top:0}.dvc-fc .btn{margin-top:8px;align-self:flex-start}';
+  document.head.appendChild(st);
+})();
+
+/* ---------- 1. вход: «Пульт» → под «Настройки» ---------- */
+(function () {
+  if (typeof plIndexHtml !== 'function') return;
+  var pi0 = plIndexHtml;
+  plIndexHtml = function (cur) {
+    var r = pi0.apply(this, arguments);
+    if (!dvc_owner()) return r;
+    return r + '<div class="pl-gt">' + dvc_h('Заведение') + '</div><div class="pl-card pl-ics"><button type="button" class="pl-row dvc-row" data-dvc="open" id="dvcRow">' +
+      '<span class="pl-ic dvc-ic">' + icon('lock', 18) + '</span><span class="pl-t"><span class="pl-tt">' + dvc_h('Закрыть заведение') + '</span>' +
+      '<span class="pl-st">' + dvc_h('Сотрудники не смогут войти. 30 дней можно восстановить') + '</span></span><span class="pl-ch">' + icon('chev', 16) + '</span></button></div>';
+  };
+})();
+document.addEventListener('click', function (ev) {
+  var b = ev.target && ev.target.closest && ev.target.closest('[data-dvc]'); if (!b) return;
+  var k = b.getAttribute('data-dvc');
+  if (k === 'open') { ev.preventDefault(); ev.stopPropagation(); dvc_open(); }
+}, true);
+
+/* ---------- 2. экран подтверждения ---------- */
+W3T.dvc = 'Закрыть заведение';
+W3V.dvc = function () { dvc_draw(); };
+if (typeof CM_VIEWS !== 'undefined' && CM_VIEWS.indexOf('dvc') < 0) CM_VIEWS.push('dvc');
+(function () { var cv0 = canView; canView = function (v) { if (v === 'dvc') return dvc_owner(); return cv0.apply(this, arguments); }; })();
+function dvc_open() { if (!dvc_owner()) { toast(dvc_t('Закрыть заведение может только владелец')); return; } if (S.view === 'dvc') return dvc_draw(); go('dvc'); }
+window.dvc_open = dvc_open;
+
+function dvc_draw() {
+  var m = $('main'); if (!m || S.view !== 'dvc') return;
+  if (!dvc_owner()) return go('home');
+  var nm = dvc_vname();
+  var lost = ['Сотрудники и их входы в приложение', 'Графики смен', 'Табели, отметки прихода и ухода', 'Заработок, штрафы, премии и авансы', 'Задачи, чек-листы и фото', 'Тест дня, рейтинг, заявки и уведомления'];
+  m.innerHTML = '<div class="dvc-f" id="dvcRoot">' +
+    '<div class="note t-bad"><div class="dvc-ttl">' + dvc_h('Закрыть «{n}»?', { n: nm }) + '</div>' +
+    '<div style="margin-top:6px;font-size:14px;line-height:1.5">' + dvc_h('Заведение закроется сразу для всех: сотрудники и руководители не смогут войти. Пропадёт:') + '</div>' +
+    '<ul class="dvc-list">' + lost.map(function (s) { return '<li>' + dvc_h(s) + '</li>'; }).join('') + '</ul>' +
+    '<div style="margin-top:8px;font-size:14px;line-height:1.5"><b>' + dvc_h('30 дней всё можно восстановить одной кнопкой. Потом данные удаляются навсегда.') + '</b></div></div>' +
+    '<div class="card"><h2>' + dvc_h('1. Сначала скачайте табели') + '</h2><div class="meta" style="white-space:normal;margin-bottom:10px">' +
+    dvc_h('Файл CSV — открывается в Excel. За всё время работы, по месяцам: сотрудник, должность, дни, часы, опоздания, начислено, штрафы, премии, аванс.') + '</div>' +
+    '<button type="button" class="btn ghost full" id="dvcDl">' + icon('dl', 18) + '<span>' + dvc_h('Скачать табели и заработок') + '</span></button></div>' +
+    '<form class="card" id="dvcForm" autocomplete="off"><h2>' + dvc_h('2. Подтвердите закрытие') + '</h2>' +
+    '<label class="f">' + dvc_h('Введите название заведения: {n}', { n: '«' + nm + '»' }) + '<input class="in" id="dvcName" autocomplete="off" autocapitalize="off" spellcheck="false"></label>' +
+    '<label class="f">' + dvc_h('Пароль владельца') + '<input class="in" id="dvcPw" type="password" autocomplete="current-password"></label>' +
+    (dvc_sv() ? '' : '<div class="meta" style="white-space:normal">' + dvc_h('В демо пароль владельца: {p}', { p: DVC_DEMO_PW }) + '</div>') +
+    '<div class="note t-bad dvc-err" id="dvcE"></div>' +
+    '<button type="submit" class="btn red full dvc-go" id="dvcGo">' + icon('lock', 18) + '<span>' + dvc_h('Закрыть заведение') + '</span></button>' +
+    '<button type="button" class="btn ghost full" id="dvcNo" style="margin-top:8px">' + dvc_h('Отмена') + '</button></form></div>';
+  $('dvcDl').onclick = function () { dvc_download(this); };
+  $('dvcNo').onclick = function () { go('desk'); };
+  $('dvcForm').onsubmit = function (ev) { ev.preventDefault(); dvc_doClose(); };
+}
+function dvc_fe(msg) { var e = $('dvcE'); if (!e) return; e.textContent = msg || ''; e.style.display = msg ? 'block' : 'none'; }
+async function dvc_doClose() {
+  var nm = dvc_vname(), typed = ($('dvcName') || {}).value || '', pw = ($('dvcPw') || {}).value || '';
+  dvc_fe('');
+  if (!dvc_key(typed) || dvc_key(typed) !== dvc_key(nm)) return dvc_fe(dvc_t('Название не совпадает. Введите: {n}', { n: '«' + nm + '»' }));
+  if (!pw) return dvc_fe(dvc_t('Введите пароль владельца'));
+  var b = $('dvcGo'); b.disabled = true;
+  try {
+    if (dvc_sv()) {
+      var X = dvc_SV(), R = X.real, em = '';
+      try { var u = await R.auth.getUser(); em = u && u.data && u.data.user && u.data.user.email || ''; } catch (e) {}
+      if (!em) { try { em = S.session && S.session.user && S.session.user.email || ''; } catch (e) {} }
+      var a = em ? await R.auth.signInWithPassword({ email: em, password: pw }) : { error: { message: 'no email' } };
+      if (a.error) { b.disabled = false; return dvc_fe(dvc_t('Неверный пароль')); }
+      var r = await R.rpc('venue_close', { p_confirm_name: typed });
+      if (r.error) { b.disabled = false; return dvc_fe(/reauth/.test(dvc_code(r.error)) ? dvc_t('Неверный пароль') : dvc_err(r.error)); }
+      X.closedVenues = [{ venue_id: r.data.venue_id, name: r.data.name, role: 'owner', closed_at: r.data.closed_at, purge_after: r.data.purge_after, can_restore: true }];
+      try { localStorage.removeItem('sv-venue'); } catch (e) {}
+      dvc_gateShow(X.closedVenues[0], function () { location.reload(); });
+      return;
+    }
+    if (pw !== DVC_DEMO_PW) { b.disabled = false; return dvc_fe(dvc_t('Неверный пароль')); }
+    var now = Date.now();
+    dvc_demoSet({ name: nm, at: new Date(now).toISOString(), purge: new Date(now + 30 * 864e5).toISOString(), by: (S.me && S.me.login) || '' });
+    try { closeLayer(); } catch (e) {}
+    render();
+  } catch (e) { b.disabled = false; dvc_fe(dvc_err(e)); }
+}
+
+/* ---------- 3. экраны «Заведение закрыто» ---------- */
+function dvc_gateOff() { if (DVC.gate) { DVC.gate.remove(); DVC.gate = null; } }
+function dvc_gateHtml(info) {
+  var own = info.role === 'owner' || info.role === 'director';
+  var head = '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start"><div style="font-size:12px;font-weight:700;letter-spacing:.18em;color:var(--gold);text-transform:uppercase">Jamoa</div>';
+  if (!own) {
+    return head + '<div style="font-size:22px;font-weight:700;line-height:1.2" id="dvcGT">' + dvc_h('Заведение закрыто владельцем') + '</div>' +
+      '<div class="muted" style="font-size:14px;line-height:1.45">' + dvc_h('«{n}» больше не работает в Jamoa. Войти, отметиться и посмотреть график нельзя. Если это ошибка — свяжитесь с владельцем.', { n: info.name || '' }) + '</div></div>' +
+      '<button type="button" class="btn dark full" id="dvcOut">' + icon('exit', 18) + '<span>' + dvc_h('Выйти') + '</span></button>';
+  }
+  return head + '<div style="font-size:22px;font-weight:700;line-height:1.2" id="dvcGT">' + dvc_h('Заведение закрыто') + '</div>' +
+    '<div class="muted" style="font-size:14px;line-height:1.45">' + h(info.name || '') + ' · ' + dvc_h('данные будут удалены после {d} (30 дней)', { d: dvc_date(info.purge_after) }) + '</div></div>' +
+    '<div class="note t-bad" style="font-size:14px;line-height:1.5">' + dvc_h('Сотрудники и руководители сейчас не могут войти. До {d} можно восстановить заведение — сотрудники, графики, табели и заработок вернутся как были.', { d: dvc_date(info.purge_after) }) + '</div>' +
+    (info.can_restore === false ? '' : '<button type="button" class="btn gold full" id="dvcRes">' + icon('refresh', 18) + '<span>' + dvc_h('Восстановить заведение') + '</span></button>') +
+    '<button type="button" class="btn ghost full" id="dvcGDl">' + icon('dl', 18) + '<span>' + dvc_h('Скачать табели') + '</span></button>' +
+    '<button type="button" class="btn ghost full" id="dvcOut">' + icon('exit', 18) + '<span>' + dvc_h('Выйти') + '</span></button>' +
+    '<div class="note t-bad dvc-err" id="dvcGE"></div>';
+}
+/* done(true) — восстановлено, done(false) — вышел */
+function dvc_gateShow(info, done) {
+  dvc_gateOff();
+  var g = document.createElement('div'); g.id = 'dvcGate'; g.className = 'dvc-gate';
+  g.innerHTML = '<div class="login" style="display:flex;flex-direction:column;gap:14px">' + dvc_gateHtml(info) + '</div>';
+  document.body.appendChild(g); DVC.gate = g;
+  try { var sp = document.getElementById('svSplash'); if (sp) sp.remove(); } catch (e) {}
+  $('dvcOut').onclick = async function () {
+    this.disabled = true; dvc_gateOff();
+    try { if (dvc_sv()) await sb.auth.signOut(); else await logout(); } catch (e) {}
+    if (done) done(false);
+  };
+  if ($('dvcGDl')) $('dvcGDl').onclick = function () { dvc_download(this); };
+  if ($('dvcRes')) $('dvcRes').onclick = async function () {
+    var b = this; b.disabled = true;
+    var ge = $('dvcGE'); if (ge) ge.style.display = 'none';
+    try {
+      if (dvc_sv()) {
+        var X = dvc_SV(), r = await X.real.rpc('venue_restore', { p_venue: info.venue_id || null });
+        if (r.error) throw r.error;
+        X.closedVenues = [];
+      } else dvc_demoSet(null);
+      dvc_gateOff();
+      try { toast(dvc_t('Заведение восстановлено')); } catch (e) {}
+      if (done) done(true); else render();
+    } catch (e) { b.disabled = false; if (ge) { ge.textContent = dvc_err(e); ge.style.display = 'block'; } }
+  };
+  return g;
+}
+/* демо: после входа на закрытое заведение — экран вместо приложения */
+(function () {
+  if (dvc_sv() || typeof render !== 'function') return;
+  var r0 = render;
+  render = function () {
+    try {
+      var c = !dvc_fdOn() && S.session && S.me ? dvc_demoGet() : null;
+      if (c) {
+        var info = { name: c.name, role: S.me.role === 'director' ? 'owner' : 'staff', closed_at: c.at, purge_after: c.purge, can_restore: true };
+        if (!DVC.gate || DVC.gate.getAttribute('data-who') !== String(S.me.id)) { dvc_gateShow(info, function () { render(); }); if (DVC.gate) DVC.gate.setAttribute('data-who', String(S.me.id)); }
+        return;
+      }
+      if (DVC.gate) dvc_gateOff();
+    } catch (e) {}
+    return r0.apply(this, arguments);
+  };
+})();
+/* сервер: при входе нет открытых заведений, но есть закрытое — экран «закрыто» вместо «Создайте заведение» */
+(function () {
+  var X = dvc_SV(); if (!X || !X.ui) return;
+  var nv0 = X.ui.noVenue;
+  X.ui.noVenue = async function () {
+    var self = this, args = arguments, L = [];
+    if (!dvc_fdOn()) { try { L = X.loadClosed ? await X.loadClosed() : (X.closedVenues || []); } catch (e) { L = []; } }
+    if (L.length) {
+      var own = L.filter(function (v) { return v.role === 'owner'; })[0];
+      return new Promise(function (res) { dvc_gateShow(own || L[0], function (ok) { res(!!ok); }); });
+    }
+    return nv0 ? nv0.apply(self, args) : false;
+  };
+  /* заведение закрыли, пока человек в приложении: первая ошибка venue_closed → перезапуск (покажется экран «закрыто») */
+  X.ui.closedNow = function () {
+    if (DVC.gate || Date.now() - DVC.nowAt < 30000) return; DVC.nowAt = Date.now();
+    try { var k = 'dvc-reload', t = +sessionStorage.getItem(k) || 0; if (Date.now() - t < 30000) return; sessionStorage.setItem(k, String(Date.now())); } catch (e) {}
+    try { localStorage.removeItem('sv-venue'); } catch (e) {}
+    setTimeout(function () { location.reload(); }, 300);
+  };
+})();
+
+/* ---------- 4. кабинет основателя: «Закрытые» ---------- */
+function dvc_fdDemoList() {
+  var L = dvc_ls(DVC_FK, null);
+  if (!L) { var now = Date.now(); L = [{ venue_id: 'demo-fd-1', name: 'Shirin Pishiriq', type: 'bakery', closed_at: new Date(now - 6 * 864e5).toISOString(), purge_after: new Date(now + 24 * 864e5).toISOString(), members: 7, owner: { name: 'Гульнора Рашидова', phone: '+998 90 412 33 18' } }]; dvc_lsSet(DVC_FK, L); }
+  var D = dvc_demoAll(); Object.keys(D).forEach(function (n) { var c = D[n]; L = L.concat([{ venue_id: 'demo-own:' + n, name: n, type: '', closed_at: c.at, purge_after: c.purge, members: null, owner: { name: 'Бекзод Аппакходжаев' } }]); });
+  return L;
+}
+function dvc_fdHtml(L, attr) {
+  var o = '<div class="card"><h2>' + dvc_h('Закрытые заведения') + '</h2><div class="meta" style="white-space:normal;margin-bottom:4px">' +
+    dvc_h('Владелец закрыл заведение — сотрудники не могут войти. Через 30 дней после закрытия данные удаляются навсегда. Восстанавливайте только по просьбе владельца.') + '</div>';
+  if (!L.length) return o + '<div class="empty">' + dvc_h('Закрытых заведений нет') + '</div></div>';
+  L.forEach(function (v) {
+    var left = Math.max(0, Math.ceil((Date.parse(v.purge_after) - Date.now()) / 864e5));
+    o += '<div class="dvc-fc" data-dvcfv="' + h(String(v.venue_id)) + '"><b>' + h(v.name || '—') + '</b>' +
+      '<div class="meta" style="white-space:normal">' + dvc_h('Закрыто {a} · удаление после {b}', { a: dvc_date(v.closed_at), b: dvc_date(v.purge_after) }) + '</div>' +
+      '<div><span class="chip ' + (left <= 7 ? 't-bad' : 't-warn') + '">' + dvc_h('осталось дней: {n}', { n: left }) + '</span></div>' +
+      (v.owner && v.owner.name ? '<div class="meta" style="white-space:normal">' + dvc_h('Владелец') + ': ' + h(v.owner.name) + (v.owner.phone ? ' · ' + h(v.owner.phone) : '') + (v.owner.email ? ' · ' + h(v.owner.email) : '') + '</div>' : '') +
+      '<button type="button" class="btn ghost sm" ' + attr + '="' + h(String(v.venue_id)) + '">' + icon('refresh', 16) + '<span>' + dvc_h('Восстановить') + '</span></button></div>';
+  });
+  return o + '</div>';
+}
+function dvc_segScroll() { setTimeout(function () { try { var b = document.querySelector('.seg button.on'); if (b && b.scrollIntoView) b.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch (e) {} }, 0); }
+function dvc_segAdd(html, attr, key, n, on) {
+  if (on) dvc_segScroll();
+  var b = '<button class="' + (on ? 'on' : '') + '" ' + attr + '="' + key + ':closed">' + dvc_h('Закрытые') + ' ' + n + '</button>';
+  var i = html.indexOf('</div>'); return i > 0 && html.indexOf('<div class="seg">') === 0 ? html.slice(0, i) + b + html.slice(i) : html;
+}
+/* демо-кабинет (98) */
+(function () {
+  if (typeof fd_ven !== 'function') return;
+  var fv0 = fd_ven;
+  fd_ven = function (D) {
+    var L = dvc_fdDemoList(), on = FD.sub.ven === 'closed';
+    if (on) { FD.sub.ven = 'all'; var base = fv0.apply(this, arguments); FD.sub.ven = 'closed'; var seg = base.slice(0, base.indexOf('</div>') + 6).replace(/class="on" data-fdsub="ven:all"/, 'class="" data-fdsub="ven:all"'); return dvc_segAdd(seg, 'data-fdsub', 'ven', L.length, true) + dvc_fdHtml(L, 'data-dvcfd'); }
+    return dvc_segAdd(fv0.apply(this, arguments), 'data-fdsub', 'ven', L.length, false);
+  };
+})();
+/* сервер-кабинет (92p) */
+(function () {
+  if (typeof fp_ven !== 'function' || typeof fp_load !== 'function') return;
+  var fl0 = fp_load;
+  fp_load = async function () {
+    try { var R = fp_real(); if (R) { var x = await R.rpc('founder_closed_venues'); FP.closed = x && !x.error && Array.isArray(x.data) ? x.data : (FP.closed || []); } } catch (e) {}
+    return fl0.apply(this, arguments);
+  };
+  var fv0 = fp_ven;
+  fp_ven = function (D) {
+    var L = FP.closed || [], on = FP.sub.ven === 'closed';
+    var ids = {}; L.forEach(function (v) { ids[v.venue_id] = v; });
+    if (on) { FP.sub.ven = 'all'; var base = fv0.apply(this, arguments); FP.sub.ven = 'closed'; var seg = base.slice(0, base.indexOf('</div>') + 6).replace(/class="on" data-fpsub="ven:all"/, 'class="" data-fpsub="ven:all"'); return dvc_segAdd(seg, 'data-fpsub', 'ven', L.length, true) + dvc_fdHtml(L, 'data-dvcfp'); }
+    var o = dvc_segAdd(fv0.apply(this, arguments), 'data-fpsub', 'ven', L.length, false);
+    /* закрытые в общем списке — рубиновая метка */
+    (D.V || []).forEach(function (v) { if (ids[v.id]) o = o.replace('data-fpv="' + v.i + '"><div class="fd-vm"><b>' + h(v.name) + '</b>', 'data-fpv="' + v.i + '"><div class="fd-vm"><b>' + h(v.name) + '</b> <span class="chip t-bad">' + dvc_h('закрыто') + '</span>'); });
+    return o;
+  };
+})();
+document.addEventListener('click', async function (ev) {
+  var b = ev.target && ev.target.closest && ev.target.closest('[data-dvcfd],[data-dvcfp]'); if (!b) return;
+  ev.preventDefault(); ev.stopPropagation();
+  var fp = b.hasAttribute('data-dvcfp'), id = b.getAttribute(fp ? 'data-dvcfp' : 'data-dvcfd');
+  var L = fp ? (FP.closed || []) : dvc_fdDemoList(), v = L.filter(function (x) { return String(x.venue_id) === id; })[0]; if (!v) return;
+  var ok = true; try { ok = await askSure(dvc_t('Восстановить «{n}»?', { n: v.name }), { ok: dvc_t('Восстановить'), sub: dvc_t('Сотрудники снова смогут войти, все данные вернутся.') }); } catch (e) {}
+  if (!ok) return;
+  if (fp) {
+    b.disabled = true;
+    var r = await fp_real().rpc('founder_venue_restore', { p_venue: id });
+    if (r.error) { b.disabled = false; try { toast(dvc_err(r.error), 4000); } catch (e) {} return; }
+    try { toast(dvc_t('Заведение восстановлено')); } catch (e) {}
+    return fp_load();
+  }
+  if (id.indexOf('demo-own:') === 0) { var o = dvc_demoAll(); delete o[id.slice(9)]; dvc_lsSet(DVC_K, o); }
+  else dvc_lsSet(DVC_FK, dvc_ls(DVC_FK, []).filter(function (x) { return String(x.venue_id) !== id; }));
+  try { toast(dvc_t('Заведение восстановлено')); } catch (e) {}
+  fd_render();
+}, true);
+
+/* для проверок */
+window.__dvc = { go: function (v) { go(v); }, S: function () { return S; }, fdGo: function (t) { if (typeof fd_go === 'function') fd_go(t); }, fpGo: function (t) { FP.tab = t; fp_main(); }, open: dvc_open, owner: dvc_owner, name: dvc_vname, rows: dvc_exportRows, csv: dvc_csvText, demo: dvc_demoGet, fd: dvc_fdDemoList };
 
 
 /* ===== ВОЛНА 4 · 92zy-sched31.js ===== */

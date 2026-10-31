@@ -1926,3 +1926,42 @@
   }
 })(typeof window !== 'undefined' ? window : globalThis);
 /* === end 92zr === */
+/* === 92zw === */
+/* Часть dvc (92zw-close, 0035_venue_close.sql): «Закрыть заведение». Блок не трогает код выше: как 92z — оборачивает
+   SVAdapter.make / supabase.createClient.
+   - SV.loadClosed(): rpc my_closed_venues → SV.closedVenues (участия в закрытых заведениях; RLS прячет их участников, поэтому
+     вход видит «нет заведения»). Вызывает фрагмент 92zw в SV.ui.noVenue и рисует экран «закрыто» вместо «Создайте заведение».
+   - любой ответ rpc с кодом venue_closed (заведение закрыли, пока человек в приложении) → SV.ui.closedNow() (перезапуск).
+   - venue_close / venue_restore / my_closed_venues / venue_export — напрямую (если ещё не заведены). */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dvc) return; A.__dvc = true;
+  function closedErr(e) { return !!e && /venue_closed/.test(String(e.details || e.detail || e.code || '') + ' ' + String(e.message || '')); }
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dvc) return cl; SV.__dvc = true;
+    var real = SV.real, R = SV.rpcMap;
+    SV.closedVenues = [];
+    /* вызывается из SV.ui.noVenue (фрагмент 92zw), только когда открытых заведений нет — обычный вход не делает лишних запросов */
+    SV.loadClosed = async function () {
+      SV.closedVenues = [];
+      try { var r = await real.rpc('my_closed_venues', {}); if (r && !r.error && Array.isArray(r.data)) SV.closedVenues = r.data; } catch (e) {}
+      return SV.closedVenues;
+    };
+    if (R) ['venue_close', 'venue_restore', 'my_closed_venues', 'venue_export'].forEach(function (n) { if (!R[n]) R[n] = function (a) { return real.rpc(n, a || {}); }; });
+    var rpc0 = cl.rpc;
+    cl.rpc = function (n, a) {
+      return Promise.resolve(rpc0.call(this, n, a)).then(function (r) {
+        if (r && closedErr(r.error)) { try { if (SV.ui && SV.ui.closedNow) SV.ui.closedNow(); } catch (e) {} }
+        return r;
+      });
+    };
+    return cl;
+  }
+  A.dvcExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92zw === */
