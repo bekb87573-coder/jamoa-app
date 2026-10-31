@@ -118,7 +118,7 @@
     'Сделано: {a} из {b}': 'Bajarildi: {b} tadan {a}', 'В демо не сохраняется — на сервере действие выполнится по-настоящему.': 'Demoda saqlanmaydi — serverda harakat haqiqatan bajariladi.',
     'Здравствуйте, {n}!': 'Assalomu alaykum, {n}!', 'Здравствуйте!': 'Assalomu alaykum!',
     'Я ваш помощник: смотрю, что происходит в заведении, готовлю график, задачи и решения. Ничего не меняю без вашего «Выполнить». Можно голосом.': 'Men sizning yordamchingizman: muassasada nima boʻlayotganini koʻraman, jadval, vazifa va qarorlarni tayyorlayman. «Bajarish»siz hech narsani oʻzgartirmayman. Ovoz bilan ham mumkin.',
-    'Помощник — ИИ, может ошибаться. Всё, что меняет данные, выполняется только после вашего «Выполнить». 10 команд в день.': 'Yordamchi — SI, xato qilishi mumkin. Maʼlumotni oʻzgartiradigan hamma narsa faqat «Bajarish»dan keyin bajariladi. Kuniga 10 ta buyruq.',
+    'Помощник — ИИ, может ошибаться. Всё, что меняет данные, выполняется только после вашего «Выполнить». 20 команд в день.': 'Yordamchi — SI, xato qilishi mumkin. Maʼlumotni oʻzgartiradigan hamma narsa faqat «Bajarish»dan keyin bajariladi. Kuniga 20 ta buyruq.',
     'В демо ответы и карточки — на учебных данных, «Выполнить» не сохраняет.': 'Demoda javob va kartochkalar — oʻquv maʼlumotlarida, «Bajarish» saqlamaydi.',
     'Поставь график на следующую неделю: …': 'Keyingi haftaga jadval tuz: …', 'Кто сегодня опоздал?': 'Bugun kim kechikdi?', 'Поставь задачу …: …': 'Vazifa ber …: …', 'Поставь задачу {n}: …': '{n}ga vazifa ber: …',
     'Что ждёт моего решения?': 'Nimalar qarorimni kutyapti?', 'Ваша команда': 'Buyrugʻingiz', 'Напишите или скажите…': 'Yozing yoki ayting…',
@@ -146,6 +146,7 @@
     'Закупка: пятновыводитель, ~450 000 сум': 'Xarid: dogʻ ketkazgich, ~450 000 soʻm', 'Скажите, что одобрить, — подготовлю карточку.': 'Nimani tasdiqlashni ayting — kartochka tayyorlayman.',
     'Не понял команду. Например: «Кто сегодня опоздал?», «Поставь задачу …», «Поставь график на следующую неделю: …».': 'Buyruqni tushunmadim. Masalan: «Bugun kim kechikdi?», «Vazifa ber …», «Keyingi haftaga jadval tuz: …».',
     'На сегодня команды помощнику закончились (10 в день). Завтра можно снова — а сейчас всё доступно в приложении как обычно.': 'Bugun uchun yordamchiga buyruqlar tugadi (kuniga 10 ta). Ertaga yana mumkin — hozir esa hammasi ilovada odatdagidek.',
+    'На сегодня команды помощнику закончились (20 в день). Завтра можно снова — а сейчас всё доступно в приложении как обычно.': 'Bugun uchun yordamchiga buyruqlar tugadi (kuniga 20 ta). Ertaga yana mumkin — hozir esa hammasi ilovada odatdagidek.',
     'Помощник сейчас не ответил. Попробуйте ещё раз через минуту.': 'Yordamchi hozir javob bermadi. Bir daqiqadan keyin yana urinib koʻring.'
   };
   window.DAI_UZ = Object.assign(window.DAI_UZ || {}, O);

@@ -38621,7 +38621,7 @@ async function dai_state() {
   if (!dz_sv()) { DAI.mode = own0 ? 'owner' : 'support'; if (own0) { var o = dai_db(), who = dz_who(), d0 = new Date(); d0.setHours(0, 0, 0, 0); DAI.lim = 10;
     DAI.left = Math.max(0, 10 - o.L.filter(function (x) { return x.who === who && x.mode === 'owner' && Date.parse(x.at) >= +d0; }).length); } return; }
   var r = await dai_rpc('owner_ai_state', {});
-  if (r && !r.error && r.data && r.data.mode) { DAI.mode = r.data.mode; DAI.lim = +r.data.lim_day || 10; DAI.left = Math.max(0, +r.data.left_day || 0); }
+  if (r && !r.error && r.data && r.data.mode) { DAI.mode = r.data.mode; DAI.lim = +r.data.lim_day || 20; DAI.left = Math.max(0, +r.data.left_day || 0); }
   else DAI.mode = own0 ? 'owner' : 'support';   /* старый сервер без 0032 — как по роли; функция всё равно решит сама */
 }
 
@@ -38743,7 +38743,7 @@ function dai_emptyO() {
   return '<div class="dai-ohi">' + dai_orb(true) + '<h2 class="dai-h">' + h(dai_cy(nm ? dai_t('Здравствуйте, {n}!', { n: nm }) : dai_t('Здравствуйте!'))) + '</h2>' +
     '<p class="dai-p">' + dai_e('Я ваш помощник: смотрю, что происходит в заведении, готовлю график, задачи и решения. Ничего не меняю без вашего «Выполнить». Можно голосом.') + '</p></div>' +
     '<div class="dai-sg">' + ex.map(function (q) { var t = dai_t(q); return '<button type="button" class="dai-sgb" data-daiq="' + h(t) + '"' + (/…/.test(t) ? ' data-daifill="1"' : '') + '><span>' + h(t) + '</span>' + icon('chev', 16) + '</button>'; }).join('') + '</div>' +
-    '<p class="dai-fine">' + dai_e('Помощник — ИИ, может ошибаться. Всё, что меняет данные, выполняется только после вашего «Выполнить». 10 команд в день.') +
+    '<p class="dai-fine">' + dai_e('Помощник — ИИ, может ошибаться. Всё, что меняет данные, выполняется только после вашего «Выполнить». 20 команд в день.') +
       (!dz_sv() ? ' ' + dai_e('В демо ответы и карточки — на учебных данных, «Выполнить» не сохраняет.') : '') + '</p>';
 }
 function dai_headO(top) {
@@ -39099,20 +39099,20 @@ function dai_demoOwner(q, lg) {
 async function dai_demoOwnerAsk(o, who, q, lg, b) {
   var d0 = new Date(); d0.setHours(0, 0, 0, 0);
   var used = o.L.filter(function (x) { return x.who === who && x.mode === 'owner' && Date.parse(x.at) >= +d0; }).length;
-  if (used >= 10) return { ok: false, reason: 'limit', scope: 'day', mode: 'owner', left_day: 0, lim_day: 10, message: dai_t('На сегодня команды помощнику закончились (10 в день). Завтра можно снова — а сейчас всё доступно в приложении как обычно.') };
+  if (used >= 20) return { ok: false, reason: 'limit', scope: 'day', mode: 'owner', left_day: 0, lim_day: 20, message: dai_t('На сегодня команды помощнику закончились (20 в день). Завтра можно снова — а сейчас всё доступно в приложении как обычно.') };
   await new Promise(function (res) { setTimeout(res, 650); });
   var A = dai_demoOwner(q, lg), vn = dz_myVenue();
   var row = { id: ++o.seq, who: who, dialog: b.dialog, q: q, a: A.answer, lang: lg, screen: b.screen || null, status: 'ok', suggest: false, handed: false, ticket_id: null, mode: 'owner',
     steps: A.steps, cards: A.cards.map(function (c, j) { return Object.assign({}, c, { id: o.seq * 10 + j }); }),
     in: 2400 + q.length, out: Math.round(A.answer.length / 2.6), cr: 14000, cw: 0, ms: 650, at: new Date().toISOString(), venue_name: vn.name, venue_type: vn.type, role: 'owner' };
   o.L.push(row); dai_put(o);
-  return { ok: true, mode: 'owner', id: row.id, dialog: b.dialog, answer: A.answer, steps: A.steps, cards: JSON.parse(JSON.stringify(row.cards)), left_day: 10 - used - 1, lim_day: 10, demo: true };
+  return { ok: true, mode: 'owner', id: row.id, dialog: b.dialog, answer: A.answer, steps: A.steps, cards: JSON.parse(JSON.stringify(row.cards)), left_day: 20 - used - 1, lim_day: 20, demo: true };
 }
 function dai_demoMark(x, j, c) {
   var o = dai_ld(), r = o.L.filter(function (y) { return y.id === x.id; })[0];
   if (r && r.cards && r.cards[j]) { r.cards[j].status = c.status; r.cards[j].result = c.res || null; dai_put(o); }
 }
-DAI_DEMO.owner_ai_state = async function () { await dai_state(); return { data: { mode: DAI.mode, lim_day: DAI.lim || 10, left_day: DAI.left == null ? 10 : DAI.left }, error: null }; };
+DAI_DEMO.owner_ai_state = async function () { await dai_state(); return { data: { mode: DAI.mode, lim_day: DAI.lim || 20, left_day: DAI.left == null ? 20 : DAI.left }, error: null }; };
 DAI_DEMO.owner_ai_card_mark = async function (a) {
   var o = dai_ld(), n = 0; o.L.forEach(function (x) { (x.cards || []).forEach(function (c) { if (c.id === a.p_id && (c.status === 'proposed' || c.status === 'failed')) { c.status = a.p_status; c.result = a.p_result || null; n++; } }); });
   dai_put(o); return { data: n > 0, error: null };
@@ -39308,7 +39308,7 @@ async function dai_vsOpen() {
   var ta = $('daiVsT'), go2 = $('daiVsGo');
   var upd = function () { go2.disabled = !ta.value.trim() || left <= 0; };
   ta.oninput = upd;
-  if (left <= 0) $('daiVsF').textContent = dai_t('На сегодня команды помощнику закончились (10 в день). Завтра можно снова — а сейчас всё доступно в приложении как обычно.');
+  if (left <= 0) $('daiVsF').textContent = dai_t('На сегодня команды помощнику закончились (20 в день). Завтра можно снова — а сейчас всё доступно в приложении как обычно.');
   document.querySelectorAll('[data-daivl]').forEach(function (b) { b.onclick = function () { DAI_VS.lang = b.getAttribute('data-daivl'); document.querySelectorAll('[data-daivl]').forEach(function (x) { x.classList.toggle('on', x === b); }); if (DAI_VS.on) { dai_vsStop(); setTimeout(dai_vsStart, 250); } }; });
   if ($('daiVsM')) $('daiVsM').onclick = function () { if (DAI_VS.on) dai_vsStop(); else dai_vsStart(); };
   go2.onclick = function () {
