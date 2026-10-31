@@ -63,6 +63,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-home2.js"></script>
 <script src="uz-w4-integ.js"></script>
 <script src="uz-w4-map.js"></script>
+<script src="uz-w4-mapv1.js"></script>
 <script src="uz-w4-mgr.js"></script>
 <script src="uz-w4-mgr2.js"></script>
 <script src="uz-w4-misc.js"></script>
@@ -50254,7 +50255,10 @@ async function dx_demoPts(a) {
   return { data: { day: day, venue: set ? { lat: c.lat, lng: c.lng, radius_m: rad } : null, points: P, demo: true, center: c }, error: null };
 }
 
-/* ===================== 3. Экран «Карта сотрудников» ===================== */
+/* ===================== 3. Экран «Карта сотрудников» — вид «вариант 1» (решение владельца 31.10) =====================
+   Макет w4/mapviz/v1.png (все) и v5.png (один сотрудник). Меняется только вид: точки, rpc map_points и переходник — как были.
+   Тёмная карта на весь верх, фильтры-чипы поверх карты, + / − и «Обновить» справа, снизу шторка «Отметки сегодня»
+   (свернута / половина / почти весь экран; на широком экране — панель справа). Нажатие на строку или кружок — вид сотрудника. */
 function dx_label(p, e) {
   if (p.kind === 'in') return dx_t(dx_g(e, 'Пришёл на смену', 'Пришла на смену'));
   if (p.kind === 'out') return dx_t(dx_g(e, 'Ушёл со смены', 'Ушла со смены'));
@@ -50286,119 +50290,399 @@ async function dx_data(day, who, people) {
 }
 function dx_col() {
   var css = getComputedStyle(document.documentElement), g = function (k, d) { var x = (css.getPropertyValue(k) || '').trim(); return x || d; };
-  return { ok: g('--dj-okf', '#12A06C'), bad: g('--dj-badf', '#E0342E'), info: g('--dj-infof', '#2F6FB3'), gold: g('--gold', '#A57F35') };
-}
-function dx_ptCol(p, C) { return p.zone == null ? C.info : p.out ? C.bad : C.ok; }
-/* выбор показа: last — последнее место (на смене), day — все за день, иначе — один сотрудник с линией */
-function dx_view(D, who, day) {
-  if (who && who !== '*') return { mode: 'one', P: D.P.filter(function (p) { return p.e.id === who; }) };
-  if (who === '*') return { mode: 'day', P: D.P };
-  var last = {}; D.P.forEach(function (p) { last[p.e.id] = p; });
-  var L = Object.keys(last).map(function (k) { return last[k]; });
-  if (day === today()) L = L.filter(function (p) { return D.on[p.e.id]; });
-  L.sort(function (x, y) { return (y.out - x.out) || Date.parse(y.at) - Date.parse(x.at); });
-  return { mode: 'last', P: L };
-}
-function dx_svg(D, V) {
-  var v = D.v, P0 = V.P, c = v || D.center || (P0[0] ? { lat: P0[0].lat, lng: P0[0].lng } : { lat: 41.29, lng: 69.27 });
-  var kx = 111320 * Math.cos(c.lat * Math.PI / 180), ky = 111320, maxd = (v ? v.rad : 60) * 1.35;
-  P0.forEach(function (p) { maxd = Math.max(maxd, Math.abs((p.lng - c.lng) * kx) * 1.15, Math.abs((p.lat - c.lat) * ky) * 1.15); });
-  var W = 400, H = 340, s = Math.min(W, H) / 2 / (maxd + 20), X = function (lng) { return W / 2 + (lng - c.lng) * kx * s; }, Y = function (lat) { return H / 2 - (lat - c.lat) * ky * s; };
-  var o = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + h(dx_t('Карта сотрудников')) + '" preserveAspectRatio="xMidYMid meet">';
-  for (var g = -4; g <= 4; g++) o += '<line x1="0" x2="' + W + '" y1="' + (H / 2 + g * 40) + '" y2="' + (H / 2 + g * 40) + '" stroke="var(--line)" stroke-width="1"/><line y1="0" y2="' + H + '" x1="' + (W / 2 + g * 50) + '" x2="' + (W / 2 + g * 50) + '" stroke="var(--line)" stroke-width="1"/>';
-  if (v) o += '<circle cx="' + W / 2 + '" cy="' + H / 2 + '" r="' + Math.max(8, v.rad * s) + '" fill="color-mix(in srgb,var(--gold) 12%,transparent)" stroke="var(--gold)" stroke-width="2"/><circle cx="' + W / 2 + '" cy="' + H / 2 + '" r="5" fill="var(--gold)"/>';
-  if (V.mode === 'one' && P0.length > 1) o += '<polyline points="' + P0.map(function (p) { return X(p.lng).toFixed(1) + ',' + Y(p.lat).toFixed(1); }).join(' ') + '" fill="none" stroke="var(--dj-infof,#2F6FB3)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity=".85"/>';
-  var lab = P0.length <= (V.mode === 'one' ? 10 : 14);
-  P0.forEach(function (p, i) {
-    var x = X(p.lng), y = Y(p.lat), col = p.zone == null ? 'var(--dj-infof,#2F6FB3)' : p.out ? 'var(--dj-badf,#E0342E)' : 'var(--dj-okf,#12A06C)';
-    o += '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="' + (V.mode === 'one' && i < P0.length - 1 ? 6 : 8) + '" fill="' + col + '" stroke="var(--card)" stroke-width="2"><title>' + h(dx_short(p.e) + ' · ' + hm(p.at) + ' · ' + p.txt) + '</title></circle>';
-    if (lab) o += '<text x="' + (x + 10).toFixed(1) + '" y="' + (y + 4).toFixed(1) + '" font-size="11" fill="var(--ink)" style="paint-order:stroke;stroke:var(--card);stroke-width:3px">' + h((V.mode === 'one' ? '' : p.e.first_name + ' ') + hm(p.at) + ' · ' + dx_cut(p.txt, 22)) + '</text>';
-  });
-  return o + '</svg>';
-}
-function dx_rowHtml(p, V) {
-  var nm = V.mode === 'one' ? '<div class="name">' + h(p.txt) + '</div>' : '<div class="name">' + h(fullName(p.e)) + '</div>';
-  var meta = (V.mode === 'one' ? '' : '<span>' + h(p.txt) + '</span> ') + '<b class="num">' + hm(p.at) + '</b>' + (p.dist != null ? ' · <span class="num">' + Math.round(p.dist) + ' ' + dx_e('м') + '</span>' : '');
-  var chip = p.zone == null ? '' : '<span class="chip ' + (p.out ? 't-bad' : 't-ok') + '"><span>' + dx_e(p.out ? 'вне зоны' : 'в зоне') + '</span></span>';
-  var lead = V.mode === 'one' ? '<span class="dx-tm num">' + hm(p.at) + '</span>' : '<span class="av sm">' + avIn(p.e) + '</span>';
-  var tag = V.mode === 'one' ? 'div' : 'button type="button" data-dxw="' + h(p.e.id) + '"';
-  return '<' + tag + ' class="dm-mr dx-r">' + lead + '<div class="grow" style="min-width:0">' + nm + '<div class="meta" style="white-space:normal">' + (V.mode === 'one' ? (p.dist != null ? '<span class="num">' + Math.round(p.dist) + ' ' + dx_e('м') + '</span>' : '') : meta) + '</div></div>' + chip + (V.mode === 'one' ? '' : '<span class="dx-ch">' + icon('chev', 16) + '</span>') + '</' + (V.mode === 'one' ? 'div' : 'button') + '>';
-}
-function dx_css() {
-  if ($('dxCss')) return;
-  var st = document.createElement('style'); st.id = 'dxCss';
-  st.textContent = '.dx-fl{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end}.dx-fl .f{margin:0;min-width:0}.dx-fl .dx-day{grid-column:1/-1}' +
-    '.dx-fl select.in{width:100%;min-width:0;text-overflow:ellipsis}.dx-fl .btn{min-height:44px;white-space:nowrap}' +
-    'button.dx-r{width:100%;background:none;border:0;border-bottom:1px solid var(--line2);text-align:left;color:inherit;font:inherit;cursor:pointer}button.dx-r:last-child{border-bottom:0}' +
-    '.dx-tm{min-width:44px;font-weight:600}.dx-ch{color:var(--mute);display:inline-flex}.dx-set{display:flex;flex-direction:column;gap:8px;border-left:3px solid var(--dj-infof,#2F6FB3)}' +
-    '.dm-mk.dx-nz{background:var(--dj-infof,#2F6FB3)}.dm-mk.dx-ln{width:16px;height:3px;border-radius:2px;background:var(--dj-infof,#2F6FB3);vertical-align:2px}';
-  document.head.appendChild(st);
+  return { ok: g('--dj-okf', '#12A06C'), bad: g('--dj-badf', '#E0342E'), info: g('--dj-infof', '#2F6FB3'), warn: g('--dj-warnf', '#E08A00'), gold: g('--gold', '#A57F35') };
 }
 function dx_goSet() {
   try { if (S.view === 'desk' && typeof plOpen === 'function') plOpen('set'); else { S.sub.desk = 'set'; go('desk'); } } catch (e) { S.sub.desk = 'set'; go('desk'); }
 }
 var dm_map0 = typeof dm_map === 'function' ? dm_map : null;
+
+/* ---------- 3.1 состояние сотрудника: цвет обводки и ярлык ---------- */
+var DX1 = { ctl: null, rs: false };
+var DX1_C = { ok: 'var(--dj-okf,#12A06C)', info: 'var(--dj-infof,#2F6FD6)', warn: 'var(--dj-warnf,#E08A00)', bad: 'var(--dj-badf,#E0342E)', gold: 'var(--gold,#B8913F)' };
+var DX1_ST = { out: 'bad', late: 'warn', task: 'info', 'in': 'ok', gone: 'gold' };
+var DX1_RANK = { out: 0, late: 1, task: 2, 'in': 2, gone: 3 };
+function dx1_dd(day) { return String(day).slice(8, 10) + '.' + String(day).slice(5, 7); }
+function dx1_ago(n) { return tsDate(Date.now() - n * 86400000); }
+/* отметки прихода и ухода за день: первый приход, последний уход, на смене ли, опоздание, минуты на смене */
+async function dx1_att(day) {
+  var q = await dm_q(sb.from('attendance').select('*').eq('day', day)), A = {}, now = Date.now();
+  ((q && q.data) || []).slice().sort(function (x, y) { return String(x.clock_in).localeCompare(String(y.clock_in)); }).forEach(function (r) {
+    if (!r.clock_in) return;
+    var o = A[r.employee_id] || (A[r.employee_id] = { inAt: r.clock_in, outAt: null, open: false, late: typeof dm_lateMin === 'function' ? dm_lateMin(r) : 0, min: 0, iv: [] });
+    if (r.clock_out) { if (!o.outAt || String(r.clock_out) > String(o.outAt)) o.outAt = r.clock_out; } else o.open = true;
+    var end = r.clock_out ? Date.parse(r.clock_out) : day === today() ? now : NaN;
+    if (isFinite(end)) o.iv.push([Date.parse(r.clock_in), end]);
+  });
+  /* минуты на смене — по объединению отрезков (две отметки подряд не считаются дважды) */
+  Object.keys(A).forEach(function (k) { var o = A[k], ce = -Infinity; o.iv.sort(function (x, y) { return x[0] - y[0]; }).forEach(function (x) { var b = Math.max(x[0], ce); if (x[1] > b) o.min += (x[1] - b) / 60000; ce = Math.max(ce, x[1]); }); });
+  return A;
+}
+/* последняя точка каждого сотрудника + состояние */
+function dx1_rows(D, A) {
+  var last = {}; D.P.forEach(function (p) { last[p.e.id] = p; });
+  var L = Object.keys(last).map(function (id) {
+    var p = last[id], a = A[id] || {}, gone = !a.open && !!a.outAt, st;
+    if (p.out && !gone) st = 'out'; else if (gone) st = 'gone'; else if (a.late) st = 'late'; else if (p.kind !== 'in' && p.kind !== 'out') st = 'task'; else st = 'in';
+    return { e: p.e, p: p, a: a, st: st };
+  });
+  L.sort(function (x, y) { return DX1_RANK[x.st] - DX1_RANK[y.st] || String(y.a.inAt || y.p.at).localeCompare(String(x.a.inAt || x.p.at)); });
+  return L;
+}
+function dx1_tag(r, D) {
+  var e = r.e, k = r.p.kind;
+  if (r.st === 'out') return dx_t('вне зоны');
+  if (r.st === 'late') return dx_t(dx_g(e, 'опоздал', 'опоздала'));
+  if (r.st === 'gone') return dx_t(dx_g(e, 'ушёл', 'ушла'));
+  if (r.st === 'task') return dx_t(k === 'task' ? 'задача' : k === 'handover' ? 'передача смены' : 'заявка');
+  return dx_t(D.v ? 'в зоне' : 'на смене');
+}
+function dx1_meta(r) {
+  var e = r.e, a = r.a, p = r.p, M = [];
+  if (a.inAt) M.push(h(dx_t(dx_g(e, 'пришёл', 'пришла'))) + ' <span class="num">' + hm(a.inAt) + '</span>');
+  if (a.late && r.st !== 'gone') M.push(h(dx_t(dx_g(e, 'опоздал', 'опоздала'))) + ' <span class="num">' + h(fmtMin(a.late)) + '</span>');
+  if (r.st === 'gone') M.push(h(dx_t(dx_g(e, 'ушёл', 'ушла'))) + ' <span class="num">' + hm(a.outAt) + '</span>');
+  else if (p.kind !== 'in' || !a.inAt) M.push(h(dx_cut(p.txt, 34)) + ' <span class="num">' + hm(p.at) + '</span>');
+  if (p.dist != null) M.push('<b class="num">' + Math.round(p.dist) + ' ' + dx_e('м') + '</b>');
+  return M.join(' · ');
+}
+function dx1_fOk(r, f) { return f === 'all' || (f === 'in' ? r.st !== 'out' && r.st !== 'gone' : f === 'out' ? r.st === 'out' : r.st === 'gone'); }
+
+/* ---------- 3.2 карта: Leaflet (OSM, тёмный фильтр плиток) или схема SVG без интернета ---------- */
+function dx1_rnd(s) { s = s % 233280; return function () { s = (s * 9301 + 49297) % 233280; return s / 233280; }; }
+var DX1_HOUSE = '<path d="M-7 6V-3L0-8 7-3V6Z" fill="#1a1408"/>';
+/* схема: улицы и кварталы условные (в метрах вокруг заведения, двигаются вместе с картой) — только фон, без адресов */
+function dx1_svgDraw(st) {
+  var o = st.o, W = st.el.clientWidth || 360, H = st.el.clientHeight || 320, pad = o.pad || {}, pt = pad.t || 0, pb = pad.b || 0, pr = pad.r || 0;
+  var c = st.c, kx = 111320 * Math.cos(c.lat * Math.PI / 180), ky = 111320;
+  var vw = Math.max(80, W - pr), vh = Math.max(80, H - pt - pb), vcx = vw / 2, vcy = pt + vh / 2;
+  var s = st.s0 * Math.pow(1.5, st.z), X = function (mx) { return vcx + st.ox + mx * s; }, Y = function (my) { return vcy + st.oy - my * s; };
+  var M = function (lat, lng) { return { x: X((lng - c.lng) * kx), y: Y((lat - c.lat) * ky) }; };
+  var g = '<rect width="' + W + '" height="' + H + '" fill="var(--dx1-bg)"/>', r = dx1_rnd(st.seed), R0 = Math.max(900, st.maxd * 5), wk = Math.max(0.6, Math.min(1.6, Math.sqrt(s / st.s0)));
+  for (var i = 0; i < 26; i++) { var bx = (r() - .5) * 2 * R0 * 0.6, by = (r() - .5) * 2 * R0 * 0.6, bw = 18 + r() * 40, bh = 14 + r() * 30; g += '<rect x="' + X(bx).toFixed(1) + '" y="' + Y(by).toFixed(1) + '" width="' + (bw * s).toFixed(1) + '" height="' + (bh * s).toFixed(1) + '" rx="3" fill="var(--dx1-bl)"/>'; }
+  for (var k = 0; k < 2; k++) {
+    var pos = -R0 + r() * 60;
+    for (var n = 0; n < 40 && pos < R0; n++) {
+      var a = (r() - .5) * 0.16 * R0, w = (n % 3 ? 2 : 5.5) * wk;
+      g += k ? '<path d="M' + X(pos).toFixed(1) + ' ' + Y(-R0).toFixed(1) + 'L' + X(pos + a).toFixed(1) + ' ' + Y(R0).toFixed(1) + '" stroke="var(--dx1-st)" stroke-width="' + w.toFixed(1) + '" fill="none"/>'
+        : '<path d="M' + X(-R0).toFixed(1) + ' ' + Y(pos).toFixed(1) + 'L' + X(R0).toFixed(1) + ' ' + Y(pos + a).toFixed(1) + '" stroke="var(--dx1-st)" stroke-width="' + w.toFixed(1) + '" fill="none"/>';
+      pos += 70 + r() * 110;
+    }
+  }
+  var vz = st.v ? M(st.v.lat, st.v.lng) : null;
+  if (vz) g += '<circle cx="' + vz.x.toFixed(1) + '" cy="' + vz.y.toFixed(1) + '" r="' + Math.max(10, st.v.rad * s).toFixed(1) + '" fill="color-mix(in srgb,var(--gold) 7%,transparent)" stroke="var(--gold)" stroke-width="1.5" stroke-dasharray="5 5"/>';
+  /* кружки не налезают друг на друга: раздвигаем на экране (данные не меняются) */
+  var N = o.pins.map(function (p, i) { var q = M(p.lat, p.lng); return { x: q.x, y: q.y, p: p, i: i }; }), sm = o.pins.length > 16, rr = o.num ? 15 : sm ? 14 : 17, zR = st.v ? st.v.rad * s : 0;
+  for (var it = 0; it < 40; it++) {
+    var mv = false;
+    for (var a1 = 0; a1 < N.length; a1++) {
+      if (vz) { var dx0 = N[a1].x - vz.x, dy0 = N[a1].y - vz.y, d0 = Math.sqrt(dx0 * dx0 + dy0 * dy0); if (d0 < rr + 17) { if (d0 < .01) { dx0 = Math.cos(a1 * 2.4); dy0 = Math.sin(a1 * 2.4); d0 = 1; } var f0 = (rr + 17 - d0); N[a1].x += dx0 / d0 * f0; N[a1].y += dy0 / d0 * f0; mv = true; } }
+      for (var b1 = a1 + 1; b1 < N.length; b1++) {
+        var dx = N[b1].x - N[a1].x, dy = N[b1].y - N[a1].y, d = Math.sqrt(dx * dx + dy * dy), need = rr * 2 - 3;
+        if (d < need) { if (d < .01) { dx = Math.cos(b1 * 2.4); dy = Math.sin(b1 * 2.4); d = 1; } var f = (need - d) / 2; N[a1].x -= dx / d * f; N[a1].y -= dy / d * f; N[b1].x += dx / d * f; N[b1].y += dy / d * f; mv = true; }
+      }
+    }
+    /* в зоне — остаётся внутри круга, вне зоны — снаружи (раздвигание не меняет смысл) */
+    if (vz) N.forEach(function (q) {
+      var z = q.p.z; if (!z) return; var dx = q.x - vz.x, dy = q.y - vz.y, d = Math.sqrt(dx * dx + dy * dy) || 1, lim;
+      if (z === 'in' && zR > rr * 2 + 20 && d > (lim = zR - rr * 0.6)) { q.x = vz.x + dx / d * lim; q.y = vz.y + dy / d * lim; mv = true; }
+      else if (z === 'out' && d < (lim = zR + rr + 2)) { q.x = vz.x + dx / d * lim; q.y = vz.y + dy / d * lim; mv = true; }
+    });
+    if (!mv) break;
+  }
+  if (vz) g += '<g transform="translate(' + vz.x.toFixed(1) + ',' + vz.y.toFixed(1) + ')"><rect x="-15" y="-15" width="30" height="30" rx="8" fill="var(--gold)"/>' + DX1_HOUSE + '<title>' + h(dx_t('Заведение')) + '</title></g>';
+  if (o.line && N.length > 1) g += '<path d="M' + N.map(function (q) { return q.x.toFixed(1) + ' ' + q.y.toFixed(1); }).join(' L') + '" fill="none" stroke="var(--gold)" stroke-width="2" stroke-dasharray="2 6" stroke-linecap="round"/>';
+  N.forEach(function (q) {
+    var p = q.p, big = o.num ? 11 : sm ? 11 : 13;
+    g += '<g class="dx1-pin" data-dx1p="' + h(p.id) + '" transform="translate(' + q.x.toFixed(1) + ',' + q.y.toFixed(1) + ')"' + (o.onPin ? ' tabindex="0" role="button"' : '') + ' aria-label="' + h(p.title) + '">' +
+      '<circle r="' + (big + 5) + '" fill="' + p.col + '" opacity=".2"/><circle r="' + big + '" fill="var(--dx1-pin)" stroke="' + p.col + '" stroke-width="2"/>' +
+      '<text y="' + (o.num ? 4 : 3.5) + '" text-anchor="middle" font-size="' + (o.num ? 11 : sm ? 8 : 9) + '" font-weight="700" fill="' + p.col + '" font-family="var(--sans,Manrope),sans-serif">' + h(p.txt) + '</text><title>' + h(p.title) + '</title></g>';
+  });
+  st.svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); st.svg.innerHTML = g;
+}
+function dx1_svgMap(el, o) {
+  var D = o.D, v = D.v, c = v || D.center || (o.pins[0] ? { lat: o.pins[0].lat, lng: o.pins[0].lng } : { lat: 41.2906, lng: 69.2781 });
+  var kx = 111320 * Math.cos(c.lat * Math.PI / 180), maxd = v ? v.rad * 1.2 : 60;
+  o.pins.forEach(function (p) { maxd = Math.max(maxd, Math.abs((p.lng - c.lng) * kx), Math.abs((p.lat - c.lat) * 111320)); });
+  el.innerHTML = '<svg class="dx1-svg" role="img" aria-label="' + h(dx_t('Карта сотрудников')) + '" preserveAspectRatio="xMidYMid slice"></svg>';
+  var st = { el: el, o: o, c: c, v: v, maxd: maxd, z: 0, ox: 0, oy: 0, seed: dx_hash((c.lat * 1e4).toFixed(0) + ',' + (c.lng * 1e4).toFixed(0)) + 7, svg: el.firstChild };
+  var fit = function () { var pad = o.pad || {}, W = el.clientWidth || 360, H = el.clientHeight || 320; var av = Math.min(W - (pad.r || 0), H - (pad.t || 0) - (pad.b || 0)) / 2 - 30; st.s0 = Math.max(0.05, av / (maxd + 10));
+    /* много людей в зоне — круг зоны крупнее, чтобы кружки поместились внутри (дальние точки — сдвигом карты или «−») */
+    if (v) { var nIn = o.pins.filter(function (p) { return p.z === 'in'; }).length, need = (o.pins.length > 16 ? 14 : 17) * (1.25 * Math.sqrt(nIn) + 1); if (v.rad * st.s0 < need) st.s0 = Math.min(av * 0.92, need) / v.rad; } };
+  fit(); dx1_svgDraw(st);
+  /* перетаскивание карты пальцем / мышью; нажатие без сдвига — на кружок */
+  var dn = null, raf = 0;
+  st.svg.addEventListener('pointerdown', function (ev) { dn = { x: ev.clientX, y: ev.clientY, ox: st.ox, oy: st.oy, mv: false, pin: ev.target.closest && ev.target.closest('[data-dx1p]') }; try { st.svg.setPointerCapture(ev.pointerId); } catch (z) {} });
+  st.svg.addEventListener('pointermove', function (ev) {
+    if (!dn) return; var dx = ev.clientX - dn.x, dy = ev.clientY - dn.y;
+    if (!dn.mv && Math.abs(dx) + Math.abs(dy) < 7) return; dn.mv = true; st.ox = dn.ox + dx; st.oy = dn.oy + dy;
+    if (!raf) raf = requestAnimationFrame(function () { raf = 0; dx1_svgDraw(st); });
+  });
+  var up = function () { var d = dn; dn = null; if (d && !d.mv && d.pin && o.onPin) o.onPin(d.pin.getAttribute('data-dx1p')); };
+  st.svg.addEventListener('pointerup', up); st.svg.addEventListener('pointercancel', function () { dn = null; });
+  st.svg.addEventListener('keydown', function (ev) { var p = ev.target.closest && ev.target.closest('[data-dx1p]'); if (p && o.onPin && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); o.onPin(p.getAttribute('data-dx1p')); } });
+  return { kind: 'svg', zoom: function (d) { st.z = Math.max(-3, Math.min(5, st.z + d)); st.ox *= d > 0 ? 1.5 : 1 / 1.5; st.oy *= d > 0 ? 1.5 : 1 / 1.5; dx1_svgDraw(st); }, redraw: function () { if (el.isConnected) { fit(); dx1_svgDraw(st); } }, el: el };
+}
+async function dx1_mapInit(el, o) {
+  var ctl = dx1_svgMap(el, o); DX1.ctl = ctl;
+  var ok = await dm_leaflet(); if (!ok || !el.isConnected || DX1.ctl !== ctl) return ctl;
+  try {
+    var D = o.D, C = dx_col(), c0 = D.v || D.center || o.pins[0] || { lat: 41.2906, lng: 69.2781 }, c = [c0.lat, c0.lng], pad = o.pad || {};
+    el.innerHTML = ''; el.classList.add('dx1-lf');
+    var map = L.map(el, { zoomControl: false, attributionControl: true }).setView(c, 17);
+    try { map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>'); map.attributionControl.setPosition('bottomleft'); } catch (z) {}
+    var tl = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap', className: 'dx1-tiles' }).addTo(map);
+    var lf = { kind: 'leaflet', zoom: function (d) { try { if (d > 0) map.zoomIn(); else map.zoomOut(); } catch (z) {} }, redraw: function () { try { map.invalidateSize(); } catch (z) {} }, el: el };
+    var bad = 0; tl.on('tileerror', function () { if (++bad === 6 && el.isConnected) { try { map.remove(); } catch (z) {} el.classList.remove('dx1-lf'); var s2 = dx1_svgMap(el, o); if (DX1.ctl === lf) DX1.ctl = s2; } });
+    var ll = [];
+    if (D.v) {
+      L.circle(c, { radius: D.v.rad, color: C.gold, weight: 1.5, dashArray: '5 5', fillColor: C.gold, fillOpacity: 0.07, interactive: false }).addTo(map);
+      L.marker(c, { interactive: false, keyboard: false, icon: L.divIcon({ className: 'dx1-li', html: '<span class="dx1-ven"><svg viewBox="-15 -15 30 30" width="30" height="30">' + DX1_HOUSE + '</svg></span>', iconSize: [30, 30], iconAnchor: [15, 15] }) }).addTo(map);
+      ll.push(c);
+    }
+    if (o.line && o.pins.length > 1) L.polyline(o.pins.map(function (p) { return [p.lat, p.lng]; }), { color: C.gold, weight: 2, dashArray: '2 7', lineCap: 'round', interactive: false }).addTo(map);
+    o.pins.forEach(function (p) {
+      ll.push([p.lat, p.lng]);
+      var m = L.marker([p.lat, p.lng], { title: p.title, keyboard: true, icon: L.divIcon({ className: 'dx1-li', html: '<span class="dx1-lp' + (o.num ? ' n' : '') + '" style="--c:' + p.col + '">' + h(p.txt) + '</span>', iconSize: [30, 30], iconAnchor: [15, 15] }) }).addTo(map);
+      if (o.onPin) m.on('click', function () { o.onPin(p.id); });
+    });
+    if (ll.length > 1) map.fitBounds(L.latLngBounds(ll).pad(0.15), { paddingTopLeft: [24, (pad.t || 0) + 16], paddingBottomRight: [(pad.r || 0) + 24, (pad.b || 0) + 24], maxZoom: 18 });
+    setTimeout(function () { try { map.invalidateSize(); } catch (z) {} }, 200);
+    DX1.ctl = lf; return lf;
+  } catch (z) { console.warn('dx map', z); el.classList.remove('dx1-lf'); return (DX1.ctl = dx1_svgMap(el, o)); }
+}
+
+/* ---------- 3.3 стили ---------- */
+function dx_css() {
+  if ($('dxCss')) return;
+  var st = document.createElement('style'); st.id = 'dxCss';
+  var ctl = '.dx1-cb{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:color-mix(in srgb,var(--card) 94%,transparent);border:1px solid var(--line);color:var(--gold);font:600 22px/1 var(--sans,Manrope),sans-serif;cursor:pointer;padding:0;box-shadow:0 6px 16px -8px rgba(0,0,0,.45)}.dx1-cb:active{transform:scale(.96)}.dx1-cb svg{width:18px;height:18px}';
+  st.textContent =
+    /* цвета схемы: тёмная (как макет) и светлая */
+    '.dx1,.dx1-one{--dx1-bg:#121417;--dx1-st:#1F2328;--dx1-bl:#191C20;--dx1-pin:#111214}' +
+    'html[data-lx="light"] .dx1,html[data-lx="light"] .dx1-one{--dx1-bg:#ECE7DD;--dx1-st:#FBF8F2;--dx1-bl:#E2DCD0;--dx1-pin:#FFFDF9}' +
+    /* сцена на весь верх (на телефоне — от края до края) */
+    '.dx1{position:relative;overflow:hidden;margin:0 calc(-1 * var(--dx1-gx,0px));height:var(--dx1-h,560px);background:var(--dx1-bg);border-top:1px solid var(--line)}' +
+    '.dx1.wide{margin:0;border:1px solid var(--line);border-radius:20px}' +
+    '.dx1-map{position:absolute;inset:0;overflow:hidden;background:var(--dx1-bg)}.dx1-svg{display:block;width:100%;height:100%;touch-action:none;cursor:grab;user-select:none}' +
+    '.dx1-pin{cursor:pointer;outline:none}.dx1-pin:focus-visible circle:nth-child(2){stroke-width:3.5}' +
+    /* Leaflet: тёмный вид плиток OSM через фильтр; в светлой теме — обычные плитки, приглушённые в тон приложения */
+    '.dx1-lf{background:var(--dx1-bg)}html[data-lx="dark"] .dx1-tiles{filter:grayscale(1) invert(1) brightness(.62) contrast(1.18) sepia(.12)}html[data-lx="light"] .dx1-tiles{filter:grayscale(.55) sepia(.18) brightness(1.02) contrast(.95)}' +
+    '.dx1-lf .leaflet-control-attribution{font-size:9px;background:color-mix(in srgb,var(--card) 80%,transparent)!important;color:var(--muted)}.dx1-lf .leaflet-control-attribution a{color:var(--muted)}' +
+    '.dx1-li{background:none;border:0}.dx1-ven{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;background:var(--gold)}' +
+    '.dx1-lp{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--dx1-pin);border:2px solid var(--c);color:var(--c);font:700 9px/1 var(--sans,Manrope),sans-serif;box-shadow:0 0 0 5px color-mix(in srgb,var(--c) 20%,transparent);cursor:pointer}.dx1-lp.n{font-size:11px;width:24px;height:24px}' +
+    /* фильтры-чипы поверх карты */
+    '.dx1-top{position:absolute;left:0;right:0;top:0;padding:10px 16px 0;z-index:500;pointer-events:none}.dx1.wide .dx1-top{right:var(--dx1-pr,0px)}.dx1-top>*{pointer-events:auto}' +
+    '.dx1-chips{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}.dx1-chips::-webkit-scrollbar{display:none}' +
+    '.dx1-f{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 13px;border-radius:999px;background:color-mix(in srgb,var(--card) 92%,transparent);border:1px solid var(--line);color:var(--muted);font:600 12.5px/1 var(--sans,Manrope),sans-serif;white-space:nowrap;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}' +
+    '.dx1-f b{font-weight:700;color:var(--ink)}.dx1-f.on{background:var(--gbtn,linear-gradient(180deg,#E2C27C,#C39B4E));color:#17181A;border-color:transparent}.dx1-f.on b{color:#17181A}' +
+    '.dx1-d{width:8px;height:8px;border-radius:50%;flex:none}' +
+    '.dx1-set{margin-top:8px;display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-radius:16px;background:color-mix(in srgb,var(--card) 95%,transparent);border:1px solid var(--line);border-left:3px solid var(--dj-infof,#2F6FD6);max-width:420px}' +
+    '.dx1-set .name,.dx1-set .meta{white-space:normal}.dx1 .dx1-set{gap:6px;padding:10px 12px;max-width:min(420px,calc(100% - 56px))}.dx1 .dx1-set .name{font-size:13.5px;line-height:1.3}.dx1 .dx1-set .meta{font-size:12px;line-height:1.35}.dx1 .dx1-set .btn{min-height:38px}' +
+    /* + / − / обновить — справа над шторкой */
+    '.dx1-ctl{position:absolute;right:16px;bottom:calc(var(--dx1-shh,200px) + 14px);display:flex;flex-direction:column;gap:8px;z-index:500;transition:bottom .32s var(--ease-sheet,ease),opacity .2s}.dx1.wide .dx1-ctl{right:calc(var(--dx1-pr,0px) + 16px);bottom:16px}' +
+    '.dx1[data-sh="2"]:not(.wide) .dx1-ctl{opacity:0;pointer-events:none}' + ctl +
+    /* шторка */
+    '.dx1-sh{position:absolute;left:0;right:0;bottom:0;height:var(--dx1-shh,200px);z-index:600;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-bottom:0;border-radius:26px 26px 0 0;box-shadow:0 -14px 30px -18px rgba(0,0,0,.55);transition:height .32s var(--ease-sheet,ease)}' +
+    '.dx1-sh.drag{transition:none}.dx1.wide .dx1-sh{left:auto;top:0;width:var(--dx1-pr,360px);height:auto;border-radius:0 20px 20px 0;border:0;border-left:1px solid var(--line);box-shadow:none}' +
+    '.dx1-hd{flex:none;padding:8px 16px 8px;cursor:grab;touch-action:none;user-select:none}.dx1.wide .dx1-hd{cursor:default;padding-top:14px}' +
+    '.dx1-grip{display:block;width:40px;height:4px;border-radius:4px;background:color-mix(in srgb,var(--muted) 45%,transparent);margin:2px auto 10px}.dx1.wide .dx1-grip{display:none}' +
+    '.dx1-hr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-width:0}.dx1-lbl{font:700 11px/1.2 var(--sans,Manrope),sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);min-width:0;flex:0 1 auto}' +
+    '.dx1-rad{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap;flex:none}.dx1.wide .dx1-rad{margin-left:0}' +
+    '.dx1-day{position:relative;flex:none;display:inline-flex;align-items:center;gap:4px;min-height:32px;padding:0 9px;border-radius:999px;border:1px solid var(--line);color:var(--ink);font:600 12px/1 var(--sans,Manrope),sans-serif;cursor:pointer}.dx1-day svg{width:14px;height:14px;color:var(--gold)}' +
+    '.dx1-day input,html[data-lx] .dx1-day input{position:absolute;inset:0;opacity:0!important;width:100%;height:100%;min-height:0;cursor:pointer;border:0;padding:0;margin:0;font-size:16px;color:transparent;background:transparent;box-shadow:none;-webkit-appearance:none;appearance:none}.dx1-day input::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}' +
+    '.dx1-ls{flex:1;overflow-y:auto;overscroll-behavior:contain;padding:0 16px 6px;min-height:0}' +
+    '.dx1-r{display:flex;align-items:center;gap:11px;width:100%;padding:10px 0;background:none;border:0;border-bottom:1px solid var(--line);text-align:left;color:inherit;font:inherit;cursor:pointer;min-height:56px}.dx1-r:last-child{border-bottom:0}' +
+    '.dx1-r .av{width:38px;height:38px}.dx1-r .grow{min-width:0;flex:1}.dx1-nm{font-weight:600;font-size:14.5px;color:var(--ink);overflow-wrap:anywhere}' +
+    '.dx1-ms{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.35}.dx1-ms b{color:var(--ink);font-weight:700}' +
+    '.dx1-tag{flex:none;font:700 11px/1 var(--sans,Manrope),sans-serif;padding:5px 9px;border-radius:999px;color:#fff;max-width:40%;text-align:center;line-height:1.15;overflow-wrap:anywhere}' +
+    '.dx1-tag.ok{background:var(--dj-fok,#0B7A52)}.dx1-tag.bad{background:var(--dj-fbad,#C62A25)}.dx1-tag.warn{background:var(--dj-fwarn,#E8A317);color:var(--dj-onw,#1C1400)}.dx1-tag.info{background:var(--dj-finfo,#1F5FBF)}.dx1-tag.gold{background:var(--goldbg);color:var(--goldink);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--gold) 45%,transparent)}' +
+    '.dx1-more{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:46px;margin-top:6px;padding:0 14px;border-radius:14px;border:1px solid var(--line);background:none;color:var(--ink);font:600 13px/1.2 var(--sans,Manrope),sans-serif;cursor:pointer;text-align:left}.dx1-more svg{color:var(--muted);flex:none}' +
+    '.dx1-sub{margin-top:12px}.dx1-sub>summary{list-style:none;cursor:pointer;min-height:40px;display:flex;align-items:center;gap:8px;font:700 11px/1.2 var(--sans,Manrope),sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}.dx1-sub>summary::-webkit-details-marker{display:none}' +
+    '.dx1-mgr{display:flex;align-items:center;gap:10px;min-height:48px;margin-top:10px;padding:4px 0;border-top:1px solid var(--line);cursor:pointer}.dx1-mgr input{width:22px;height:22px;accent-color:var(--gold);flex:none}.dx1-mgr span{white-space:normal;font-size:13px}' +
+    '.dx1-nt{flex:none;padding:6px 16px calc(8px + env(safe-area-inset-bottom,0px));font-size:11px;line-height:1.35;color:var(--muted);border-top:1px solid var(--line2)}' +
+    '.dx1-ch{color:var(--muted);display:inline-flex;flex:none}.dx1-empty{padding:14px 0;color:var(--muted);font-size:13px;white-space:normal}' +
+    /* один сотрудник (макет v5) */
+    '.dx1-one{display:flex;flex-direction:column;gap:12px}' +
+    '.dx1-back{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 14px 0 10px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:600 13px/1 var(--sans,Manrope),sans-serif;cursor:pointer}.dx1-back svg{width:16px;height:16px;color:var(--gold)}' +
+    '.dx1-who{display:flex;align-items:center;gap:12px;min-width:0}.dx1-who .av{width:46px;height:46px;font-size:18px}.dx1-who .grow{min-width:0}' +
+    '.dx1-wn{font:var(--t-title,600 22px/1.15 serif);font-family:var(--serif);font-size:24px;line-height:1.1;color:var(--ink);overflow-wrap:anywhere}.dx1-wm{font-size:12.5px;color:var(--muted);margin-top:3px}' +
+    '.dx1-days{flex-wrap:nowrap}.dx1-days .dx1-f{background:var(--card)}.dx1-days .dx1-f.on{background:var(--gbtn,linear-gradient(180deg,#E2C27C,#C39B4E))}' +
+    '.dx1-mc{position:relative;height:300px;border-radius:22px;overflow:hidden;border:1px solid var(--line);background:var(--dx1-bg)}' +
+    '.dx1-badge{position:absolute;left:12px;bottom:12px;z-index:500;padding:8px 12px;border-radius:12px;background:color-mix(in srgb,var(--card) 92%,transparent);border:1px solid var(--line);font-size:12px;color:var(--ink);max-width:calc(100% - 80px)}.dx1-badge b.ok{color:var(--ok)}.dx1-badge b.bad{color:var(--bad)}' +
+    '.dx1-mc .dx1-ctl{right:12px;bottom:12px;top:auto}' +
+    '.dx1-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.dx1-sc{padding:11px 8px;border-radius:16px;text-align:center;background:var(--card);border:1px solid var(--line);min-width:0}' +
+    '.dx1-sc b{display:block;font-size:17px;font-weight:700;color:var(--ink);line-height:1.2}.dx1-sc span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}' +
+    '.dx1-steps{display:flex;flex-direction:column}.dx1-step{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);min-height:44px}' +
+    '.dx1-no{flex:none;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--c);color:var(--c);font:700 11px/1 var(--sans,Manrope),sans-serif;display:grid;place-items:center}' +
+    '.dx1-tm{flex:none;width:44px;font-weight:700;font-size:13.5px;color:var(--ink)}.dx1-sx{flex:1;min-width:0;font-size:13px;color:var(--muted);line-height:1.35}.dx1-sx b{color:var(--ink);font-weight:600}' +
+    '.dx1-one .dx1-nt{border:0;padding:0 2px 8px}' +
+    '@media (max-width:360px){.dx1-sc b{font-size:15px}.dx1 .dx1-set .meta{display:none}.dx1-mc{height:260px}.dx1-f{padding:0 11px;font-size:12px}.dx1-rad{font-size:11px}.dx1-wn{font-size:21px}}';
+  document.head.appendChild(st);
+}
+
+/* ---------- 3.4 общий экран: карта + чипы + шторка ---------- */
+function dx1_rowHtml(r, D) {
+  return '<button type="button" class="dx1-r" data-dxw="' + h(r.e.id) + '"><span class="av">' + h(ini(r.e)) + '</span><span class="grow"><span class="dx1-nm" style="display:block">' + h(fullName(r.e)) + '</span>' +
+    '<span class="dx1-ms" style="display:block">' + dx1_meta(r) + '</span></span><span class="dx1-tag ' + DX1_ST[r.st] + '">' + h(dx1_tag(r, D)) + '</span></button>';
+}
+function dx1_ptRow(p) {
+  var col = p.zone == null ? 'info' : p.out ? 'bad' : 'ok';
+  return '<button type="button" class="dx1-r" data-dxw="' + h(p.e.id) + '"><span class="av">' + h(ini(p.e)) + '</span><span class="grow"><span class="dx1-nm" style="display:block">' + h(fullName(p.e)) + '</span>' +
+    '<span class="dx1-ms" style="display:block"><span class="num">' + hm(p.at) + '</span> · ' + h(dx_cut(p.txt, 40)) + (p.dist != null ? ' · <b class="num">' + Math.round(p.dist) + ' ' + dx_e('м') + '</b>' : '') + '</span></span>' +
+    (p.zone == null ? '' : '<span class="dx1-tag ' + col + '">' + dx_e(p.out ? 'вне зоны' : 'в зоне') + '</span>') + '</button>';
+}
+function dx1_noPt(dir) {
+  return '<div class="dx1-set" id="dxNoPt"><div class="name">' + dx_e('Задайте точку заведения, чтобы видеть круг зоны') + '</div>' +
+    '<div class="meta">' + dx_e(dir ? 'Точка и радиус — в «Пульт → Настройки отметки». Без точки на карте видны места сотрудников, но не видно, в зоне они или нет.' : 'Точку и радиус задаёт владелец в «Пульт → Настройки отметки».') + '</div>' +
+    (dir ? '<button type="button" class="btn gold sm" id="dxSet" style="align-self:flex-start"><span>' + dx_e('Задать точку заведения') + '</span></button>' : '') + '</div>';
+}
+function dx1_note(D) { return dx_e('Только место в момент отметки — постоянного слежения нет') + (D && D.demo ? '. ' + dx_e('В демо точки условные.') : ''); }
+/* размеры сцены: от её верха до нижнего меню; на телефоне — от края до края */
+function dx1_fit(stg) {
+  var m = $('main'), gx = 0;
+  try { gx = parseFloat(getComputedStyle(m || stg.parentNode).paddingLeft) || 0; } catch (e) {}
+  var nav = document.querySelector('nav.nav'), nb = nav ? nav.getBoundingClientRect().top : innerHeight;
+  if (!nb || nb > innerHeight || nb < innerHeight * 0.5) nb = innerHeight;
+  var top = stg.getBoundingClientRect().top + (window.scrollY || 0);
+  var wide = (stg.parentNode.clientWidth || 0) >= 720;
+  stg.classList.toggle('wide', wide);
+  stg.style.setProperty('--dx1-gx', wide ? '0px' : Math.min(24, gx) + 'px');
+  var H = Math.round(Math.max(wide ? 520 : 440, Math.min(wide ? 760 : 2000, nb - Math.max(0, top) - (wide ? 16 : 0))));
+  stg.style.setProperty('--dx1-h', H + 'px');
+  if (wide) stg.style.setProperty('--dx1-pr', Math.min(380, Math.round(stg.clientWidth * 0.42)) + 'px');
+  return { H: H, wide: wide };
+}
+function dx1_shH(stg, H, k) { var a = [Math.min(150, Math.round(H * 0.3)), Math.round(H * 0.46), H - 62]; return a[Math.max(0, Math.min(2, k))]; }
+function dx1_sheet(stg, H, onSnap) {
+  var sh = stg.querySelector('.dx1-sh'), hd = stg.querySelector('.dx1-hd'), k = S.sub.dx1Sh == null ? 1 : +S.sub.dx1Sh;
+  var set = function (px) { stg.style.setProperty('--dx1-shh', Math.round(px) + 'px'); };
+  var snap = function (n) { k = Math.max(0, Math.min(2, n)); S.sub.dx1Sh = k; stg.setAttribute('data-sh', k); set(dx1_shH(stg, H, k)); if (onSnap) onSnap(k); };
+  snap(k);
+  if (stg.classList.contains('wide')) return;
+  var dn = null;
+  hd.addEventListener('pointerdown', function (ev) { if (ev.target.closest('.dx1-day')) return; dn = { y: ev.clientY, h: sh.getBoundingClientRect().height, mv: false }; sh.classList.add('drag'); try { hd.setPointerCapture(ev.pointerId); } catch (z) {} });
+  hd.addEventListener('pointermove', function (ev) { if (!dn) return; var dy = ev.clientY - dn.y; if (Math.abs(dy) > 5) dn.mv = true; set(Math.max(dx1_shH(stg, H, 0) - 30, Math.min(H - 40, dn.h - dy))); });
+  var end = function (ev) {
+    if (!dn) return; var d = dn; dn = null; sh.classList.remove('drag');
+    if (!d.mv) { snap(k === 2 ? 1 : k + 1); return; }
+    var cur = sh.getBoundingClientRect().height, best = 0, bd = 1e9;
+    for (var i = 0; i < 3; i++) { var dd = Math.abs(dx1_shH(stg, H, i) - cur); if (dd < bd) { bd = dd; best = i; } }
+    var vy = ev && d ? ev.clientY - d.y : 0; if (Math.abs(vy) > 60 && best === k) best = k + (vy < 0 ? 1 : -1);
+    snap(best);
+  };
+  hd.addEventListener('pointerup', end); hd.addEventListener('pointercancel', end);
+  hd.addEventListener('keydown', function (ev) { if (ev.key === 'ArrowUp') { ev.preventDefault(); snap(k + 1); } else if (ev.key === 'ArrowDown') { ev.preventDefault(); snap(k - 1); } });
+}
+function dx1_open(box, team, id) { S.sub.dx1From = S.sub.dxWho || ''; S.sub.dxWho = id; dx_map(box, team); try { box.scrollIntoView({ block: 'start' }); } catch (e) {} }
 async function dx_map(box, team) {
   if (!box) return;
   dx_css();
   var day = S.sub.dmMapDay || today(), dir = isDirector(), people = dx_people(team);
   var who = S.sub.dxWho || ''; if (who && who !== '*' && !people.some(function (e) { return e.id === who; })) who = S.sub.dxWho = '';
-  if (!box.querySelector('#dxHead')) box.innerHTML = '<div class="card empty">' + dx_e('Загрузка…') + '</div>';
-  var D = await dx_data(day, who, people); if (!box.isConnected) return;
+  if (who && who !== '*') return dx1_one(box, team, who, day, people);
+  if (!box.querySelector('.dx1')) box.innerHTML = '<div class="card empty">' + dx_e('Загрузка…') + '</div>';
+  var R = await Promise.all([dx_data(day, '', people), dx1_att(day)]), D = R[0], A = R[1]; if (!box.isConnected) return;
   if (!D) { if (dm_map0) return dm_map0(box, team); box.innerHTML = '<div class="card empty">' + dx_e('Карта не загрузилась — проверьте интернет') + '</div>'; return; }
-  var V = dx_view(D, who, day), nIn = V.P.filter(function (p) { return p.zone && !p.out; }).length, nOut = V.P.filter(function (p) { return p.out; }).length;
-  var opt = function (val, txt) { return '<option value="' + h(val) + '"' + (who === val ? ' selected' : '') + '>' + h(txt) + '</option>'; };
-  var sel = opt('', dx_t('Все на смене — последнее место')) + opt('*', dx_t('Все за день')) +
-    people.slice().sort(function (a, b) { return fullName(a).localeCompare(fullName(b)); }).map(function (e) { var ps = typeof posName === 'function' ? posName(e.position_id) : ''; return opt(e.id, fullName(e) + (ps ? ' — ' + trUi(ps) : '')); }).join('');
-  var e1 = V.mode === 'one' ? people.filter(function (e) { return e.id === who; })[0] : null;
-  var title = V.mode === 'one' ? h(fullName(e1)) : dx_e(V.mode === 'day' ? 'Все точки за день' : day === today() ? 'На смене — последнее место' : 'Последнее место');
-  var empty = V.mode === 'one' ? dx_e('За этот день точек нет.') : day === today() ? dx_e(V.mode === 'last' && D.P.length ? 'Сейчас на смене никого с точкой. Выберите «Все за день».' : 'Точек пока нет. Точка появляется, когда сотрудник отмечает приход или уход, сдаёт задачу, передаёт смену или подаёт заявку.') : dx_e('В этот день точек не было.');
-  var list = V.mode === 'one' ? V.P.slice().reverse() : V.mode === 'day' ? V.P.slice().reverse() : V.P;
-  var html = '<div class="card" id="dxHead"><div class="dx-fl">' +
-      '<label class="f dx-day">' + dx_e('День') + '<input class="in" type="date" id="dmMd" value="' + day + '" max="' + today() + '"></label>' +
-      '<label class="f">' + dx_e('Сотрудник') + '<select class="in" id="dxWho">' + sel + '</select></label>' +
-      '<button type="button" class="btn ghost sm" id="dxRe"><span>' + dx_e('Обновить') + '</span></button></div>' +
-      '<div class="dm-leg">' + (D.v ? '<span class="chip t-ok"><span class="dm-mk in"></span><span>' + dx_e('в зоне') + '</span> <b class="num">' + nIn + '</b></span><span class="chip t-bad"><span class="dm-mk out"></span><span>' + dx_e('вне зоны') + '</span> <b class="num">' + nOut + '</b></span>'
-        : '<span class="chip t-info"><span class="dm-mk dx-nz"></span><span>' + dx_e('точки') + '</span> <b class="num">' + V.P.length + '</b></span>') +
-      (D.v ? '<span class="chip t-mute"><span class="dm-mk v"></span><span>' + dx_e('заведение и радиус') + '</span> <b class="num">' + D.v.rad + ' ' + dx_e('м') + '</b></span>' : '') +
-      (V.mode === 'one' && V.P.length > 1 ? '<span class="chip t-mute"><span class="dm-mk dx-ln"></span><span>' + dx_e('путь по времени') + '</span></span>' : '') + '</div></div>' +
-    (!D.v ? '<div class="card dx-set" id="dxNoPt"><div class="name" style="white-space:normal">' + dx_e('Задайте точку заведения, чтобы видеть круг зоны') + '</div>' +
-      '<div class="meta" style="white-space:normal">' + dx_e(dir ? 'Точка и радиус — в «Пульт → Настройки отметки». Без точки на карте видны места сотрудников, но не видно, в зоне они или нет.' : 'Точку и радиус задаёт владелец в «Пульт → Настройки отметки».') + '</div>' +
-      (dir ? '<button type="button" class="btn gold sm" id="dxSet" style="align-self:flex-start"><span>' + dx_e('Задать точку заведения') + '</span></button>' : '') + '</div>' : '') +
-    '<div class="card" style="padding:6px"><div class="dm-map" id="dmMap"></div></div>' +
-    '<div class="card"><h2><span>' + title + '</span> <small class="num">' + V.P.length + '</small></h2>' +
-      (V.mode === 'one' && e1 ? '<div class="meta" style="margin:-4px 0 6px">' + dx_e(D.on[e1.id] ? 'на смене' : '') + '</div>' : '') +
-      (list.length ? list.map(function (p) { return dx_rowHtml(p, V); }).join('') : '<div class="empty" style="white-space:normal">' + empty + '</div>') + '</div>' +
-    '<div class="meta" style="white-space:normal;margin:0 2px 8px">' + dx_e('Точки — только в момент действий: приход, уход, задача, передача смены, заявка. Постоянного слежения нет.') + (D.demo ? ' ' + dx_e('В демо точки условные.') : '') + '</div>' +
-    (dir ? '<div class="card"><label class="cb-sw" style="display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer"><input type="checkbox" id="dmMgr"' + (dm_mapMgrOn() ? ' checked' : '') + ' style="width:22px;height:22px;accent-color:var(--gold)"><span class="grow" style="white-space:normal">' + dx_e('Руководители видят карту своей команды (Разделы)') + '</span></label></div>' : '');
+  var all = who === '*', rows = dx1_rows(D, A), f = S.sub.dx1F || 'all';
+  if (!D.v && f === 'out') f = 'all';
+  var cnt = { all: rows.length, 'in': 0, out: 0, gone: 0 }; rows.forEach(function (r) { ['in', 'out', 'gone'].forEach(function (k) { if (dx1_fOk(r, k)) cnt[k]++; }); });
+  var vis = rows.filter(function (r) { return dx1_fOk(r, f); });
+  var chip = function (k, txt, dot) { return '<button type="button" class="dx1-f' + (f === k ? ' on' : '') + '" data-dx1f="' + k + '" aria-pressed="' + (f === k) + '">' + (dot ? '<span class="dx1-d" style="background:' + dot + '"></span>' : '') + '<span>' + dx_e(txt) + '</span><b class="num">' + cnt[k] + '</b></button>'; };
+  var chips = all ? '<button type="button" class="dx1-f" id="dx1All0"><span>' + icon('back', 14) + '</span><span>' + dx_e('Отметки') + '</span></button><span class="dx1-f on" style="cursor:default"><span>' + dx_e('Все точки за день') + '</span><b class="num">' + D.P.length + '</b></span>'
+    : chip('all', 'Все') + chip('in', D.v ? 'В зоне' : 'На смене', DX1_C.ok) + (D.v ? chip('out', 'Вне зоны', DX1_C.bad) : '') + chip('gone', 'Ушли', DX1_C.gold);
+  var withPt = {}; rows.forEach(function (r) { withPt[r.e.id] = 1; });
+  var noPt = people.filter(function (e) { return !withPt[e.id]; }).sort(function (a, b) { return fullName(a).localeCompare(fullName(b)); });
+  var lbl = all ? dx_t('Все точки за день') : day === today() ? dx_t('Отметки сегодня') : dx_t('Отметки') + ' · ' + dx1_dd(day);
+  var empty = day === today() ? dx_e(rows.length ? 'В этом фильтре никого нет.' : 'Точек пока нет. Точка появляется, когда сотрудник отмечает приход или уход, сдаёт задачу, передаёт смену или подаёт заявку.') : dx_e(rows.length ? 'В этом фильтре никого нет.' : 'В этот день точек не было.');
+  var list = all ? (D.P.length ? D.P.slice().reverse().map(dx1_ptRow).join('') : '<div class="dx1-empty">' + empty + '</div>')
+    : (vis.length ? vis.map(function (r) { return dx1_rowHtml(r, D); }).join('') : '<div class="dx1-empty">' + empty + '</div>') +
+      (D.P.length ? '<button type="button" class="dx1-more" id="dx1All"><span>' + dx_e('Все точки за день') + ' · <b class="num">' + D.P.length + '</b></span>' + icon('chev', 16) + '</button>' : '') +
+      (noPt.length ? '<details class="dx1-sub"><summary>' + dx_e('Без отметок') + ' · <span class="num">' + noPt.length + '</span>' + icon('chev', 14) + '</summary>' +
+        noPt.map(function (e) { var ps = typeof posName === 'function' ? posName(e.position_id) : ''; return '<button type="button" class="dx1-r" data-dxw="' + h(e.id) + '"><span class="av">' + h(ini(e)) + '</span><span class="grow"><span class="dx1-nm" style="display:block">' + h(fullName(e)) + '</span><span class="dx1-ms" style="display:block">' + h(ps ? trUi(ps) : '') + '</span></span><span class="dx1-ch">' + icon('chev', 16) + '</span></button>'; }).join('') + '</details>' : '') +
+      (dir ? '<label class="dx1-mgr"><input type="checkbox" id="dmMgr"' + (dm_mapMgrOn() ? ' checked' : '') + '><span class="grow">' + dx_e('Руководители видят карту своей команды (Разделы)') + '</span></label>' : '');
+  var html = '<div class="dx1" id="dxHead" data-sh="1"><div class="dx1-map" id="dmMap"></div>' +
+    '<div class="dx1-top"><div class="dx1-chips" role="group" aria-label="' + h(dx_t('Фильтр')) + '">' + chips + '</div>' + (!D.v ? dx1_noPt(dir) : '') + '</div>' +
+    '<div class="dx1-ctl"><button type="button" class="dx1-cb" id="dxRe" aria-label="' + h(dx_t('Обновить')) + '" title="' + h(dx_t('Обновить')) + '">' + icon('refresh', 18) + '</button>' +
+      '<button type="button" class="dx1-cb" id="dx1Zi" aria-label="' + h(dx_t('Приблизить')) + '">+</button><button type="button" class="dx1-cb" id="dx1Zo" aria-label="' + h(dx_t('Отдалить')) + '">−</button></div>' +
+    '<section class="dx1-sh" aria-label="' + h(lbl) + '"><div class="dx1-hd" tabindex="0" role="button" aria-label="' + h(dx_t('Шторка: потяните вверх или вниз')) + '"><span class="dx1-grip"></span><div class="dx1-hr"><span class="dx1-lbl">' + h(lbl) + '</span>' +
+      '<label class="dx1-day di-noov" title="' + h(dx_t('День')) + '">' + icon('cal', 14) + '<span class="num">' + dx1_dd(day) + '</span><input type="date" id="dmMd" value="' + day + '" max="' + today() + '" aria-label="' + h(dx_t('День')) + '"></label>' +
+      (D.v ? '<span class="dx1-rad">' + dx_e('радиус зоны') + ' <span class="num">' + D.v.rad + '</span> ' + dx_e('м') + '</span>' : '') + '</div></div>' +
+      '<div class="dx1-ls">' + list + '</div><div class="dx1-nt">' + dx1_note(D) + '</div></section></div>';
   box.innerHTML = html;
+  var stg = box.querySelector('.dx1'), fit = dx1_fit(stg), sel = function (id) { dx1_open(box, team, id); };
+  /* кружки на карте */
+  var pins = all ? D.P.map(function (p, i) { return { id: p.e.id, z: p.zone == null ? null : p.out ? 'out' : 'in', lat: p.lat, lng: p.lng, col: p.zone == null ? DX1_C.info : p.out ? DX1_C.bad : DX1_C.ok, txt: ini(p.e), title: fullName(p.e) + ' · ' + hm(p.at) + ' · ' + p.txt }; })
+    : vis.map(function (r) { return { id: r.e.id, z: r.p.zone == null ? null : r.p.out ? 'out' : 'in', lat: r.p.lat, lng: r.p.lng, col: DX1_C[DX1_ST[r.st]], txt: ini(r.e), title: fullName(r.e) + ' · ' + hm(r.p.at) + ' · ' + r.p.txt + ' · ' + dx1_tag(r, D) }; });
+  var mo = { D: D, pins: pins, onPin: sel, pad: { t: 56 + (!D.v ? 120 : 0), b: fit.wide ? 0 : dx1_shH(stg, fit.H, 1), r: fit.wide ? parseFloat(getComputedStyle(stg).getPropertyValue('--dx1-pr')) || 360 : 0 } };
+  dx1_sheet(stg, fit.H);
+  box.querySelectorAll('[data-dx1f]').forEach(function (b) { b.onclick = function () { S.sub.dx1F = b.getAttribute('data-dx1f'); dx_map(box, team); }; });
+  box.querySelectorAll('[data-dxw]').forEach(function (b) { b.onclick = function () { sel(b.getAttribute('data-dxw')); }; });
+  if ($('dx1All')) $('dx1All').onclick = function () { S.sub.dxWho = '*'; dx_map(box, team); };
+  if ($('dx1All0')) $('dx1All0').onclick = function () { S.sub.dxWho = ''; dx_map(box, team); };
   $('dmMd').onchange = function () { S.sub.dmMapDay = this.value || today(); dx_map(box, team); };
-  $('dxWho').onchange = function () { S.sub.dxWho = this.value; dx_map(box, team); };
   $('dxRe').onclick = function () { var b = this; b.disabled = true; Promise.resolve(dx_map(box, team)).then(function () { toast(dx_t('Обновлено')); }, function () {}); };
+  $('dx1Zi').onclick = function () { if (DX1.ctl) DX1.ctl.zoom(1); };
+  $('dx1Zo').onclick = function () { if (DX1.ctl) DX1.ctl.zoom(-1); };
   if ($('dxSet')) $('dxSet').onclick = dx_goSet;
   if ($('dmMgr')) $('dmMgr').onchange = function () { w3SavePref({ dm_map_mgr: !!this.checked }); toast(dx_t('Сохранено')); };
-  box.querySelectorAll('[data-dxw]').forEach(function (b) { b.onclick = function () { S.sub.dxWho = b.getAttribute('data-dxw'); dx_map(box, team); try { box.scrollIntoView({ block: 'start' }); } catch (e) {} }; });
-  var el = $('dmMap'); el.innerHTML = dx_svg(D, V);
-  var ok = await dm_leaflet(); if (!ok || !el.isConnected) return;
-  try {
-    var C = dx_col(), c0 = D.v || D.center || V.P[0] || { lat: 41.2906, lng: 69.2781 }, c = [c0.lat, c0.lng];
-    el.innerHTML = ''; var map = L.map(el, { zoomControl: true, attributionControl: true }).setView(c, 17);
-    try { map.attributionControl.setPrefix('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>'); } catch (z) {}
-    var tl = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-    var bad = 0; tl.on('tileerror', function () { if (++bad === 6 && el.isConnected) { try { map.remove(); } catch (z) {} el.innerHTML = dx_svg(D, V); } });
-    var ll = [];
-    if (D.v) { L.circle(c, { radius: D.v.rad, color: C.gold, weight: 2, fillOpacity: 0.08 }).addTo(map); L.circleMarker(c, { radius: 5, color: C.gold, fillColor: C.gold, fillOpacity: 1 }).addTo(map).bindTooltip(dx_t('Заведение')); ll.push(c); }
-    if (V.mode === 'one' && V.P.length > 1) L.polyline(V.P.map(function (p) { return [p.lat, p.lng]; }), { color: C.info, weight: 3, opacity: 0.85 }).addTo(map);
-    var perm = V.P.length <= 8;
-    V.P.forEach(function (p, i) {
-      ll.push([p.lat, p.lng]);
-      var tip = (V.mode === 'one' ? '' : dx_short(p.e) + ' · ') + hm(p.at) + ' · ' + p.txt + (p.zone ? ' · ' + dx_t(p.out ? 'вне зоны' : 'в зоне') : '');
-      L.circleMarker([p.lat, p.lng], { radius: V.mode === 'one' && i < V.P.length - 1 ? 6 : 8, color: '#fff', weight: 2, fillColor: dx_ptCol(p, C), fillOpacity: 1 }).addTo(map)
-        .bindTooltip(h(tip), { permanent: perm, direction: 'top' });
-    });
-    if (ll.length > 1) map.fitBounds(L.latLngBounds(ll).pad(0.25), { maxZoom: 18 });
-    setTimeout(function () { try { map.invalidateSize(); } catch (z) {} }, 200);
-  } catch (z) { console.warn('dx map', z); el.innerHTML = dx_svg(D, V); }
+  dx1_rs();
+  await dx1_mapInit($('dmMap'), mo);
+}
+/* поворот / изменение окна: пересчитать размеры сцены и перерисовать схему */
+function dx1_rs() {
+  if (DX1.rs) return; DX1.rs = true; var t = 0;
+  window.addEventListener('resize', function () {
+    clearTimeout(t); t = setTimeout(function () {
+      var stg = document.querySelector('.dx1'); if (!stg || !DX1.ctl || !DX1.ctl.el || !DX1.ctl.el.isConnected) return;
+      var f = dx1_fit(stg); stg.style.setProperty('--dx1-shh', (f.wide ? 0 : dx1_shH(stg, f.H, S.sub.dx1Sh == null ? 1 : +S.sub.dx1Sh)) + 'px'); DX1.ctl.redraw();
+    }, 180);
+  });
+}
+
+/* ---------- 3.5 один сотрудник за день (макет v5): пронумерованные точки, пунктир, список, итог ---------- */
+function dx1_ptCol(p, i, A) {
+  if (p.out) return 'bad';
+  if (p.kind === 'in') return A.late && i === 0 ? 'warn' : 'ok';
+  if (p.kind === 'out') return 'gold';
+  return 'info';
+}
+async function dx1_one(box, team, who, day, people) {
+  var e1 = people.filter(function (e) { return e.id === who; })[0], dir = isDirector();
+  if (!box.querySelector('.dx1-one')) box.innerHTML = '<div class="card empty">' + dx_e('Загрузка…') + '</div>';
+  var R = await Promise.all([dx_data(day, who, people), dx1_att(day)]), D = R[0], A = (R[1] || {})[who] || {}; if (!box.isConnected) return;
+  if (!D) { box.innerHTML = '<div class="card empty">' + dx_e('Карта не загрузилась — проверьте интернет') + '</div>'; return; }
+  var P = D.P.filter(function (p) { return p.e.id === who; }), nOut = P.filter(function (p) { return p.out; }).length, nTask = P.filter(function (p) { return p.kind === 'task'; }).length;
+  var ps = typeof posName === 'function' ? posName(e1.position_id) : '', y1 = dx1_ago(1);
+  var dchip = function (d, txt) { return '<button type="button" class="dx1-f' + (day === d ? ' on' : '') + '" data-dx1d="' + d + '">' + dx_e(txt) + '</button>'; };
+  var badge = !P.length ? '' : !D.v ? '<b class="num">' + P.length + '</b> ' + dx_e('точек') : !nOut ? dx_e('Все точки') + ' <b class="ok">' + dx_e('в зоне') + '</b> · <span class="num">' + P.length + '</span>'
+    : '<b class="bad">' + dx_e('Вне зоны') + '</b>: <span class="num">' + nOut + ' / ' + P.length + '</span>';
+  var steps = P.map(function (p, i) {
+    var c = DX1_C[dx1_ptCol(p, i, A)];
+    return '<div class="dx1-step"><span class="dx1-no" style="--c:' + c + '">' + (i + 1) + '</span><span class="dx1-tm num">' + hm(p.at) + '</span><span class="dx1-sx">' + h(p.txt) +
+      (p.dist != null ? ' · <b class="num">' + Math.round(p.dist) + ' ' + dx_e('м') + '</b>' : '') + '</span>' + (p.out ? '<span class="dx1-tag bad">' + dx_e('вне зоны') + '</span>' : '') + '</div>';
+  }).join('');
+  var html = '<div class="dx1-one" id="dxHead"><button type="button" class="dx1-back" id="dx1Back">' + icon('back', 16) + '<span>' + dx_e(S.sub.dx1From === '*' ? 'Все точки за день' : 'Все сотрудники') + '</span></button>' +
+    '<div class="dx1-who"><span class="av">' + h(ini(e1)) + '</span><div class="grow"><div class="dx1-wn">' + h(fullName(e1)) + '</div><div class="dx1-wm">' + h((ps ? trUi(ps) + ' · ' : '') + dx_t('точки дня')) + (D.on[who] ? ' · ' + dx_e('на смене') : '') + '</div></div></div>' +
+    '<div class="dx1-chips dx1-days">' + dchip(today(), 'Сегодня') + dchip(y1, 'Вчера') +
+      '<label class="dx1-day di-noov dx1-f' + (day !== today() && day !== y1 ? ' on' : '') + '" title="' + h(dx_t('День')) + '">' + icon('cal', 14) + '<span class="num">' + dx1_dd(day) + '</span><input type="date" id="dmMd" value="' + day + '" max="' + today() + '" aria-label="' + h(dx_t('День')) + '"></label></div>' +
+    (!D.v ? dx1_noPt(dir) : '') +
+    '<div class="dx1-mc"><div class="dx1-map" id="dmMap"></div>' + (badge ? '<div class="dx1-badge">' + badge + '</div>' : '') +
+      '<div class="dx1-ctl"><button type="button" class="dx1-cb" id="dx1Zi" aria-label="' + h(dx_t('Приблизить')) + '">+</button><button type="button" class="dx1-cb" id="dx1Zo" aria-label="' + h(dx_t('Отдалить')) + '">−</button></div></div>' +
+    '<div class="dx1-stats"><div class="dx1-sc"><b class="num">' + h(A.min ? fmtMin(A.min) : '—') + '</b><span>' + dx_e('на смене') + '</span></div><div class="dx1-sc"><b class="num">' + nTask + '</b><span>' + dx_e('задачи') + '</span></div>' +
+      '<div class="dx1-sc"><b class="num"' + (nOut ? ' style="color:var(--bad)"' : '') + '>' + nOut + '</b><span>' + dx_e('вне зоны') + '</span></div></div>' +
+    (P.length ? '<div class="dx1-steps">' + steps + '</div>' : '<div class="dx1-empty">' + dx_e('За этот день точек нет.') + '</div>') +
+    '<div class="dx1-nt">' + dx1_note(D) + '</div></div>';
+  box.innerHTML = html;
+  $('dx1Back').onclick = function () { S.sub.dxWho = S.sub.dx1From === '*' ? '*' : ''; S.sub.dx1From = ''; dx_map(box, team); };
+  box.querySelectorAll('[data-dx1d]').forEach(function (b) { b.onclick = function () { S.sub.dmMapDay = b.getAttribute('data-dx1d'); dx_map(box, team); }; });
+  $('dmMd').onchange = function () { S.sub.dmMapDay = this.value || today(); dx_map(box, team); };
+  if ($('dxSet')) $('dxSet').onclick = dx_goSet;
+  $('dx1Zi').onclick = function () { if (DX1.ctl) DX1.ctl.zoom(1); };
+  $('dx1Zo').onclick = function () { if (DX1.ctl) DX1.ctl.zoom(-1); };
+  dx1_rs();
+  var pins = P.map(function (p, i) { return { id: String(i + 1), z: p.zone == null ? null : p.out ? 'out' : 'in', lat: p.lat, lng: p.lng, col: DX1_C[dx1_ptCol(p, i, A)], txt: String(i + 1), title: (i + 1) + ' · ' + hm(p.at) + ' · ' + p.txt }; });
+  await dx1_mapInit($('dmMap'), { D: D, pins: pins, num: true, line: true, pad: { t: 10, b: 40, r: 56 } });
 }
 /* вход тот же, что у 92m: Пульт → Сегодня → «Карта сотрудников» (PL_FN 'map'), руководителю — «Разделы» (W3V.dmmap) — оба зовут dm_map */
 if (typeof dm_map === 'function') dm_map = dx_map;
