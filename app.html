@@ -66,6 +66,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-mgr2.js"></script>
 <script src="uz-w4-misc.js"></script>
 <script src="uz-w4-nav.js"></script>
+<script src="uz-w4-onboard.js"></script>
 <script src="uz-w4-owner.js"></script>
 <script src="uz-w4-paint.js"></script>
 <script src="uz-w4-parity.js"></script>
@@ -77,6 +78,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-server.js"></script>
 <script src="uz-w4-shift.js"></script>
 <script src="uz-w4-shift2.js"></script>
+<script src="uz-w4-shtat.js"></script>
 <script src="uz-w4-skills.js"></script>
 <script src="uz-w4-support.js"></script>
 <script src="uz-w4-tasks2.js"></script>
@@ -36574,7 +36576,7 @@ function sv_t(s) { try { return trUi(s); } catch (e) { return s; } }
     var lg = $('lg'); if (lg) lg.setAttribute('placeholder', sv_t('логин или почта владельца'));
     var hint = f.querySelector('.lg-hint');
     if (hint && !$('svSu')) hint.insertAdjacentHTML('afterend', '<button type="button" class="btn ghost full" id="svSu">' + h(sv_t('Зарегистрировать заведение')) + '</button>');
-    if ($('svSu')) $('svSu').onclick = function () { sv_signup(); };
+    if ($('svSu')) $('svSu').onclick = function () { (window.sv_signup || sv_signup)(); };   /* 92zr: мастер регистрации со службами */
     f.onsubmit = async function (ev) {
       ev.preventDefault();
       var v = $('lg').value.trim(), pw = $('pw').value, email = v.indexOf('@') > 0 ? v.toLowerCase() : v.toLowerCase() + '@' + (window.JAMOA_SERVER.staffDomain || 'staff.jamoa.uz');
@@ -36646,7 +36648,7 @@ function sv_t(s) { try { return trUi(s); } catch (e) { return s; } }
     $('svRe').onclick = function () { location.reload(); }; $('svOut').onclick = function () { gateOff(); sb.auth.signOut(); };
   };
   window.sv_switchVenue = function () { try { localStorage.removeItem('sv-venue'); } catch (e) {} location.reload(); };
-  if (/signup/.test(location.hash || '')) { var go0 = function () { if (!S.session) sv_signup(); }; if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(go0, 0); }); else setTimeout(go0, 0); }
+  if (/signup/.test(location.hash || '')) { var go0 = function () { if (!S.session) (window.sv_signup || sv_signup)(); };   /* 92zr */ if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(go0, 0); }); else setTimeout(go0, 0); }
 
   /* ---------- 3. после входа: колокольчик в реальном времени, данные для экранов без сети ---------- */
   var aa0 = afterAuth;
@@ -51319,6 +51321,1297 @@ async function dz_fOvFill() {
     '.dz-ck{display:flex;gap:10px;align-items:flex-start;margin-top:10px;font-size:14px;line-height:1.4;cursor:pointer}.dz-ck input{width:20px;height:20px;flex:none;margin-top:1px;accent-color:var(--gold)}';
   document.head.appendChild(st);
 })();
+
+
+/* ===== ВОЛНА 4 · 92zr-onboard.js ===== */
+/* ===== 92zr · «Штат и первый вход владельца», часть А (префикс dzr_). Журнал — w4/log/dzr.md =====
+   Требования — w4/SHTAT_BRIEF.md, аудит — w4/AUDIT_onboarding.md (п. 1, 2, 4 порядка работ; находки 1–6, 9, 10).
+   Часть Б (экран «Штат», виджет на главной) — другой фрагмент (92zs, функция dsh_open); здесь только проверяем, есть ли она.
+   1) «Команда» и «График» владельцу (и руководителю) открыты всегда, даже без людей; у пустых служб — «Пригласить первого сотрудника»
+      с уже выбранной должностью этой службы;
+   2) пока в заведении нет сотрудников — на главной вместо «Всё сделано» карточка «Расставьте штат»; знакомство «01–04» и тур —
+      после первого приглашённого; «Первые шаги» владельца начинаются со «Службы и должности», «Пригласить сотрудников», «Составить график»;
+   3) после выдачи логина и пароля — «Пригласить следующего» (та же должность);
+   4) регистрация на рабочем сайте — мастер как в демо: тип плитками (поиск, разделы) → службы (хотя бы одна, можно свою) →
+      должности и сколько людей нужно (штатная численность) → почта, пароль, название, имя → venue_create со структурой одной операцией
+      (sv-adapter, блок 92zr → rpc venue_create_struct, 0034_shtat.sql);
+   5) демо: position_headcount_set / staff_overview на учебных данных (localStorage), численность — в S.pos (поле headcount). */
+var DZR = { lastPos: null, obWait: false, HK: 'dzr-hc' };
+function dzr_uz() { try { return uiLang() === 'uz'; } catch (e) { return false; } }
+function dzr_t(s) { try { return trUi(s); } catch (e) { return s; } }
+function dzr_owner() { try { return !!(S.me && isDirector()); } catch (e) { return false; } }
+/* люди заведения без владельца (приглашённые, которые ещё не вошли, — тоже люди) */
+function dzr_staff() { return (S.emps || []).filter(function (e) { return e && e.active !== false && e.role !== 'director' && !e.colleague; }); }
+function dzr_empty() { return dzr_owner() && !dzr_staff().length; }
+function dzr_posList() { return (S.pos || []).filter(function (p) { return p && p.access !== 'director' && !(p.dept_id === 'dir' && /^(Владелец|Egasi)$/i.test(p.name || '')); }); }
+function dzr_hcOf(p) { if (!p) return null; if (p.headcount != null && p.headcount !== '') return +p.headcount; var M = dzr_hcMap(); return M[p.id] != null ? +M[p.id] : null; }
+function dzr_hcMap() { if (sv_on()) return {}; try { return JSON.parse(localStorage.getItem(DZR.HK) || '{}') || {}; } catch (e) { return {}; } }
+function dzr_inPos(pid) { return dzr_staff().filter(function (e) { return String(e.position_id) === String(pid); }).length; }
+function dzr_vac(p) { var n = dzr_hcOf(p); return n == null ? 0 : Math.max(0, n - dzr_inPos(p.id)); }
+/* лучшая должность службы для первого приглашения: с наибольшим числом свободных мест, затем первая */
+function dzr_bestPos(deptId) {
+  var L = dzr_posList().filter(function (p) { return deptId == null || String(p.dept_id) === String(deptId); }); if (!L.length) return null;
+  var b = L.slice().sort(function (a, c) { return dzr_vac(c) - dzr_vac(a); })[0];
+  return dzr_vac(b) > 0 ? b : L[0];
+}
+/* экран «Штат» части Б, если он есть; иначе «Команда» (владельцу открыта и без людей) */
+function dzr_openShtat() {
+  try { obMark('dzr_struct'); } catch (e) {}
+  if (typeof dsh_open === 'function') { try { return dsh_open(); } catch (e) { console.warn(e); } }
+  go('team');
+}
+/* приглашение с уже выбранной должностью */
+function dzr_invite(pid) {
+  if (typeof cf_invite !== 'function') { try { staffSheet(null); } catch (e) {} return; }
+  cf_invite();
+  if (pid == null) return;
+  var L = $('layer'); if (!L) return;
+  var b = L.querySelector('[data-cfpos="' + pid + '"]');
+  if (b) { b.click(); return; }
+  var o = L.querySelector('[data-cfpos="other"]');
+  if (o) { o.click(); var s = $('cfPos'); if (s) { s.value = String(pid); s.dispatchEvent(new Event('change')); } }
+}
+window.dzr_invite = dzr_invite;
+
+/* ---------- 1. «Команда» и «График» без людей ---------- */
+(function () {
+  var cv0 = canView;
+  canView = function (v) {
+    if ((v === 'team' || v === 'teamsched') && S.me && (isDirector() || S.me.role === 'manager')) return true;
+    return cv0.apply(this, arguments);
+  };
+})();
+/* пустые службы в «Команде» (карточки dai_edTeam): «Пригласить первого сотрудника» с должностью этой службы */
+function dzr_edTeam() {
+  if (S.view !== 'team' || !$('main')) return;
+  var box = $('daiEdT');
+  if (box && typeof dai_emptyDepts === 'function') {
+    var L = dai_emptyDepts();
+    box.querySelectorAll('[data-daiinv]').forEach(function (b, i) {
+      if (b.getAttribute('data-dzr')) return; var d = L[i]; if (!d) return;
+      var p = dzr_bestPos(d.id); b.setAttribute('data-dzr', '1');
+      b.className = 'btn ghost sm';
+      b.innerHTML = icon('team', 16) + '<span>Пригласить первого сотрудника</span>';
+      if (p) b.title = dzr_uz() && p.name_uz ? p.name_uz : p.name;
+      b.onclick = function () { dzr_invite(p ? p.id : null); };
+    });
+  }
+  /* совсем пусто (служб ещё нет или они не показаны) — подсказка и кнопки */
+  if (dzr_empty() && !$('dzrTeamE')) {
+    var c = document.createElement('div'); c.className = 'card'; c.id = 'dzrTeamE';
+    c.innerHTML = '<h2><span>Команда пока пустая</span></h2><div class="muted" style="font-size:13.5px;margin:4px 0 10px;line-height:1.45"><span>Пригласите людей на должности — каждому придут логин и временный пароль. После этого заработают смены, задачи и табель.</span></div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn gold" id="dzrTeamInv">' + icon('team', 18) + '<span>Пригласить первого сотрудника</span></button>' +
+      (typeof dsh_open === 'function' ? '<button type="button" class="btn ghost" id="dzrTeamSh"><span>Открыть штат</span></button>' : '') + '</div>';
+    var m = $('main'), f = m.querySelector('.card'); if (f) m.insertBefore(c, f); else m.appendChild(c);
+    $('dzrTeamInv').onclick = function () { var p = dzr_bestPos(null); dzr_invite(p ? p.id : null); };
+    if ($('dzrTeamSh')) $('dzrTeamSh').onclick = dzr_openShtat;
+  }
+}
+function dzr_edSched() {
+  if (S.view !== 'teamsched' || !$('main') || !dzr_empty() || $('dzrSchE')) return;
+  var c = document.createElement('div'); c.className = 'note t-info'; c.id = 'dzrSchE';
+  c.innerHTML = '<span>В графике пока никого. Пригласите сотрудников — они появятся здесь, и вы составите неделю смен.</span> <button type="button" class="btn ghost sm" id="dzrSchInv" style="margin-top:6px">' + icon('team', 16) + '<span>Пригласить</span></button>';
+  var m = $('main'); m.insertBefore(c, m.firstChild);
+  $('dzrSchInv').onclick = function () { var p = dzr_bestPos(null); dzr_invite(p ? p.id : null); };
+}
+window.addEventListener('load', function () {
+  var later = function (fn) { [0, 250, 800, 1500].forEach(function (ms) { setTimeout(function () { try { fn(); } catch (e) {} }, ms); }); };
+  try { if (typeof vTeam === 'function') { var t0 = vTeam; vTeam = async function () { var r; try { r = await t0.apply(this, arguments); } finally { later(dzr_edTeam); } return r; }; } } catch (e) {}
+  try { if (typeof vTeamSched === 'function') { var s0 = vTeamSched; vTeamSched = async function () { var r; try { r = await s0.apply(this, arguments); } finally { later(dzr_edSched); } return r; }; } } catch (e) {}
+});
+
+/* ---------- 2. Главная: «Расставьте штат» вместо «Всё сделано» ---------- */
+function dzr_counts() {
+  var D = (S.depts || []).filter(function (d) { return d && d.id !== 'dir' && d.code !== 'dir'; }), P = dzr_posList(), hc = 0, set = false;
+  P.forEach(function (p) { var n = dzr_hcOf(p); if (n != null) { set = true; hc += n; } });
+  var vac = P.reduce(function (a, p) { return a + dzr_vac(p); }, 0);
+  return { depts: D.length, pos: P.length, people: dzr_staff().length, hc: hc, set: set, vac: vac };
+}
+function dzr_homeCard() {
+  var box = $('homeNow'); if (!box || !dzr_empty() || $('dzrSetup')) return;
+  if (dzr_dshVis()) { box.innerHTML = ''; return; }   /* виджет «Штат» части Б виден на главной — он и ведёт дальше */
+  var C = dzr_counts();
+  box.innerHTML = '<div class="shift now" id="dzrSetup"><div class="now-h"><span class="lbl">Первый шаг</span></div>' +
+    '<div style="font-weight:700;font-size:18px;line-height:1.3;margin:2px 0 4px"><span>Расставьте штат</span></div>' +
+    '<div class="now-m" style="white-space:normal;line-height:1.45"><span>Службы → должности → пригласите сотрудников. Без людей смены, задачи и табель не заработают.</span></div>' +
+    '<div class="meta" style="margin:6px 0 10px;white-space:normal"><b class="num">' + C.depts + '</b> <span>' + h(dzr_pl(C.depts, 'служба', 'службы', 'служб')) + '</span> · <b class="num">' + C.pos + '</b> <span>' + h(dzr_pl(C.pos, 'должность', 'должности', 'должностей')) + '</span>' +
+    (C.set ? ' · <b class="num" style="color:var(--dj-amber,var(--warn,#B7791F))">' + C.vac + '</b> <span>' + h(dzr_pl(C.vac, 'место свободно', 'места свободно', 'мест свободно')) + '</span>' : '') + '</div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn gold" id="dzrGo"><span>' + (typeof dsh_open === 'function' ? 'Расставить штат' : 'Открыть команду') + '</span></button>' +
+    '<button type="button" class="btn ghost" id="dzrInv">' + icon('team', 18) + '<span>Пригласить</span></button></div></div>';
+  $('dzrGo').onclick = dzr_openShtat;
+  $('dzrInv').onclick = function () { var p = dzr_bestPos(null); dzr_invite(p ? p.id : null); };
+}
+function dzr_dshVis() { var d = $('dshHome'); if (!d || !d.offsetParent) return false; var r = d.getBoundingClientRect(); return r.height > 40; }
+function dzr_pl(n, a, b, c) { n = Math.abs(+n || 0) % 100; var k = n % 10; return n > 10 && n < 20 ? c : k === 1 ? a : k >= 2 && k <= 4 ? b : c; }
+(function () {
+  if (typeof homeNowCard !== 'function') return;
+  var hn0 = homeNowCard;
+  homeNowCard = async function () {
+    var r = await hn0.apply(this, arguments); try { dzr_homeCard(); } catch (e) { console.warn(e); }
+    /* виджет части Б может появиться чуть позже — тогда наша карточка не нужна */
+    [400, 1200].forEach(function (ms) { setTimeout(function () { try { if (dzr_dshVis() && $('dzrSetup')) $('homeNow').innerHTML = ''; } catch (e) {} }, ms); });
+    return r;
+  };
+})();
+
+/* знакомство «01–04» и тур — владельцу после первого приглашённого (повтор из профиля — как раньше) */
+(function () {
+  if (typeof obStart !== 'function') return;
+  var os0 = obStart;
+  obStart = function () {
+    try { if (dzr_empty() && !(typeof OB_FORCE !== 'undefined' && OB_FORCE)) { DZR.obWait = true; return; } } catch (e) {}
+    return os0.apply(this, arguments);
+  };
+})();
+function dzr_obLater() {
+  try {
+    if (!DZR.obWait || !dzr_owner() || !dzr_staff().length) return;
+    DZR.obWait = false; setTimeout(function () { try { obStart(); } catch (e) {} }, 500);
+  } catch (e) {}
+}
+
+/* «Первые шаги» владельца: сначала штат */
+(function () {
+  if (typeof obSteps !== 'function') return;
+  var st0 = obSteps;
+  obSteps = function () {
+    var X = st0.apply(this, arguments);
+    try {
+      if (!dzr_owner() || !X || !Array.isArray(X.L) || X.L.some(function (x) { return x[0] === 'dzr_struct'; })) return X;
+      var C = dzr_counts();
+      if (C.set) X.d.s.dzr_struct = 1;
+      if (C.people > 0) X.d.s.dzr_inv = 1;
+      X.L = X.L.filter(function (x) { return x[0] !== 'task'; });   /* «Открыть задачу» без людей — тупик */
+      X.L.unshift(
+        ['dzr_struct', 'Службы и должности', 'Проверьте службы и сколько людей нужно на каждой должности', 'grid', dzr_openShtat],
+        ['dzr_inv', 'Пригласить сотрудников', 'Каждому придут логин и временный пароль', 'team', function () { var p = dzr_bestPos(null); dzr_invite(p ? p.id : null); }],
+        ['dzr_sched', 'Составить график', 'Неделя смен для команды', 'cal', function () { obMark('dzr_sched'); go('teamsched'); }]);
+      obPut(X.d);
+    } catch (e) { console.warn(e); }
+    return X;
+  };
+  document.addEventListener('click', function (e) {
+    try { if (e.target && e.target.closest && e.target.closest('[data-go=teamsched]') && dzr_owner() && dzr_staff().length) obMark('dzr_sched'); } catch (x) {}
+  }, true);
+})();
+
+/* ---------- 3. «Пригласить следующего» после выдачи логина и пароля ---------- */
+document.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest && e.target.closest('#cfGo'); if (!b) return;
+  try { var L = $('layer'), on = L && L.querySelector('[data-cfpos].on'), v = on ? on.getAttribute('data-cfpos') : ($('cfPos') && $('cfPos').value); DZR.lastPos = v && v !== 'other' ? (+v || v) : null; } catch (x) {}
+}, true);
+(function () {
+  var sh0 = sheet;
+  sheet = function () {
+    var r = sh0.apply(this, arguments);
+    try {
+      var ok = $('cfOk');
+      if (ok && !$('dzrNext')) {
+        var nb = document.createElement('button'); nb.type = 'button'; nb.className = 'btn dark full'; nb.id = 'dzrNext';
+        var p = DZR.lastPos != null ? (S.pos || []).filter(function (x) { return String(x.id) === String(DZR.lastPos); })[0] : null;
+        nb.innerHTML = icon('team', 18) + '<span>Пригласить следующего</span>'; if (p) nb.title = dzr_uz() && p.name_uz ? p.name_uz : p.name;
+        ok.parentNode.insertBefore(nb, ok);
+        var pid = DZR.lastPos;
+        nb.onclick = function () { closeLayer(); dzr_invite(pid); };
+        ok.addEventListener('click', function () { setTimeout(function () { dzr_obLater(); try { if (S.view === 'home' && !($('layer') && $('layer').innerHTML)) render(); } catch (y) {} }, 0); });   /* onclick «Готово» ставит cf_invite после sheet() */
+      }
+    } catch (e) { console.warn(e); }
+    return r;
+  };
+})();
+
+/* ---------- 4. Регистрация на рабочем сайте: мастер со службами и численностью ---------- */
+var DZR_DUZ = { 'Руководство': 'Rahbariyat', 'Ресепшен': 'Qabulxona', 'Хаускипинг': 'Xaskiping', 'Кухня': 'Oshxona', 'Зал': 'Zal', 'Зал и бар': 'Zal va bar', 'Бар': 'Bar', 'Ресторан': 'Restoran',
+  'Техслужба': 'Texnik xizmat', 'Охрана': 'Qoʻriqlash', 'Продажи': 'Sotuv', 'Администрация': 'Maʼmuriyat', 'Доставка': 'Yetkazib berish' };
+function dzr_uzOf(ru) {
+  if (!ru) return null;
+  try { if (typeof CG_UZ !== 'undefined' && typeof CG_UZ[ru] === 'string') return CG_UZ[ru]; } catch (e) {}
+  if (DZR_DUZ[ru]) return DZR_DUZ[ru];
+  try { var x = (window.MLX_UZ_EXTRA || {})[ru]; if (typeof x === 'string') return x; } catch (e) {}
+  return null;
+}
+/* структура для venue_create_struct: службы анкеты (vStruct) + свои службы мастера */
+function dzr_struct(vp, custom) {
+  var st = vStruct(vp), out = [];
+  (st.depts || []).forEach(function (d) {
+    var P = (st.pos || []).filter(function (p) { return p.dept_id === d[0] && p.access !== 'director'; })
+      .map(function (p) { return { name: p.name, name_uz: dzr_uzOf(p.name), access: p.access === 'manager' ? 'manager' : 'staff', headcount: Math.max(0, Math.min(99, +p.n || 0)) }; });
+    if (d[0] === 'dir' && !P.length) return;
+    out.push({ code: d[0], name: d[1], name_uz: dzr_uzOf(d[1]), positions: P });
+  });
+  (custom || []).forEach(function (c) {
+    var P = (c.pos || []).filter(function (p) { return +p[1] > 0; }).map(function (p) { return { name: p[0], name_uz: dzr_uzOf(p[0]), access: 'staff', headcount: Math.max(0, Math.min(99, +p[1] || 0)) }; });
+    if (P.length) out.push({ name: c.name, name_uz: null, positions: P });
+  });
+  return out;
+}
+function dzr_signup() {
+  try { var old = $('sxSu'); if (old) old.remove(); var o2 = $('dzrSu'); if (o2) o2.remove(); } catch (e) {}
+  var D0 = null; try { D0 = JSON.parse(localStorage.getItem('dzr-su') || 'null'); } catch (e) {}
+  var st = { step: 'type', picked: null, q: '', em: '', vn: '', fn: '', ln: '', custom: [], err: '', errs: {}, busy: false };
+  var vp = vDefault('laundry');
+  if (D0 && D0.vp && D0.vp.type) { Object.assign(st, { step: D0.step === 'acc' ? 'acc' : D0.step || 'type', picked: D0.picked || null, em: D0.em || '', vn: D0.vn || '', fn: D0.fn || '', ln: D0.ln || '', custom: D0.custom || [] }); vp = D0.vp; }
+  if (!st.picked) st.step = 'type';
+  var O = ['type', 'svc', 'people', 'acc'];
+  var w = document.createElement('div'); w.className = 'sx-su'; w.id = 'dzrSu'; document.body.appendChild(w);
+  DZR.su = { draw: draw, st: st, close: close };
+  function save() { try { localStorage.setItem('dzr-su', JSON.stringify({ step: st.step, picked: st.picked, vp: vp, custom: st.custom, em: st.em, vn: st.vn, fn: st.fn, ln: st.ln })); } catch (e) {} }
+  function close() { try { w.remove(); } catch (e) {} DZR.su = null; }
+  function keep() { ['em', 'vn', 'fn', 'ln'].forEach(function (k) { var el = $('dzr_' + k); if (el) st[k] = el.value.trim(); }); }
+  function mode() { try { return typeof cy_mode === 'function' ? cy_mode() : (window.MLX_I18N ? MLX_I18N.lang : 'ru'); } catch (e) { return 'ru'; } }
+  function langSw() {
+    var m = mode(), L = [['ru', 'RU'], ['uz', 'UZ']]; if (window.MLX_CYR) L.push(['uzc', 'ЎЗ']);
+    return '<div class="lg-lang cy-keep" role="group" aria-label="Язык" style="position:static;flex:none">' + L.map(function (x) { return '<button type="button" data-lang="' + x[0] + '" class="cy-keep' + (m === x[0] ? ' on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>';
+  }
+  function tiles() {
+    var G = (typeof CGD !== 'undefined' && CGD.groups) ? CGD.groups.slice() : [['all', '', VTYPES.map(function (t) { return t[0]; })]];
+    /* химчистка (первый пилот) — первой */
+    G.sort(function (a, b) { return (b[2].indexOf('laundry') >= 0) - (a[2].indexOf('laundry') >= 0); });
+    var seen = {}; G.forEach(function (g) { g[2].forEach(function (c) { seen[c] = 1; }); });
+    var rest = VTYPES.filter(function (t) { return !seen[t[0]]; }).map(function (t) { return t[0]; });
+    if (rest.length) G.push(['rest', '', rest]);
+    return G.map(function (g) {
+      var L = g[2].map(function (c) { return vType(c); }).filter(function (t) { return t && g[2].indexOf(t[0]) >= 0; });
+      if (!L.length) return '';
+      return '<div data-dzrg="' + h(g[0]) + '">' + (g[1] ? '<div class="pft" style="margin:6px 0 8px"><span>' + h(g[1]) + '</span></div>' : '') + '<div class="sx-types">' +
+        L.map(function (t) { var on = st.picked === t[0]; return '<button type="button" class="sx-type' + (on ? ' on' : '') + '" data-ty="' + t[0] + '" aria-pressed="' + on + '"' + (t[0] === 'laundry' ? ' style="border-width:2px"' : '') + '><b>' + h(t[1]) + '</b><span>' + h(t[2]) + '</span></button>'; }).join('') + '</div></div>';
+    }).join('');
+  }
+  function customSvcHtml() {
+    return (st.custom.length ? '<div class="pft" style="margin-top:6px"><span>Свои службы</span></div><div class="sx-types">' + st.custom.map(function (c, i) {
+      return '<button type="button" class="sx-type on" data-dzcx="' + i + '" aria-pressed="true"><b>' + h(c.name) + '</b><span>Нажмите, чтобы убрать</span></button>'; }).join('') + '</div>' : '') +
+      '<div class="sx-row" style="margin-top:4px"><input class="in sx-in2" id="dzrCs" placeholder="Своя служба" maxlength="60"><button type="button" class="btn ghost" id="dzrCsA" style="flex:none">+ Добавить</button></div>';
+  }
+  function customPeopleHtml() {
+    return st.custom.map(function (c, ci) {
+      var n = c.pos.reduce(function (a, p) { return a + (+p[1] || 0); }, 0);
+      return '<div class="sx-price" style="gap:6px"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:16px">' + h(c.name) + '</b><span class="meta"><span>человек</span>: <b class="num">' + n + '</b></span></div>' +
+        c.pos.map(function (p, i) { return '<div class="pfrow" style="padding:6px 0"><div class="grow"><div class="pft">' + h(p[0]) + '</div></div><button type="button" class="btn ghost sm" data-dzcm="' + ci + '|' + i + '|-1" aria-label="Меньше">−</button><b class="num" style="min-width:26px;text-align:center">' + (+p[1] || 0) + '</b><button type="button" class="btn ghost sm" data-dzcm="' + ci + '|' + i + '|1" aria-label="Больше">+</button></div>'; }).join('') +
+        '<div class="sx-row" style="margin-top:4px"><input class="in sx-in2" data-dzcn="' + ci + '" placeholder="Своя должность" maxlength="40"><button type="button" class="btn ghost" data-dzca="' + ci + '" style="flex:none">+ Добавить</button></div></div>';
+    }).join('');
+  }
+  function total() { return vTotal(vp) + st.custom.reduce(function (a, c) { return a + c.pos.reduce(function (b, p) { return b + (+p[1] || 0); }, 0); }, 0); }
+  function draw() {
+    var si = O.indexOf(st.step), html = '<div class="sx-in">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0"><div style="font-size:12px;font-weight:700;letter-spacing:.18em;color:var(--gold);text-transform:uppercase;min-width:0">Jamoa</div>' + langSw() + '</div>' +
+      '<div class="sx-steps">' + O.map(function (_, i) { return '<i class="' + (i <= si ? 'on' : '') + '"></i>'; }).join('') + '</div>';
+    if (st.step === 'type') {
+      html += '<h1 class="sx-h">Какое у вас заведение?</h1><p class="sx-sub">Вы — владелец. От типа зависят подсказки служб и должностей. Потом всё можно поменять.</p>' +
+        '<input class="in" id="dzrQ" type="search" placeholder="Поиск типа: химчистка, кафе, салон…" value="' + h(st.q) + '" autocomplete="off">' + '<div id="dzrTiles" style="display:flex;flex-direction:column;gap:6px">' + tiles() + '</div>' +
+        '<div class="muted" id="dzrQn" style="display:none;font-size:14px"><span>Ничего не нашлось — выберите «Другой бизнес»</span></div>';
+    } else if (st.step === 'svc') {
+      html += vStepSvc(vp) + customSvcHtml();
+    } else if (st.step === 'people') {
+      html += vStepPeople(vp) + customPeopleHtml();
+      html = html.replace('<h1 class="sx-h">Сколько людей и на каких должностях?</h1>', '<h1 class="sx-h">Должности и сколько людей нужно</h1>');
+      html += '<div class="meta" style="white-space:normal;line-height:1.45"><span>Это ваш штат. Пустые места станут вакансиями — на них вы пригласите людей. Числа можно поменять в любой момент.</span></div>';
+    } else {
+      var T = vType(vp.type), nS = (vp.svc || []).length + st.custom.length;
+      html += '<h1 class="sx-h">Вход владельца</h1><p class="sx-sub">Почта и пароль — для вашего входа. Сотрудникам логины выдадите сами.</p>' +
+        '<div class="note t-info" style="white-space:normal"><b>' + h(T[1]) + '</b> · <span>служб</span>: <b class="num">' + nS + '</b> · <span>нужно людей</span>: <b class="num">' + total() + '</b></div>' +
+        '<label class="f"><span>Название заведения</span><input class="in" id="dzr_vn" maxlength="80" required value="' + h(st.vn) + '" placeholder="Например, «Oq Libos»"></label>' +
+        '<div class="sx-row"><label class="f"><span>Ваше имя</span><input class="in" id="dzr_fn" maxlength="40" autocomplete="given-name" value="' + h(st.fn) + '"></label><label class="f"><span>Фамилия</span><input class="in" id="dzr_ln" maxlength="60" autocomplete="family-name" value="' + h(st.ln) + '"></label></div>' +
+        '<label class="f"><span>Почта</span><input class="in" id="dzr_em" type="email" autocomplete="email" value="' + h(st.em) + '"></label>' +
+        '<label class="f"><span>Пароль (не меньше 8 символов)</span><input class="in" id="dzr_pw" type="password" autocomplete="new-password" minlength="8"></label>';
+    }
+    if (st.err) html += '<div class="note t-bad" id="svE" style="white-space:normal">' + h(st.err) + '</div>';
+    var last = st.step === 'acc';
+    html += '<div class="sx-row">' + (si > 0 ? '<button type="button" class="btn ghost" id="dzrBk">Назад</button>' : '') +
+      '<button type="button" class="btn ' + (last ? 'gold' : 'dark') + '" id="' + (last ? 'svGo' : 'dzrNx') + '"' + (st.step === 'type' && !st.picked || st.busy ? ' disabled' : '') + '>' + (last ? 'Создать заведение' : 'Дальше') + '</button></div>' +
+      (si === 0 ? '<button type="button" class="btn ghost full" id="svBk">У меня уже есть вход</button>' : '') + '</div>';
+    w.innerHTML = html;
+    bind();
+    if (st.step === 'svc') {   /* «обычно есть» — первыми (аудит, мелочи демо-мастера) */
+      var def = vType(vp.type)[3] || [], box = w.querySelector('.sx-types');
+      if (box) [].slice.call(box.querySelectorAll('[data-vs]')).filter(function (b) { return def.indexOf(b.getAttribute('data-vs')) >= 0; }).reverse().forEach(function (b) { box.insertBefore(b, box.firstChild); });
+    }
+    if (st.step === 'people') { var tn = w.querySelectorAll('.note.t-info b.num'); if (tn.length) tn[tn.length - 1].textContent = total(); }
+    if (st.step === 'type') filter();
+    save();
+  }
+  function filter() {
+    var q = (st.q || '').trim().toLowerCase(), any = false;
+    w.querySelectorAll('[data-dzrg]').forEach(function (g) {
+      var vis = 0; g.querySelectorAll('[data-ty]').forEach(function (b) { var t = vType(b.getAttribute('data-ty')), hay = (t[1] + ' ' + t[2] + ' ' + b.textContent + ' ' + (dzr_uzOf(t[1]) || '')).toLowerCase(); var ok = !q || hay.indexOf(q) >= 0; b.style.display = ok ? '' : 'none'; if (ok) vis++; });
+      g.style.display = vis ? '' : 'none'; if (vis) any = true;
+    });
+    var n = $('dzrQn'); if (n) n.style.display = any ? 'none' : 'block';
+  }
+  function next() {
+    keep(); st.err = '';
+    if (st.step === 'type' && !st.picked) return;
+    if (st.step === 'svc' && !(vp.svc || []).length && !st.custom.length) { st.err = dzr_t('Отметьте хотя бы одну службу'); return draw(); }
+    if (st.step === 'people' && total() < 1 && !(vp.self || []).length) { st.err = dzr_t('Укажите, сколько людей нужно хотя бы на одной должности'); return draw(); }
+    st.step = O[O.indexOf(st.step) + 1]; draw(); try { w.scrollTo(0, 0); } catch (e) {}
+  }
+  function bind() {
+    w.querySelectorAll('[data-lang]').forEach(function (b) { b.onclick = function () { keep(); try { MLX_I18N.set(b.getAttribute('data-lang')); } catch (e) {} draw(); }; });
+    w.querySelectorAll('[data-ty]').forEach(function (b) { b.onclick = function () { var c = b.getAttribute('data-ty'); if (st.picked !== c) { vp = vDefault(c); st.custom = []; } st.picked = c; st.err = ''; draw(); }; });
+    var q = $('dzrQ'); if (q) q.oninput = function () { st.q = q.value; filter(); };
+    vBind(w, vp, function () { keep(); st.err = ''; draw(); });
+    var cs = $('dzrCsA'); if (cs) cs.onclick = function () {
+      var v = ($('dzrCs').value || '').trim(); if (!v) return toast(dzr_t('Напишите название службы'));
+      var dup = st.custom.some(function (c) { return c.name.toLowerCase() === v.toLowerCase(); }) || VSVC.some(function (s) { return s[1].toLowerCase() === v.toLowerCase() && (vp.svc || []).indexOf(s[0]) >= 0; });
+      if (!dup) st.custom.push({ name: v, pos: [['Сотрудник', 1]] }); st.err = ''; draw();
+    };
+    if ($('dzrCs')) $('dzrCs').onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); $('dzrCsA').click(); } };
+    w.querySelectorAll('[data-dzcx]').forEach(function (b) { b.onclick = function () { st.custom.splice(+b.getAttribute('data-dzcx'), 1); draw(); }; });
+    w.querySelectorAll('[data-dzcm]').forEach(function (b) { b.onclick = function () { var a = b.getAttribute('data-dzcm').split('|'), p = st.custom[+a[0]].pos[+a[1]]; p[1] = Math.max(0, Math.min(99, (+p[1] || 0) + (+a[2]))); draw(); }; });
+    w.querySelectorAll('[data-dzca]').forEach(function (b) { b.onclick = function () { var ci = +b.getAttribute('data-dzca'), el = w.querySelector('[data-dzcn="' + ci + '"]'), v = (el.value || '').trim(); if (!v) return toast(dzr_t('Напишите название должности')); var c = st.custom[ci]; if (!c.pos.some(function (p) { return p[0] === v; })) c.pos.push([v, 1]); draw(); }; });
+    if ($('dzrBk')) $('dzrBk').onclick = function () { keep(); st.err = ''; st.step = O[O.indexOf(st.step) - 1]; draw(); };
+    if ($('dzrNx')) $('dzrNx').onclick = next;
+    if ($('svBk')) $('svBk').onclick = function () { close(); if (location.hash) history.replaceState(null, '', location.pathname + location.search); render(); };
+    if ($('svGo')) $('svGo').onclick = submit;
+  }
+  async function submit() {
+    keep(); st.err = '';
+    var pw = ($('dzr_pw') && $('dzr_pw').value) || '';
+    var bad = !st.vn || !st.fn ? 'Заполните название и имя' : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(st.em) ? 'Проверьте почту' : (!DZR.authed && pw.length < 8) ? 'Пароль — не меньше 8 символов' : '';
+    if (bad) { st.err = dzr_t(bad); draw(); var f = !st.vn ? 'dzr_vn' : !st.fn ? 'dzr_fn' : /почт/.test(bad) ? 'dzr_em' : 'dzr_pw'; if ($(f)) $(f).focus(); return; }
+    Object.keys(vp.staff || {}).forEach(function (s) { if ((vp.svc || []).indexOf(s) < 0) delete vp.staff[s]; }); try { vClean(vp); } catch (e) {}
+    var d = { p_name: st.vn, p_type: vp.type, p_first: st.fn, p_last: st.ln, p_lang: dzr_uz() ? 'uz' : 'ru', p_gender: null, p_struct: dzr_struct(vp, st.custom) };
+    try { localStorage.setItem('sv-pend', JSON.stringify(d)); localStorage.setItem('dzr-hc-new', '1'); } catch (e) {}
+    st.busy = true; draw();
+    /* уже вошли (повтор после ошибки сервера) — сразу создать */
+    if (DZR.authed && DZR.retry) { var fn = DZR.retry; DZR.retry = null; return fn(d); }
+    var r = await sb.auth.signUp({ email: st.em.toLowerCase(), password: pw });
+    st.busy = false;
+    if (r.error) { try { localStorage.removeItem('sv-pend'); } catch (e) {} st.err = /registered/i.test(r.error.message) ? dzr_t('Эта почта уже зарегистрирована — войдите') : err(r.error); return draw(); }
+    if (!r.data || !r.data.session) {
+      w.innerHTML = '<div class="sx-in"><h1 class="sx-h">Подтвердите почту</h1><p class="sx-sub">Мы отправили письмо со ссылкой. Откройте её, затем войдите по почте и паролю — заведение со службами создастся при первом входе.</p><button type="button" class="btn dark full" id="dzrOk">Понятно</button></div>';
+      $('dzrOk').onclick = function () { close(); render(); };
+    } else { st.busy = true; draw(); }   /* дальше — SV.ui.noVenue (venue_create со структурой) */
+  }
+  draw();
+}
+window.dzr_signup = dzr_signup;
+(function () {
+  if (!sv_on()) return;
+  var SV = window.JAMOA_SV; if (!SV) return;
+  window.sv_signup = dzr_signup;   /* 90-server (метка 92zr) вызывает window.sv_signup */
+  /* вход: владельцу понятно, куда нажать (аудит, находка 1) */
+  var rl0 = renderLogin;
+  renderLogin = function () { var r = rl0.apply(this, arguments); try { var b = $('svSu'); if (b && !b.getAttribute('data-dzr')) { b.setAttribute('data-dzr', '1'); b.innerHTML = '<span>Я владелец — зарегистрировать заведение</span>'; } } catch (e) {} return r; };
+  /* вошли, заведения нет, есть черновик со структурой — создаём; ошибка сервера — снова шаг «Вход владельца» с текстом ошибки */
+  var nv0 = SV.ui.noVenue;
+  SV.ui.noVenue = function () {
+    var pend = null; try { pend = JSON.parse(localStorage.getItem('sv-pend') || 'null'); } catch (e) {}
+    if (!pend || !pend.p_struct) return nv0.apply(this, arguments);
+    DZR.authed = true;
+    return new Promise(function (done) {
+      async function make(d) {
+        var r; try { r = await sb.rpc('venue_create', d); } catch (e) { r = { error: e }; }
+        if (r && r.error) {
+          if (!DZR.su) dzr_signup();
+          var s = DZR.su; s.st.busy = false; s.st.step = 'acc'; s.st.err = err(r.error); s.draw(); DZR.retry = make; return;
+        }
+        try { localStorage.removeItem('sv-pend'); localStorage.removeItem('dzr-su'); } catch (e) {}
+        if (DZR.su) DZR.su.close(); DZR.authed = false; done(true);
+      }
+      make(pend);
+    });
+  };
+  /* быстрые смены по типу: структура уже создана сервером — только смены для существующих служб, без лишних служб и должностей */
+  var sd0 = SV.seed;
+  if (sd0) SV.seed = async function () {
+    var me = SV.me || {}, R = SV.real, vid = SV.venueId, mk = 'sv-seed-' + vid;
+    if (me.role !== 'owner' || !R || !vid) return false;
+    try { if (localStorage.getItem(mk)) return false; } catch (e) {}
+    var dr = await R.from('departments').select('id,code,archived_at').eq('venue_id', vid); if (dr.error) return sd0.apply(this, arguments);
+    var L = (dr.data || []).filter(function (d) { return d.code !== 'dir' && !d.archived_at; });
+    if (!L.length) return sd0.apply(this, arguments);
+    var sr = await R.from('shift_presets').select('id').eq('venue_id', vid).limit(1); if (sr.error) return false;
+    if ((sr.data || []).length || typeof dh_std !== 'function') { try { localStorage.setItem(mk, '1'); } catch (e) {} return false; }
+    var ty = (SV.venue && SV.venue.type) || ((SV.venues || []).filter(function (v) { return v.venue_id === vid; })[0] || {}).type;
+    var vt0 = typeof dh_vtype === 'function' ? dh_vtype : null; if (vt0) dh_vtype = function () { return ty || vt0(); };
+    try {
+      for (var k = 0; k < L.length; k++) { var X = []; try { X = dh_std(L[k].code) || []; } catch (e) { X = []; }
+        for (var m = 0; m < X.length; m++) { var r3 = await R.rpc('preset_save', { p_id: null, p_dept: L[k].id, p_name: X[m][1], p_name_uz: dzr_uzOf(X[m][1]), p_start: X[m][2], p_end: X[m][3], p_sort: m }); if (r3.error) try { console.warn('[dzr] preset', r3.error.message); } catch (x) {} } }
+    } finally { if (vt0) dh_vtype = vt0; }
+    try { localStorage.setItem(mk, '1'); } catch (e) {}
+    return true;
+  };
+})();
+
+/* ---------- 5. Демо: численность и обзор штата на учебных данных ---------- */
+function dzr_demoHc() {
+  var M = dzr_hcMap(), vp = null; try { vp = venueP(); } catch (e) {}
+  var st = null; try { st = vp ? vStruct(vp) : null; } catch (e) {}
+  (S.pos || []).forEach(function (p) {
+    if (M[p.id] !== undefined) { p.headcount = M[p.id]; return; }
+    if (p.headcount != null) return;
+    var x = st && (st.pos || []).filter(function (q) { return q.name === p.name && String(q.dept_id) === String(p.dept_id); })[0];
+    p.headcount = x && x.access !== 'director' ? Math.min(99, +x.n || 0) : null;
+  });
+  try { S.headcount = {}; (S.pos || []).forEach(function (p) { S.headcount[p.id] = p.headcount; }); } catch (e) {}
+}
+function dzr_demoOverview() {
+  dzr_demoHc();
+  var own = (S.emps || []).filter(function (e) { return e.role === 'director' && e.active !== false; })[0] || null, mgr = S.me && S.me.role === 'manager';
+  var mine = null; if (mgr) { mine = {}; mine[S.me.dept_id] = 1; (S.depts || []).forEach(function (d) { if (d.head_id === S.me.id) mine[d.id] = 1; }); }
+  var people = (S.emps || []).filter(function (e) { return e.active !== false; });
+  var ppl = function (e) { var f = e.first_name || '', l = e.last_name || ''; return { member_id: e.id, name: (f + ' ' + l).trim(), short: f + (l ? ' ' + l.charAt(0) + '.' : ''), initials: (f.charAt(0) + l.charAt(0)).toUpperCase(), status: e.user_id === null || e.invited ? 'invited' : 'active' }; };
+  var D = (S.depts || []).filter(function (d) { return !mine || mine[d.id]; }).map(function (d) {
+    var P = (S.pos || []).filter(function (p) { return p.dept_id === d.id; }).map(function (p) {
+      var on = people.filter(function (e) { return e.position_id === p.id; });
+      return { id: p.id, name: p.name, name_uz: p.name_uz || null, access: p.access === 'manager' ? 'manager' : 'staff', headcount: p.headcount == null ? null : +p.headcount, people: on.map(ppl), vacancies: p.headcount == null ? 0 : Math.max(0, +p.headcount - on.length), _own: p.access === 'director' };
+    });
+    return { id: d.id, code: d.code || d.id, name: d.name, name_uz: d.name_uz || null, sort: d.sort || 0, positions: P, unplaced: people.filter(function (e) { return e.dept_id === d.id && e.role !== 'director' && !P.some(function (p) { return p.id === e.position_id; }); }).map(ppl) };
+  });
+  var allP = []; D.forEach(function (d) { d.positions.forEach(function (p) { allP.push(p); }); });
+  var tot = { depts: D.filter(function (d) { return d.id !== 'dir'; }).length, positions: allP.filter(function (p) { return !p._own; }).length,
+    people: people.filter(function (e) { return e.role !== 'director' && (!mine || mine[e.dept_id]); }).length,
+    vacancies: allP.reduce(function (a, p) { return a + p.vacancies; }, 0), headcount_set: allP.some(function (p) { return !p._own && p.headcount != null; }) };
+  allP.forEach(function (p) { delete p._own; });
+  var org = ''; try { org = orgP('org_name', '') || ''; } catch (e) {}
+  return { venue: { id: 'demo', name: org, type: (venueP() || {}).type || (typeof orgType === 'function' ? orgType() : '') }, owner: own ? { member_id: own.id, name: ((own.first_name || '') + ' ' + (own.last_name || '')).trim() } : null, role: mgr ? 'manager' : 'owner', totals: tot, depts: D };
+}
+(function () {
+  if (sv_on()) return;
+  if (typeof loadBase === 'function') { var lb0 = loadBase; loadBase = async function () { var r = await lb0.apply(this, arguments); try { dzr_demoHc(); } catch (e) {} return r; }; }
+  var r0 = sb.rpc;
+  sb.rpc = function (n, a) {
+    if (n === 'position_headcount_set') {
+      a = a || {};
+      if (!S.me || S.me.role !== 'director') return Promise.resolve({ data: null, error: { message: dzr_t('Недостаточно прав'), details: 'no_rights' } });
+      var p = (S.pos || []).filter(function (x) { return String(x.id) === String(a.p_id); })[0];
+      if (!p) return Promise.resolve({ data: null, error: { message: dzr_t('Такой должности в заведении нет'), details: 'not_found' } });
+      var v = a.p_n == null || a.p_n === '' ? null : Math.round(+a.p_n);
+      if (v != null && (isNaN(v) || v < 0 || v > 99)) return Promise.resolve({ data: null, error: { message: dzr_t('Сколько людей нужно — число от 0 до 99'), details: 'bad_input' } });
+      var M = dzr_hcMap(); M[p.id] = v; try { localStorage.setItem(DZR.HK, JSON.stringify(M)); } catch (e) {}
+      p.headcount = v; try { (window.__DB.positions || []).forEach(function (x) { if (String(x.id) === String(p.id)) x.headcount = v; }); } catch (e) {}
+      var n0 = (S.emps || []).filter(function (e) { return e.active !== false && e.position_id === p.id; }).length;
+      return Promise.resolve({ data: { id: p.id, name: p.name, headcount: v, people: n0, vacancies: v == null ? 0 : Math.max(0, v - n0) }, error: null });
+    }
+    if (n === 'staff_overview') {
+      if (!S.me || (S.me.role !== 'director' && S.me.role !== 'manager')) return Promise.resolve({ data: null, error: { message: dzr_t('Недостаточно прав'), details: 'no_rights' } });
+      try { return Promise.resolve({ data: dzr_demoOverview(), error: null }); } catch (e) { return Promise.resolve({ data: null, error: { message: String(e && e.message || e) } }); }
+    }
+    return r0.apply(this, arguments);
+  };
+})();
+if (/[?&]w4dbg/.test(location.search)) window.__dzr = { S: S, sb: sb, DZR: DZR, staff: dzr_staff, counts: dzr_counts, struct: function (t) { return dzr_struct(vDefault(t), []); }, overview: function () { return dzr_demoOverview(); }, invite: dzr_invite, signup: dzr_signup, go: function (v) { return go(v); } };
+
+
+/* ===== ВОЛНА 4 · 92zs-shtat.js ===== */
+/* ===== 92zs «Штат»: экран штата (Список · Схема · 3D-Офис) и виджет на главной владельца (префикс dsh_) =====
+   Требования — w4/SHTAT_BRIEF.md, макеты — w4/AUDIT_onboarding.md (раздел 5), 3D — образец w4/shtat3d/v4.html («ОФИС»).
+   Данные: dsh_overview() — на сервере rpc staff_overview (0034, блок 92zr части А в sv-adapter); нет rpc (до миграции) или демо —
+   то же дерево из S.depts / S.pos / S.emps + численность S.pos[].headcount (демо — часть А, localStorage dzr-hc); запасное хранилище
+   телефона 'dsh-hc' — только если rpc position_headcount_set нет.
+   Вакансии = max(0, численность − люди на должности (работают + приглашённые)); численность не задана → вакансий нет, «0 / не задано».
+   Изменения: службы и должности — rpc 0033 (dept_create / positions_add / dept_remove / position_remove; демо — dai_demoStruct, тот же слой, что
+   «Отделы и должности»), переименование — запись в departments/positions (как «Отделы и должности»), численность — position_headcount_set.
+   Вакансия → существующая форма cf_invite с уже выбранной должностью. Человек → карточка сотрудника (vEmp).
+   Права: владелец — всё; руководитель — свои службы, только просмотр и приглашение; сотрудник — нет доступа.
+   3D: three.js тем же способом, что 3D-отель (h3dLib); нет WebGL или не загрузился — «Схема» с подсказкой. Слабый телефон — без карты теней. */
+var DSH = { seq: 0, data: null, open: {}, sel: null, g3: null, zoom: 1, busy: false, hint: '' };
+var DSH_VK = 'dsh-view', DSH_HK = 'dsh-hc';
+function dsh_uz() { try { return uiLang() === 'uz'; } catch (e) { return false; } }
+function dsh_t(s, o) {
+  var r = s;
+  if (dsh_uz()) { var X = window.MLX_UZ_EXTRA || {}; if (X[s] != null) r = X[s]; else { try { r = trUi(s); } catch (e) {} } }
+  if (o) Object.keys(o).forEach(function (k) { r = String(r).split('{' + k + '}').join(o[k]); });
+  try { if (window.MLX_I18N && MLX_I18N.cy) r = MLX_I18N.cy(r); } catch (e) {}
+  return r;
+}
+function dsh_h(s, o) { return h(dsh_t(s, o)); }
+function dsh_sv() { return typeof sv_on === 'function' && sv_on(); }
+/* «4 службы»: dsh_n(4, 'службы', 'служба', 'служб') — формы: 2–4, 1, 5+ */
+function dsh_n(n, f24, f1, f5) {
+  var m = Math.abs(n) % 100, k = m % 10, w = m > 10 && m < 20 ? f5 : k === 1 ? f1 : k >= 2 && k <= 4 ? f24 : f5;
+  return '<b class="num">' + n + '</b> <span>' + h(dsh_t(w)) + '</span>';
+}
+function dsh_nm(x) { return x ? (dsh_uz() && x.name_uz ? x.name_uz : x.name) : ''; }
+function dsh_isDir() { try { return isDirector(); } catch (e) { return false; } }
+function dsh_can() { try { return !!S.me && (isDirector() || myTeam().length > 0); } catch (e) { return false; } }
+function dsh_edit() { return dsh_isDir(); }
+function dsh_wide() { var m = $('main'); return (m ? m.clientWidth : innerWidth) >= 820; }
+function dsh_short(nm) { var p = String(nm || '').trim().split(/\s+/); return p.length > 1 ? p[1] + ' ' + p[0].charAt(0) + '.' : p[0] || ''; }
+function dsh_ini(nm) { var p = String(nm || '').replace(/\./g, '').trim().split(/\s+/); return ((p[0] || '').charAt(0) + (p[1] || '').charAt(0)).toUpperCase(); }
+function dsh_err(e) { try { return err(e); } catch (x) { return (e && e.message) || String(e); } }
+function dsh_miss(e) { return !!e && (e.code === 'PGRST202' || /Could not find the function|does not exist|schema cache/i.test(String(e.message || ''))); }
+
+/* ---------- численность: сервер (staff_overview / position_headcount_set) или телефон (демо и до миграции 0034) ---------- */
+function dsh_SV() { try { return sb && sb.__sv || null; } catch (e) { return null; } }
+function dsh_hcKey() { var v = ''; try { var X = dsh_sv() && dsh_SV(); if (X && X.venue && X.venue.id) v = String(X.venue.id); } catch (e) {} return DSH_HK + (v ? '-' + v : ''); }
+function dsh_stale() { try { var X = dsh_SV(); if (X && X.stale) X.stale('base'); } catch (e) {} DSH.ovAt = 0; }
+/* своё хранилище — только запасное (нет rpc position_headcount_set: сервер до 0034, демо без части А); главное — S.pos[].headcount (часть А, 92zr) */
+function dsh_hcAll() { if (!DSH.hc || DSH.hcK !== dsh_hcKey()) { DSH.hcK = dsh_hcKey(); try { DSH.hc = JSON.parse(localStorage.getItem(DSH.hcK) || '{}') || {}; } catch (e) { DSH.hc = {}; } } return DSH.hc; }
+function dsh_hcSave() { try { localStorage.setItem(dsh_hcKey(), JSON.stringify(DSH.hc || {})); } catch (e) {} }
+/* демо без части А: численность из анкеты заведения (мастер «Сколько людей нужно») — пока владелец не задал свою */
+function dsh_hcVP() {
+  var want = {}; if (dsh_sv()) return want;
+  try { var vp = venueP(), st = (vp && vp.staff) || {}; Object.keys(st).forEach(function (d) { var x = st[d]; if (Array.isArray(x)) x.forEach(function (p) { if (p && p[0]) want[p[0]] = (want[p[0]] || 0) + (+p[1] || 0); }); else if (x && typeof x === 'object') Object.keys(x).forEach(function (n) { want[n] = (want[n] || 0) + (+x[n] || 0); }); }); } catch (e) {}
+  return want;
+}
+function dsh_hcGet(p, vp) {
+  var A = dsh_hcAll(), k = String(p.id);
+  if (Object.prototype.hasOwnProperty.call(A, k)) return A[k];
+  if (p.headcount !== undefined) return p.headcount == null || p.headcount === '' ? null : +p.headcount;
+  try { if (S.headcount && Object.prototype.hasOwnProperty.call(S.headcount, k)) return S.headcount[k] == null ? null : +S.headcount[k]; } catch (e) {}
+  if (vp && vp[p.name] != null && vp[p.name] > 0) return vp[p.name];
+  return null;
+}
+async function dsh_hcSet(pid, n) {
+  n = n == null || n === '' ? null : Math.max(0, Math.min(99, Math.round(+n) || 0));
+  var r = null;
+  try { r = await sb.rpc('position_headcount_set', { p_id: +pid || pid, p_n: n }); } catch (e) { r = { error: e }; }
+  if (r && r.error && !dsh_miss(r.error)) throw r.error;
+  var A = dsh_hcAll();
+  if (r && !r.error && r.data != null) { if (Object.prototype.hasOwnProperty.call(A, String(pid))) { delete A[String(pid)]; dsh_hcSave(); } return; }
+  A[String(pid)] = n; dsh_hcSave();   /* нет rpc — запомнить на этом телефоне */
+}
+
+/* ---------- данные «Штата» ---------- */
+function dsh_owner() {
+  var L = (S.emps || []).filter(function (e) { return e && e.active !== false; });
+  return L.filter(function (e) { return e.jrole === 'owner'; })[0] || (dsh_isDir() ? S.me : null) || L.filter(function (e) { return e.role === 'director'; })[0] || null;
+}
+function dsh_invited(e) { return !!e && (e.status === 'invited' || (dsh_sv() ? !e.user_id && !e.colleague : e.must_change_password === true)); }
+function dsh_local() {
+  var vp = dsh_hcVP(), own = dsh_owner();
+  var depts = (S.depts || []).slice().sort(function (a, b) { return (a.sort || 0) - (b.sort || 0); }).map(function (d) {
+    return { id: d.id, sid: d.sid, code: d.code || d.id, name: d.name, name_uz: d.name_uz, sort: d.sort,
+      positions: (S.pos || []).filter(function (p) { return p.dept_id === d.id; }).sort(function (a, b) { return (a.sort || 0) - (b.sort || 0); }).map(function (p) {
+        var ppl = (S.emps || []).filter(function (e) { return e && e.active !== false && e.position_id === p.id; }).map(function (e) {
+          var nm = fullName(e); return { member_id: e.id, name: nm, short: dsh_short(nm), initials: (function () { try { return ini(e); } catch (x) { return dsh_ini(nm); } })(), status: dsh_invited(e) ? 'invited' : 'active' };
+        });
+        return { id: p.id, name: p.name, name_uz: p.name_uz, access: p.access, headcount: dsh_hcGet(p, vp), people: ppl };
+      }) };
+  });
+  return { venue: { name: (function () { try { return orgName(); } catch (e) { return ''; } })() }, owner: own ? { member_id: own.id, name: fullName(own) } : null, depts: depts, src: 'local' };
+}
+function dsh_norm(D) {
+  var own = D.owner || null, oid = own && own.member_id, myd = null;
+  if (!dsh_isDir()) {
+    myd = {}; try { if (S.me) { myd[S.me.dept_id] = 1; if (S.me.lead_dept) myd[S.me.lead_dept] = 1; } myTeam().forEach(function (e) { myd[e.dept_id] = 1; }); (S.depts || []).forEach(function (d) { if (S.me && d.head_id === S.me.id) myd[d.id] = 1; }); } catch (e) {}
+  }
+  var T = { depts: 0, positions: 0, people: 0, vacancies: 0, seats: 0, filled: 0, headcount_set: false };
+  var out = (D.depts || []).map(function (d) {
+    /* id службы — как в приложении (у сервера — код); если пришёл id сервера — найти по sid */
+    if (!(S.depts || []).some(function (x) { return x.id === d.id; })) { var m = (S.depts || []).filter(function (x) { return x.sid != null && String(x.sid) === String(d.id) || x.code && x.code === d.code; })[0]; if (m) { d = Object.assign({}, d, { sid: d.sid != null ? d.sid : d.id, id: m.id }); } }
+    var ps = (d.positions || []).map(function (p) {
+      var ppl = (p.people || []).filter(function (x) { return !oid || x.member_id !== oid; });
+      var hc = p.headcount == null ? null : +p.headcount, A = dsh_hcAll();
+      if (Object.prototype.hasOwnProperty.call(A, String(p.id))) hc = A[String(p.id)];   /* запасное хранилище телефона (сервер до 0034) */
+      var vac = hc == null ? 0 : Math.max(0, hc - ppl.length);
+      return Object.assign({}, p, { people: ppl, headcount: hc, vacancies: vac, over: hc != null && ppl.length > hc ? ppl.length - hc : 0, own: !!(own && (p.people || []).some(function (x) { return x.member_id === oid; })) });
+    }).filter(function (p) { return !(p.access === 'director' && !p.people.length && p.headcount == null) && !(p.own && !p.people.length && p.headcount == null); });
+    var dd = Object.assign({}, d, { positions: ps });
+    dd.people = ps.reduce(function (a, p) { return a + p.people.length; }, 0);
+    dd.vacancies = ps.reduce(function (a, p) { return a + p.vacancies; }, 0);
+    dd.hc = ps.some(function (p) { return p.headcount != null; }) ? ps.reduce(function (a, p) { return a + (p.headcount == null ? p.people.length : Math.max(p.headcount, p.people.length)); }, 0) : null;
+    dd.dir = d.code === 'dir' || d.id === 'dir';
+    return dd;
+  }).filter(function (d) { return !(d.dir && !d.positions.length); }).filter(function (d) { return !myd || myd[d.id]; });
+  out.forEach(function (d) {
+    T.depts++; T.positions += d.positions.length; T.people += d.people; T.vacancies += d.vacancies;
+    d.positions.forEach(function (p) { if (p.headcount != null) T.headcount_set = true; T.seats += p.headcount == null ? p.people.length : Math.max(p.headcount, p.people.length); T.filled += p.people.length; });
+  });
+  return { venue: D.venue || {}, owner: own, depts: out, totals: T, src: D.src || 'server' };
+}
+async function dsh_overview(cached) {
+  if (cached && DSH.ov && Date.now() - (DSH.ovAt || 0) < 15000) return DSH.ov;
+  var D = await dsh_overview0(); DSH.ov = D; DSH.ovAt = Date.now(); return D;
+}
+async function dsh_overview0() {
+  if (dsh_sv()) {
+    try {
+      var r = await sb.rpc('staff_overview');
+      if (r && !r.error && r.data && Array.isArray(r.data.depts)) return dsh_norm(r.data);
+      if (r && r.error && !dsh_miss(r.error)) console.warn('[dsh] staff_overview', r.error);
+    } catch (e) { console.warn('[dsh]', e); }
+  }
+  return dsh_norm(dsh_local());
+}
+window.dsh_overview = dsh_overview;
+function dsh_firstVac(D) { var o = null; (D.depts || []).some(function (d) { return d.positions.some(function (p) { if (p.vacancies > 0) { o = { d: d, p: p }; return true; } return false; }); }); return o; }
+function dsh_next(D) {
+  var T = D.totals, v = dsh_firstVac(D);
+  if (!T.depts) return { t: dsh_t('Добавьте службу — например «Приёмка» или «Цех».'), k: 'dept' };
+  if (!T.positions) return { t: dsh_t('Добавьте должность в службу.'), k: 'pos', d: D.depts[0] };
+  if (v) return { t: dsh_t('Пригласите на вакансию: {p}', { p: dsh_nm(v.p) }) + (v.p.vacancies > 1 ? ' · ' + dsh_t('свободно мест: {n}', { n: v.p.vacancies }) : ''), k: 'inv', p: v.p, d: v.d };
+  if (!T.headcount_set) return { t: dsh_t('Укажите, сколько людей нужно на каждой должности — пустые места станут вакансиями.'), k: 'hc' };
+  return { t: dsh_t('Штат укомплектован.'), k: 'ok' };
+}
+
+/* ---------- стили ---------- */
+(function () {
+  var st = document.createElement('style'); st.id = 'dshCss';
+  st.textContent =
+    ':root{--dsh-em:var(--dj-okf,#38C98D);--dsh-emd:var(--dj-fok,#0B7A52);--dsh-am:var(--dj-warnf,#F0B13D);--dsh-sa:var(--dj-infof,#6FA8FF);--dsh-amg:rgba(240,177,61,.55)}' +
+    'html[data-lx="light"]:root{--dsh-amg:rgba(224,138,0,.45)}' +
+    '.dsh{min-width:0}.dsh .num{font-variant-numeric:tabular-nums}' +
+    '.dsh-top{display:flex;align-items:center;gap:10px;margin:2px 2px 6px}.dsh-top .grow{flex:1;min-width:0;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.dsh-add{flex:none;min-height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--gold);background:transparent;color:var(--goldink,var(--gold));font-weight:700;font-size:14px;cursor:pointer}' +
+    '.dsh-sum{font-size:13.5px;color:var(--muted);margin:0 2px 10px;line-height:1.5}.dsh-sum b{color:var(--ink);font-weight:700}.dsh-sum .dsh-pe b,.dsh-sum .dsh-pe span{color:var(--dsh-em)}.dsh-sum .dsh-va b,.dsh-sum .dsh-va span{color:var(--dsh-am)}' +
+    '.dsh-seg{margin:0 0 12px}.dsh-seg button.on{background:var(--gold);color:var(--dj-onw,#1C1400)}' +
+    '.dsh-hint{font-size:12.5px;color:var(--muted);margin:-4px 2px 10px;line-height:1.4}.dsh-hint.warn{color:var(--dsh-am)}' +
+    /* список — как проводник */
+    '.dsh-ft{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}' +
+    '.dsh-r{position:relative;display:flex;align-items:center;gap:8px;min-height:46px;padding:4px 6px 4px 8px;border-top:1px solid var(--line2);font-size:14.5px}.dsh-ft>.dsh-r:first-child{border-top:0}' +
+    '.dsh-r .dsh-ca{flex:none;width:30px;height:36px;display:grid;place-items:center;border:0;background:none;color:var(--muted);cursor:pointer;border-radius:8px;padding:0}.dsh-r .dsh-ca svg{transition:transform .18s}.dsh-r.op .dsh-ca svg{transform:rotate(90deg)}.dsh-r .dsh-ca.x{visibility:hidden}' +
+    '.dsh-r .dsh-ic{flex:none;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:var(--goldbg);color:var(--goldink,var(--gold))}.dsh-r .dsh-ic svg{width:16px;height:16px}' +
+    '.dsh-r .dsh-nm{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;background:none;border:0;color:inherit;font:inherit;text-align:left;padding:4px 0;cursor:pointer}.dsh-r .dsh-nm b{font-weight:650;line-height:1.25;overflow-wrap:anywhere}.dsh-r .dsh-nm small{font-size:12px;color:var(--muted);line-height:1.3}' +
+    '.dsh-r .dsh-ct{flex:none;font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}.dsh-r .dsh-ct b{color:var(--ink)}.dsh-r .dsh-ct.full b{color:var(--dsh-em)}.dsh-r .dsh-ct.gap b{color:var(--dsh-am)}' +
+    '.dsh-r .dsh-mn{flex:none;width:38px;height:38px;border-radius:10px;border:0;background:none;color:var(--muted);display:grid;place-items:center;cursor:pointer;font-size:20px;line-height:1;font-weight:700;letter-spacing:-1px}.dsh-r .dsh-mn:active,.dsh-r .dsh-ca:active{background:var(--goldbg)}' +
+    '.dsh-r .dsh-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--dsh-am);box-shadow:0 0 8px var(--dsh-amg)}' +
+    '.dsh-r.l1{padding-left:26px}.dsh-r.l2{padding-left:52px}.dsh-r.sel{background:var(--goldbg)}' +
+    '.dsh-r.l1 .dsh-ic{background:transparent;border:1px solid var(--line);color:var(--muted)}' +
+    '.dsh-pp{flex:1;min-width:0;display:flex;align-items:center;gap:10px;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer;min-height:40px;padding:2px 0}' +
+    '.dsh-av{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:11.5px;font-weight:700;color:#062018;background:var(--dsh-em);box-shadow:0 0 0 2px color-mix(in srgb,var(--dsh-em) 30%,transparent)}' +
+    '.dsh-av.inv{background:transparent;color:var(--dsh-sa);box-shadow:inset 0 0 0 1.5px var(--dsh-sa)}.dsh-av.own{background:var(--gold);color:#1c1400}' +
+    '.dsh-pp .t{flex:1;min-width:0;display:flex;flex-direction:column}.dsh-pp .t b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dsh-pp .t small{font-size:12px;color:var(--muted)}.dsh-pp .t small.inv{color:var(--dsh-sa)}' +
+    '.dsh-vac{flex:1;min-width:0;display:flex;align-items:center;gap:10px;min-height:40px;margin:3px 6px 3px 0;padding:6px 12px;border-radius:12px;border:1.5px dashed var(--dsh-am);background:color-mix(in srgb,var(--dsh-am) 10%,transparent);color:var(--dsh-am);font:inherit;font-weight:700;font-size:14px;text-align:left;cursor:pointer;animation:dshGlow 2.4s ease-in-out infinite}' +
+    '.dsh-vac .p{flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;border:1.5px solid var(--dsh-am);font-size:18px;line-height:1}.dsh-vac span.s{font-weight:600;color:var(--muted);font-size:12.5px}' +
+    '@keyframes dshGlow{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 14px 1px var(--dsh-amg)}}@media (prefers-reduced-motion:reduce){.dsh-vac,.dsh-ov,.dsh3-vac{animation:none!important}}' +
+    '.dsh-plus{flex:1;min-height:40px;border:0;background:none;color:var(--goldink,var(--gold));font:inherit;font-weight:700;font-size:14px;text-align:left;cursor:pointer;padding:0 4px}' +
+    '.dsh-2p{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px;align-items:start}.dsh-2p .dsh-det{position:sticky;top:76px}' +
+    '.dsh-det h3{font-family:var(--serif);font-size:22px;margin:0 0 4px}.dsh-det .meta{margin-bottom:10px}.dsh-det .dsh-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.dsh-det .dsh-acts .btn{min-height:42px}' +
+    /* схема — оргдерево */
+    '.dsh-orgw{position:relative;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}' +
+    '.dsh-orgt{display:flex;gap:6px;justify-content:flex-end;padding:8px 8px 0}.dsh-orgt button{min-width:40px;min-height:36px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-weight:700;cursor:pointer}' +
+    '.dsh-org{overflow:auto;-webkit-overflow-scrolling:touch;max-height:72vh;padding:10px 12px 18px;overscroll-behavior:contain}' +
+    '.dsh-org ul{display:flex;justify-content:center;padding:18px 0 0;margin:0;position:relative;list-style:none}' +
+    '.dsh-org li{position:relative;padding:18px 6px 0;display:flex;flex-direction:column;align-items:center;list-style:none}' +
+    '.dsh-org li::before,.dsh-org li::after{content:"";position:absolute;top:0;right:50%;width:50%;height:18px;border-top:1.5px solid var(--line)}.dsh-org li::after{right:auto;left:50%;border-left:1.5px solid var(--line)}' +
+    '.dsh-org li:only-child::before,.dsh-org li:only-child::after{display:none}.dsh-org li:only-child{padding-top:0}.dsh-org li:first-child::before,.dsh-org li:last-child::after{border:0 none}' +
+    '.dsh-org li:last-child::before{border-right:1.5px solid var(--line);border-radius:0 8px 0 0}.dsh-org li:first-child::after{border-radius:8px 0 0 0}' +
+    '.dsh-org ul ul::before{content:"";position:absolute;top:0;left:50%;border-left:1.5px solid var(--line);height:18px}.dsh-org>ul{padding-top:0}' +
+    '.dsh-ob{min-width:150px;max-width:210px;border:1px solid var(--line);background:var(--surface,var(--card));border-radius:12px;padding:9px 10px;text-align:left;font:inherit;color:inherit;cursor:pointer;display:block}' +
+    '.dsh-ob.own{background:linear-gradient(180deg,var(--gold),color-mix(in srgb,var(--gold) 70%,#000));color:#1c1400;border:0;text-align:center;min-width:170px}.dsh-ob.own small{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;opacity:.75}.dsh-ob.own b{font-size:15px}' +
+    '.dsh-ob.dep{border-color:color-mix(in srgb,var(--gold) 55%,var(--line))}.dsh-ob.dep b{font-family:var(--serif);font-size:17px;color:var(--goldink,var(--gold));display:block;line-height:1.15}' +
+    '.dsh-ob .c{font-size:12px;color:var(--muted);margin-top:2px}.dsh-ob .c b{font-family:inherit;font-size:12px;color:var(--ink);display:inline}' +
+    '.dsh-pcol{display:flex;flex-direction:column;gap:8px;padding-top:18px;position:relative}.dsh-pcol::before{content:"";position:absolute;top:0;left:50%;height:18px;border-left:1.5px solid var(--line)}' +
+    '.dsh-pc{width:184px;border:1px solid var(--line);border-radius:12px;background:var(--card);padding:8px;text-align:left}.dsh-pc .hd{display:flex;align-items:flex-start;gap:6px;background:none;border:0;color:inherit;font:inherit;width:100%;text-align:left;cursor:pointer;padding:0 0 6px}.dsh-pc .hd b{flex:1;font-weight:650;font-size:13.5px;line-height:1.25}.dsh-pc .hd span{font-size:12px;color:var(--muted);white-space:nowrap}' +
+    '.dsh-ch{display:flex;align-items:center;gap:7px;width:100%;min-height:36px;border-radius:9px;border:1px solid transparent;background:color-mix(in srgb,var(--dsh-em) 9%,transparent);color:inherit;font:inherit;font-size:13px;padding:3px 7px;margin-top:5px;text-align:left;cursor:pointer}.dsh-ch .dsh-av{width:24px;height:24px;font-size:10px}' +
+    '.dsh-ch>span:not(.dsh-av){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dsh-ch.inv{background:color-mix(in srgb,var(--dsh-sa) 10%,transparent)}' +
+    '.dsh-ov{display:flex;align-items:center;gap:7px;width:100%;min-height:36px;border-radius:9px;border:1.5px dashed var(--dsh-am);background:color-mix(in srgb,var(--dsh-am) 9%,transparent);color:var(--dsh-am);font:inherit;font-size:12.5px;font-weight:700;padding:3px 7px;margin-top:5px;text-align:left;cursor:pointer;animation:dshGlow 2.4s ease-in-out infinite}' +
+    '.dsh-ov i{font-style:normal;width:22px;height:22px;border-radius:50%;border:1.5px solid var(--dsh-am);display:grid;place-items:center;font-size:15px;flex:none}' +
+    '.dsh-dash{width:184px;min-height:40px;border:1.5px dashed var(--line);border-radius:12px;background:none;color:var(--goldink,var(--gold));font:inherit;font-weight:700;font-size:13px;cursor:pointer}' +
+    '.dsh-ob.addd{border-style:dashed;color:var(--goldink,var(--gold));font-weight:700;text-align:center}' +
+    /* 3D-офис */
+    '.dsh-3d{position:relative;height:var(--dsh3h,560px);border-radius:14px;overflow:hidden;border:1px solid var(--line);background:radial-gradient(120% 70% at 50% 45%,#1a1610 0%,#0e0c09 55%,#080706 100%);touch-action:none;user-select:none;-webkit-user-select:none}' +
+    'html[data-lx="light"]:root .dsh-3d{background:radial-gradient(120% 70% at 50% 45%,#fbf7ef 0%,#efe7d8 60%,#e6dccb 100%)}' +
+    '.dsh-3d canvas{position:absolute;left:0;top:0;display:block}.dsh-3d .dsh3-L{position:absolute;inset:0;pointer-events:none;overflow:hidden}' +
+    '.dsh3-l{position:absolute;left:0;top:0;white-space:nowrap;will-change:transform}' +
+    '.dsh3-sign{font:700 15px/1 var(--serif);color:#D2AE66;background:rgba(12,10,8,.86);border:1px solid rgba(210,174,102,.45);border-radius:6px;padding:3px 7px 4px}' +
+    'html[data-lx="light"]:root .dsh3-sign{background:rgba(255,252,245,.92);color:#8a6420;border-color:rgba(165,127,53,.5)}' +
+    '.dsh3-ml{display:flex;flex-direction:column;align-items:center;gap:2px}.dsh3-pos{font:600 10px/1.1 var(--sans,Manrope,sans-serif);color:#e6dcc4;background:rgba(10,9,7,.72);border-radius:4px;padding:1px 4px;max-width:120px;overflow:hidden;text-overflow:ellipsis}' +
+    'html[data-lx="light"]:root .dsh3-pos{color:#3d3424;background:rgba(255,252,245,.85)}' +
+    '.dsh3-nm{font:600 10.5px/1 var(--sans,Manrope,sans-serif);color:#eaf7f0;background:rgba(9,30,22,.88);border:1px solid rgba(56,201,141,.6);border-radius:7px;padding:3px 6px}.dsh3-nm.inv{color:#cfe0ff;background:rgba(14,24,44,.88);border-color:rgba(111,168,255,.65)}' +
+    '.dsh3-vac{font:700 10.5px/1 var(--sans,Manrope,sans-serif);color:#F0B13D;background:rgba(40,26,4,.9);border:1.5px solid #F0B13D;border-radius:7px;padding:3px 6px;box-shadow:0 0 10px rgba(240,177,61,.65),0 0 2px rgba(240,177,61,.9);animation:dshGlow 2.4s ease-in-out infinite}' +
+    '.dsh3-gr{font:600 10px/1 var(--sans,Manrope,sans-serif);color:#b9b09c;background:rgba(20,18,14,.85);border:1px dashed #6f685a;border-radius:7px;padding:3px 6px}' +
+    '.dsh3-ini{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font:700 10px var(--sans,Manrope,sans-serif);color:#062018;background:#38C98D;border:1.5px solid #bff3dc;box-shadow:0 0 8px rgba(56,201,141,.7)}.dsh3-ini.inv{background:#6FA8FF;color:#081a33;border-color:#d6e6ff;box-shadow:0 0 8px rgba(111,168,255,.6)}' +
+    '.dsh3-ini.g{background:linear-gradient(#D2AE66,#A57F35);color:#1c1400;border-color:#f3dfae;box-shadow:0 0 10px rgba(210,174,102,.8);width:28px;height:28px;font-size:11px}' +
+    '.dsh3-plus{font:400 22px/1 var(--sans,Manrope,sans-serif);color:#F0B13D;text-shadow:0 0 10px rgba(240,177,61,1)}' +
+    '.dsh3-own{max-width:170px;overflow:hidden;text-overflow:ellipsis;font:700 12px/1.15 var(--sans,Manrope,sans-serif);color:#1c1400;background:linear-gradient(180deg,#D2AE66,#A57F35);border-radius:9px;padding:5px 10px;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.5)}.dsh3-own small{display:block;font:600 9.5px var(--sans,Manrope,sans-serif);color:#3a2a08;letter-spacing:.6px;text-transform:uppercase}' +
+    '.dsh3-leg{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:center;padding:9px 6px 2px;font-size:12px;color:var(--muted)}.dsh3-leg .d{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}' +
+    '.dsh3-tool{position:absolute;right:8px;top:8px;display:flex;gap:6px;z-index:2}.dsh3-tool button{min-width:38px;min-height:36px;border-radius:10px;border:1px solid rgba(210,174,102,.45);background:rgba(12,10,8,.75);color:#D2AE66;font-weight:700;cursor:pointer}' +
+    'html[data-lx="light"]:root .dsh3-tool button{background:rgba(255,252,245,.9);color:#8a6420}' +
+    /* виджет на главной */
+    '.dsh-w h2{display:flex;align-items:baseline;gap:8px}.dsh-w h2 .v{margin-left:auto;font-family:var(--sans,inherit);font-size:13px;font-weight:600;color:var(--muted);max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    '.dsh-wn{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:6px 0 12px}.dsh-wn div{display:flex;flex-direction:column;align-items:flex-start;min-width:0}.dsh-wn b{font-size:24px;line-height:1.1;font-weight:700;font-variant-numeric:tabular-nums}.dsh-wn span{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;max-width:100%}' +
+    '.dsh-wn .pe b{color:var(--dsh-em)}.dsh-wn .va b{color:var(--dsh-am)}' +
+    '.dsh-bar{height:8px;border-radius:99px;background:color-mix(in srgb,var(--dsh-am) 22%,var(--line2));overflow:hidden}.dsh-bar i{display:block;height:100%;background:var(--dsh-em);border-radius:inherit;min-width:0}' +
+    '.dsh-bt{font-size:12.5px;color:var(--muted);margin-top:6px}.dsh-nx{margin-top:10px;font-size:14px;line-height:1.4}.dsh-nx b{color:var(--dsh-am)}.dsh-nx.ok b{color:var(--dsh-em)}' +
+    '.dsh-wb{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.dsh-wb .btn{min-height:44px}.dsh-wb.one{grid-template-columns:1fr}' +
+    '.dsh-wl{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;text-align:left;font:inherit;color:inherit;cursor:pointer}.dsh-wl .t{flex:1;min-width:0}.dsh-wl .t b{display:block}.dsh-wl .t small{color:var(--muted);font-size:12.5px}' +
+    '.dsh-st{display:flex;align-items:center;justify-content:center;gap:14px;margin:10px 0 4px}.dsh-st button{width:48px;height:48px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:24px;font-weight:700;cursor:pointer}.dsh-st b{font-size:30px;min-width:56px;text-align:center;font-variant-numeric:tabular-nums}' +
+    '.dsh-mi{display:flex;align-items:center;gap:12px;width:100%;min-height:48px;border:0;border-top:1px solid var(--line2);background:none;color:inherit;font:inherit;font-size:15px;text-align:left;cursor:pointer;padding:6px 2px}.dsh-mi:first-of-type{border-top:0}.dsh-mi.bad{color:var(--bad)}.dsh-mi svg{flex:none}';
+  document.head.appendChild(st);
+})();
+
+/* ---------- экран ---------- */
+W3T.shtat = 'Штат';
+W3V.shtat = function () { dsh_draw(); };
+if (typeof CM_VIEWS !== 'undefined' && CM_VIEWS.indexOf('shtat') < 0) CM_VIEWS.push('shtat');
+(function () { var cv0 = canView; canView = function (v) { if (v === 'shtat') return dsh_can(); return cv0.apply(this, arguments); }; })();
+function dsh_open() { if (!dsh_can()) { toast(dsh_t('Нет доступа')); return; } if (S.view === 'shtat') return dsh_draw(); go('shtat'); }
+window.dsh_open = dsh_open;
+function dsh_viewGet() { var v = 'list'; try { v = localStorage.getItem(DSH_VK) || 'list'; } catch (e) {} return ['list', 'org', '3d'].indexOf(v) >= 0 ? v : 'list'; }
+function dsh_viewSet(v) { try { localStorage.setItem(DSH_VK, v); } catch (e) {} }
+async function dsh_draw(keep) {
+  var m = $('main'); if (!m || S.view !== 'shtat') return;
+  if (!dsh_can()) return go('home');
+  var seq = ++DSH.seq;
+  if (!$('dshRoot')) m.innerHTML = '<div id="dshRoot" class="dsh"><div class="card empty">' + dsh_h('Загрузка…') + '</div></div>';
+  var D = await dsh_overview(!!keep);
+  if (seq !== DSH.seq || S.view !== 'shtat' || !$('dshRoot')) return;
+  DSH.data = D; dsh_paint();
+}
+function dsh_sumHtml(T) {
+  return dsh_n(T.depts, 'службы', 'служба', 'служб') + ' · ' + dsh_n(T.positions, 'должности', 'должность', 'должностей') + ' · <span class="dsh-pe">' + dsh_n(T.people, 'человека', 'человек', 'человек') + '</span> · <span class="dsh-va">' + dsh_n(T.vacancies, 'вакансии', 'вакансия', 'вакансий') + '</span>';
+}
+function dsh_paint() {
+  var root = $('dshRoot'), D = DSH.data; if (!root || !D) return;
+  dsh_3dKill();
+  var v = dsh_viewGet(), ed = dsh_edit(), T = D.totals;
+  var html = '<div class="dsh-top"><div class="grow">' + h(D.venue && D.venue.name || '') + (ed ? '' : (D.venue && D.venue.name ? ' · ' : '') + dsh_h('Ваши службы — только просмотр')) + '</div>' +
+    (ed ? '<button type="button" class="dsh-add" id="dshAddD">' + dsh_h('+ Служба') + '</button>' : '') + '</div>' +
+    '<div class="dsh-sum">' + dsh_sumHtml(T) + '</div>' +
+    '<div class="seg dsh-seg" role="tablist">' + [['list', 'Список'], ['org', 'Схема'], ['3d', '3D']].map(function (x) { return '<button type="button" role="tab" data-dshv="' + x[0] + '" class="' + (x[0] === v ? 'on' : '') + '" aria-selected="' + (x[0] === v) + '">' + dsh_h(x[1]) + '</button>'; }).join('') + '</div>' +
+    (DSH.hint ? '<div class="dsh-hint warn">' + h(DSH.hint) + '</div>' : '') +
+    (ed && !T.headcount_set && T.positions ? '<div class="dsh-hint">' + dsh_h('Нажмите на должность и укажите, сколько людей нужно — свободные места станут вакансиями.') + '</div>' : '') +
+    '<div id="dshBody"></div>';
+  root.innerHTML = html;
+  root.querySelectorAll('[data-dshv]').forEach(function (b) { b.onclick = function () { DSH.hint = ''; dsh_viewSet(b.getAttribute('data-dshv')); dsh_paint(); }; });
+  if ($('dshAddD')) $('dshAddD').onclick = dsh_addDept;
+  var body = $('dshBody');
+  if (v === 'org') dsh_org(body, D); else if (v === '3d') dsh_3d(body, D); else dsh_list(body, D);
+  DSH.hint = '';
+}
+function dsh_find(pid) { var o = null; (DSH.data && DSH.data.depts || []).some(function (d) { return d.positions.some(function (p) { if (String(p.id) === String(pid)) { o = { d: d, p: p }; return true; } return false; }); }); return o; }
+function dsh_findD(id) { return (DSH.data && DSH.data.depts || []).filter(function (d) { return String(d.id) === String(id); })[0] || null; }
+function dsh_ct(p) { return p.headcount == null ? '<b class="num">' + p.people.length + '</b> / ' + dsh_h('не задано') : '<b class="num">' + p.people.length + '</b> / <span class="num">' + p.headcount + '</span>'; }
+function dsh_ctCls(p) { return p.headcount == null ? '' : p.vacancies > 0 ? 'gap' : 'full'; }
+function dsh_dct(d) { return d.hc == null ? '<b class="num">' + d.people + '</b>' : '<b class="num">' + d.people + '</b> / <span class="num">' + d.hc + '</span>'; }
+
+/* ----- Список (проводник) ----- */
+function dsh_list(box, D) {
+  var ed = dsh_edit(), wide = dsh_wide();
+  if (DSH.open.__init !== true) { DSH.open = { __init: true }; D.depts.forEach(function (d, i) { if (d.vacancies > 0 || i < 2 || D.depts.length <= 3) DSH.open['d' + d.id] = 1; }); }
+  var rows = [];
+  if (D.owner) rows.push('<div class="dsh-r"><span class="dsh-ca x"></span><button type="button" class="dsh-pp" data-dshme="1"><span class="dsh-av own">' + h(dsh_ini(D.owner.name)) + '</span><span class="t"><b>' + h(D.owner.name) + '</b><small>' + dsh_h('Владелец') + '</small></span></button></div>');
+  D.depts.forEach(function (d) {
+    var op = !!DSH.open['d' + d.id], sel = DSH.sel === 'd' + d.id;
+    rows.push('<div class="dsh-r' + (op ? ' op' : '') + (sel ? ' sel' : '') + '" data-dshrow="d' + h(String(d.id)) + '"><button type="button" class="dsh-ca" data-dshtg="d' + h(String(d.id)) + '" aria-label="' + dsh_h('Раскрыть') + '">' + icon('chev', 16) + '</button><span class="dsh-ic">' + icon('board', 16) + '</span>' +
+      '<button type="button" class="dsh-nm" data-dshsd="' + h(String(d.id)) + '"><b>' + h(dsh_nm(d)) + '</b><small>' + h(dsh_t('должностей: {n}', { n: d.positions.length })) + '</small></button>' +
+      (!op && d.vacancies > 0 ? '<span class="dsh-dot" title="' + dsh_h('Есть вакансии') + '"></span>' : '') +
+      '<span class="dsh-ct ' + (d.hc == null ? '' : d.vacancies > 0 ? 'gap' : 'full') + '">' + dsh_dct(d) + '</span>' +
+      (ed ? '<button type="button" class="dsh-mn" data-dshmd="' + h(String(d.id)) + '" aria-label="' + dsh_h('Меню службы') + '">⋮</button>' : '') + '</div>');
+    if (!op) return;
+    d.positions.forEach(function (p) {
+      var po = DSH.open['p' + p.id] !== 0, ps = DSH.sel === 'p' + p.id, kids = p.people.length + p.vacancies;
+      rows.push('<div class="dsh-r l1' + (po && kids ? ' op' : '') + (ps ? ' sel' : '') + '"><button type="button" class="dsh-ca' + (kids ? '' : ' x') + '" data-dshtg="p' + h(String(p.id)) + '" aria-label="' + dsh_h('Раскрыть') + '">' + icon('chev', 16) + '</button><span class="dsh-ic">' + icon('users', 15) + '</span>' +
+        '<button type="button" class="dsh-nm" data-dshsp="' + h(String(p.id)) + '"><b>' + h(dsh_nm(p)) + '</b>' + (p.over ? '<small>' + h(dsh_t('сверх штата +{n}', { n: p.over })) + '</small>' : '') + '</button>' +
+        '<span class="dsh-ct ' + dsh_ctCls(p) + '">' + dsh_ct(p) + '</span>' + (ed ? '<button type="button" class="dsh-mn" data-dshmp="' + h(String(p.id)) + '" aria-label="' + dsh_h('Меню должности') + '">⋮</button>' : '') + '</div>');
+      if (!po) return;
+      p.people.forEach(function (x) {
+        rows.push('<div class="dsh-r l2"><button type="button" class="dsh-pp" data-dshpp="' + h(String(x.member_id)) + '"><span class="dsh-av' + (x.status === 'invited' ? ' inv' : '') + '">' + h(x.initials || dsh_ini(x.name)) + '</span><span class="t"><b>' + h(x.name) + '</b>' + (x.status === 'invited' ? '<small class="inv">' + dsh_h('ждём первого входа') + '</small>' : '') + '</span>' + icon('chev', 16) + '</button></div>');
+      });
+      for (var i = 0; i < p.vacancies; i++) rows.push('<div class="dsh-r l2"><button type="button" class="dsh-vac" data-dshinv="' + h(String(p.id)) + '"><span class="p">+</span><span>' + dsh_h('Вакансия · Добавить сотрудника') + '</span></button></div>');
+    });
+    if (ed) rows.push('<div class="dsh-r l1"><span class="dsh-ca x"></span><button type="button" class="dsh-plus" data-dshap="' + h(String(d.id)) + '">' + dsh_h('+ Должность') + '</button></div>');
+  });
+  if (ed) rows.push('<div class="dsh-r"><span class="dsh-ca x"></span><button type="button" class="dsh-plus" data-dshad="1">' + dsh_h('+ Служба') + '</button></div>');
+  if (!D.depts.length) rows.push('<div class="dsh-r"><span class="dsh-ca x"></span><span class="muted" style="padding:8px 0">' + dsh_h(ed ? 'Служб пока нет — добавьте первую.' : 'В ваших службах пока никого нет.') + '</span></div>');
+  var tree = '<div class="dsh-ft">' + rows.join('') + '</div>';
+  box.innerHTML = wide ? '<div class="dsh-2p">' + tree + '<div class="card dsh-det" id="dshDet"></div></div>' : tree;
+  dsh_bind(box);
+  box.querySelectorAll('[data-dshtg]').forEach(function (b) { b.onclick = function () { var k = b.getAttribute('data-dshtg'); if (k.charAt(0) === 'd') DSH.open[k] = DSH.open[k] ? 0 : 1; else DSH.open[k] = DSH.open[k] === 0 ? 1 : 0; dsh_list(box, D); }; });
+  box.querySelectorAll('[data-dshsd]').forEach(function (b) { b.onclick = function () { var k = 'd' + b.getAttribute('data-dshsd'); if (wide) { DSH.sel = k; DSH.open[k] = 1; dsh_list(box, D); } else { DSH.open[k] = DSH.open[k] ? 0 : 1; dsh_list(box, D); } }; });
+  box.querySelectorAll('[data-dshsp]').forEach(function (b) { b.onclick = function () { var id = b.getAttribute('data-dshsp'); if (wide) { DSH.sel = 'p' + id; dsh_list(box, D); } else if (dsh_edit()) dsh_menuP(id); else { var k = 'p' + id; DSH.open[k] = DSH.open[k] === 0 ? 1 : 0; dsh_list(box, D); } }; });
+  if (wide) dsh_detail($('dshDet'), D);
+}
+/* правая панель (компьютер): выбранная служба или должность */
+function dsh_detail(el, D) {
+  if (!el) return; var ed = dsh_edit(), k = DSH.sel || (D.depts[0] ? 'd' + D.depts[0].id : null), html = '';
+  if (!k) { el.innerHTML = '<div class="muted">' + dsh_h('Выберите службу или должность слева.') + '</div>'; return; }
+  if (k.charAt(0) === 'd') {
+    var d = dsh_findD(k.slice(1)); if (!d) { el.innerHTML = ''; return; }
+    html = '<h3>' + h(dsh_nm(d)) + '</h3><div class="meta">' + h(dsh_t('Служба')) + ' · ' + h(dsh_t('должностей: {n}', { n: d.positions.length })) + ' · ' + h(dsh_t('людей: {n}', { n: d.people })) + (d.vacancies ? ' · <b style="color:var(--dsh-am)">' + h(dsh_t('вакансий: {n}', { n: d.vacancies })) + '</b>' : '') + '</div>' +
+      d.positions.map(function (p) { return '<button type="button" class="dsh-mi" data-dshsel="p' + h(String(p.id)) + '"><span style="flex:1">' + h(dsh_nm(p)) + '</span><span class="dsh-ct ' + dsh_ctCls(p) + '" style="font-size:13px;color:var(--muted)">' + dsh_ct(p) + '</span>' + icon('chev', 16) + '</button>'; }).join('') +
+      (ed ? '<div class="dsh-acts"><button type="button" class="btn gold" data-dshap="' + h(String(d.id)) + '">' + dsh_h('+ Должность') + '</button><button type="button" class="btn ghost" data-dshrd="' + h(String(d.id)) + '">' + dsh_h('Переименовать') + '</button>' + (d.dir ? '' : '<button type="button" class="btn ghost" data-dshxd="' + h(String(d.id)) + '">' + dsh_h('Удалить') + '</button>') + '</div>' : '');
+  } else {
+    var f = dsh_find(k.slice(1)); if (!f) { el.innerHTML = ''; return; } var p = f.p;
+    html = '<h3>' + h(dsh_nm(p)) + '</h3><div class="meta">' + h(dsh_nm(f.d)) + ' · ' + dsh_t('занято') + ' ' + dsh_ct(p) + '</div>' +
+      p.people.map(function (x) { return '<div class="dsh-r" style="border:0;padding-left:0"><button type="button" class="dsh-pp" data-dshpp="' + h(String(x.member_id)) + '"><span class="dsh-av' + (x.status === 'invited' ? ' inv' : '') + '">' + h(x.initials || dsh_ini(x.name)) + '</span><span class="t"><b>' + h(x.name) + '</b>' + (x.status === 'invited' ? '<small class="inv">' + dsh_h('ждём первого входа') + '</small>' : '') + '</span>' + icon('chev', 16) + '</button></div>'; }).join('') +
+      Array.apply(null, Array(p.vacancies)).map(function () { return '<div class="dsh-r" style="border:0;padding-left:0"><button type="button" class="dsh-vac" data-dshinv="' + h(String(p.id)) + '"><span class="p">+</span><span>' + dsh_h('Вакансия · Добавить сотрудника') + '</span></button></div>'; }).join('') +
+      (ed ? '<div class="pft" style="margin-top:12px">' + dsh_h('Сколько людей нужно') + '</div>' + dsh_stepHtml(p.headcount) +
+        '<div class="dsh-acts"><button type="button" class="btn gold" data-dshinv="' + h(String(p.id)) + '">' + dsh_h('+ Пригласить') + '</button><button type="button" class="btn ghost" data-dshrp="' + h(String(p.id)) + '">' + dsh_h('Переименовать') + '</button><button type="button" class="btn ghost" data-dshxp="' + h(String(p.id)) + '">' + dsh_h('Удалить') + '</button></div>' : '');
+  }
+  el.innerHTML = html; dsh_bind(el);
+  el.querySelectorAll('[data-dshsel]').forEach(function (b) { b.onclick = function () { DSH.sel = b.getAttribute('data-dshsel'); dsh_paint(); }; });
+  if (k.charAt(0) === 'p' && ed) dsh_stepBind(el, f.p.headcount, async function (n) { await dsh_doHc(f.p.id, n); });
+}
+/* общие обработчики: человек, вакансия, меню, «+» */
+function dsh_bind(box) {
+  box.querySelectorAll('[data-dshpp]').forEach(function (b) { b.onclick = function () { dsh_person(b.getAttribute('data-dshpp')); }; });
+  box.querySelectorAll('[data-dshme]').forEach(function (b) { b.onclick = function () { dsh_person(DSH.data && DSH.data.owner && DSH.data.owner.member_id); }; });
+  box.querySelectorAll('[data-dshinv]').forEach(function (b) { b.onclick = function () { dsh_invite(b.getAttribute('data-dshinv')); }; });
+  box.querySelectorAll('[data-dshmd]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); dsh_menuD(b.getAttribute('data-dshmd')); }; });
+  box.querySelectorAll('[data-dshmp]').forEach(function (b) { b.onclick = function (e) { e.stopPropagation(); dsh_menuP(b.getAttribute('data-dshmp')); }; });
+  box.querySelectorAll('[data-dshap]').forEach(function (b) { b.onclick = function () { dsh_addPos(b.getAttribute('data-dshap')); }; });
+  box.querySelectorAll('[data-dshad]').forEach(function (b) { b.onclick = dsh_addDept; });
+  box.querySelectorAll('[data-dshrd]').forEach(function (b) { b.onclick = function () { dsh_rename('d', b.getAttribute('data-dshrd')); }; });
+  box.querySelectorAll('[data-dshrp]').forEach(function (b) { b.onclick = function () { dsh_rename('p', b.getAttribute('data-dshrp')); }; });
+  box.querySelectorAll('[data-dshxd]').forEach(function (b) { b.onclick = function () { dsh_remove('d', b.getAttribute('data-dshxd')); }; });
+  box.querySelectorAll('[data-dshxp]').forEach(function (b) { b.onclick = function () { dsh_remove('p', b.getAttribute('data-dshxp')); }; });
+}
+
+/* ----- Схема (оргдерево) ----- */
+function dsh_org(box, D) {
+  var ed = dsh_edit();
+  var deps = D.depts.map(function (d) {
+    var pcs = d.positions.map(function (p) {
+      return '<div class="dsh-pc"><button type="button" class="hd" ' + (ed ? 'data-dshmp' : 'data-dshsel0') + '="' + h(String(p.id)) + '"><b>' + h(dsh_nm(p)) + '</b><span class="dsh-ct ' + dsh_ctCls(p) + '">' + dsh_ct(p) + '</span></button>' +
+        p.people.map(function (x) { return '<button type="button" class="dsh-ch' + (x.status === 'invited' ? ' inv' : '') + '" data-dshpp="' + h(String(x.member_id)) + '"><span class="dsh-av' + (x.status === 'invited' ? ' inv' : '') + '">' + h(x.initials || dsh_ini(x.name)) + '</span><span>' + h(x.short || dsh_short(x.name)) + '</span></button>'; }).join('') +
+        Array.apply(null, Array(p.vacancies)).map(function () { return '<button type="button" class="dsh-ov" data-dshinv="' + h(String(p.id)) + '"><i>+</i><span>' + dsh_h('Вакансия · Добавить') + '</span></button>'; }).join('') + '</div>';
+    }).join('') + (ed ? '<button type="button" class="dsh-dash" data-dshap="' + h(String(d.id)) + '">' + dsh_h('+ Должность') + '</button>' : '');
+    return '<li><button type="button" class="dsh-ob dep" ' + (ed ? 'data-dshmd' : 'data-dshx0') + '="' + h(String(d.id)) + '"><b>' + h(dsh_nm(d)) + '</b><div class="c">' + dsh_dct(d) + (d.vacancies ? ' · <span style="color:var(--dsh-am);font-weight:700">' + h(dsh_t('вакансий: {n}', { n: d.vacancies })) + '</span>' : '') + '</div></button>' +
+      '<div class="dsh-pcol">' + pcs + '</div></li>';
+  });
+  if (ed) deps.push('<li><button type="button" class="dsh-ob addd" data-dshad="1">' + dsh_h('+ Служба') + '</button></li>');
+  var own = D.owner ? '<button type="button" class="dsh-ob own" data-dshme="1"><small>' + dsh_h('Владелец') + '</small><b>' + h(D.owner.name) + '</b></button>' : '<div class="dsh-ob own"><small>' + dsh_h('Владелец') + '</small></div>';
+  box.innerHTML = '<div class="dsh-orgw"><div class="dsh-orgt"><button type="button" data-dshz="-" aria-label="' + dsh_h('Уменьшить') + '">−</button><button type="button" data-dshz="fit">' + dsh_h('Вписать') + '</button><button type="button" data-dshz="+" aria-label="' + dsh_h('Увеличить') + '">+</button></div>' +
+    '<div class="dsh-org" id="dshOrg"><div id="dshOrgIn" style="width:max-content;min-width:100%;transform-origin:0 0"><ul><li>' + own + (deps.length ? '<ul>' + deps.join('') + '</ul>' : '') + '</li></ul></div></div></div>';
+  dsh_bind(box);
+  var inner = $('dshOrgIn'), sc = $('dshOrg');
+  function zoomTo(z) { DSH.zoom = Math.max(0.35, Math.min(1.6, z)); inner.style.zoom = DSH.zoom; }
+  zoomTo(DSH.zoom || 1);
+  box.querySelectorAll('[data-dshz]').forEach(function (b) { b.onclick = function () { var k = b.getAttribute('data-dshz'); if (k === 'fit') { inner.style.zoom = 1; var w = inner.scrollWidth; zoomTo(Math.min(1, (sc.clientWidth - 24) / Math.max(1, w))); } else zoomTo((DSH.zoom || 1) * (k === '+' ? 1.2 : 1 / 1.2)); }; });
+  /* увеличение двумя пальцами (необязательно — на телефоне удобнее «Вписать») */
+  var pz = null;
+  sc.addEventListener('touchstart', function (e) { if (e.touches.length === 2) pz = { d: Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY), z: DSH.zoom || 1 }; }, { passive: true });
+  sc.addEventListener('touchmove', function (e) { if (pz && e.touches.length === 2) { var d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); zoomTo(pz.z * d / Math.max(1, pz.d)); } }, { passive: true });
+  sc.addEventListener('touchend', function () { pz = null; }, { passive: true });
+  /* первый раз — показать середину дерева (владелец в центре) */
+  setTimeout(function () { try { if (sc.scrollWidth > sc.clientWidth) sc.scrollLeft = (sc.scrollWidth - sc.clientWidth) / 2; } catch (e) {} }, 0);
+}
+
+/* ----- действия ----- */
+function dsh_person(id) {
+  if (!id) return;
+  if (S.me && String(id) === String(S.me.id)) return go('profile');
+  var e = (function () { try { return emp(id) || emp(+id); } catch (x) { return null; } })();
+  if (!e) return toast(dsh_t('Сотрудник ещё не загрузился — обновите экран'));
+  if (!dsh_isDir() && !myTeam().some(function (x) { return x.id === e.id; })) return toast(dsh_t('Это не ваш сотрудник'));
+  S.sub = S.sub || {}; S.sub.empId = e.id; go('emp');
+}
+/* вакансия → существующая форма «Пригласить сотрудника» с выбранной должностью */
+function dsh_invite(pid) {
+  var p = (S.pos || []).filter(function (x) { return String(x.id) === String(pid); })[0];
+  if (!p) return toast(dsh_t('Должность не найдена — обновите экран'));
+  if (typeof cf_invite !== 'function') { try { staffSheet(null); } catch (e) {} return; }
+  cf_invite();
+  var id = String(p.id).replace(/"/g, '');
+  function pick(n) {
+    var c = document.querySelector('#layer [data-cfpos="' + id + '"]');
+    if (c) { c.click(); return dsh_invFocus(); }
+    var sl = $('cfPos'), w = $('cfPosW');
+    if (sl && w && !w.hidden) { sl.value = id; sl.dispatchEvent(new Event('change')); return dsh_invFocus(); }
+    var o = document.querySelector('#layer [data-cfpos="other"]');
+    if (o && n < 6) { o.click(); return setTimeout(function () { pick(n + 1); }, 30); }
+    if (n < 6) setTimeout(function () { pick(n + 1); }, 80);
+  }
+  pick(0);
+}
+function dsh_invFocus() { setTimeout(function () { try { var n = $('cfN'); if (n) n.focus(); } catch (e) {} }, 80); }
+async function dsh_after(msg) {
+  dsh_stale();
+  try { await loadBase(); } catch (e) { console.warn(e); }
+  if (msg) toast(msg);
+  if (S.view === 'shtat') dsh_draw(); else dsh_homeCard();
+}
+async function dsh_rpc(n, a) {
+  if (dsh_sv()) { var r = await sb.rpc(n, a); if (r && r.error) throw r.error; return r ? r.data : null; }
+  if (typeof dai_demoStruct !== 'function') throw new Error(dsh_t('Действие недоступно'));
+  var res = await dai_demoStruct([{ rpc: n, args: a }]);
+  if (res && res.fail) throw new Error((res.errors || []).join('; '));
+  return null;
+}
+function dsh_stepHtml(n) { return '<div class="dsh-st" data-dshst="1"><button type="button" data-dshs="-1" aria-label="' + dsh_h('Меньше') + '">−</button><b class="num" data-dshsv="1">' + (n == null ? '—' : n) + '</b><button type="button" data-dshs="1" aria-label="' + dsh_h('Больше') + '">+</button></div>' + '<div class="meta" style="text-align:center;margin:0 0 4px" data-dshsm="1">' + h(n == null ? dsh_t('не задано — вакансий не считаем') : dsh_t('мест по штату: {n}', { n: n })) + '</div>'; }
+function dsh_stepBind(el, n0, onSet) {
+  var cur = n0, t = null, v = el.querySelector('[data-dshsv]'), mm = el.querySelector('[data-dshsm]');
+  el.querySelectorAll('[data-dshs]').forEach(function (b) {
+    b.onclick = function () {
+      cur = Math.max(0, Math.min(99, (cur == null ? 0 : cur) + +b.getAttribute('data-dshs')));
+      if (v) v.textContent = cur; if (mm) mm.textContent = dsh_t('мест по штату: {n}', { n: cur });
+      if (onSet) { clearTimeout(t); t = setTimeout(function () { onSet(cur); }, 450); }
+    };
+  });
+  return function () { return cur; };
+}
+async function dsh_doHc(pid, n) {
+  try { await dsh_hcSet(pid, n); await dsh_after(); } catch (e) { toast(dsh_err(e)); }
+}
+function dsh_menuD(id) {
+  var d = dsh_findD(id); if (!d || !dsh_edit()) return;
+  sheet(sheetHead(h(dsh_nm(d)), h(dsh_t('Служба')) + ' · ' + h(dsh_t('должностей: {n}', { n: d.positions.length })) + ' · ' + h(dsh_t('людей: {n}', { n: d.people }))) +
+    '<button type="button" class="dsh-mi" id="dshMa">' + icon('users', 20) + '<span>' + dsh_h('+ Должность') + '</span></button>' +
+    '<button type="button" class="dsh-mi" id="dshMr">' + icon('edit', 20) + '<span>' + dsh_h('Переименовать') + '</span></button>' +
+    (d.dir ? '' : '<button type="button" class="dsh-mi bad" id="dshMx">' + icon('trash', 20) + '<span>' + dsh_h('Удалить службу') + '</span></button>'));
+  $('dshMa').onclick = function () { dsh_addPos(id); };
+  $('dshMr').onclick = function () { dsh_rename('d', id); };
+  if ($('dshMx')) $('dshMx').onclick = function () { closeLayer(); dsh_remove('d', id); };
+}
+function dsh_menuP(id) {
+  var f = dsh_find(id); if (!f) return; var p = f.p;
+  if (!dsh_edit()) { if (p.vacancies > 0) dsh_invite(id); return; }
+  sheet(sheetHead(h(dsh_nm(p)), h(dsh_nm(f.d)) + ' · ' + dsh_t('занято') + ' ' + dsh_ct(p)) +
+    '<div class="pft">' + dsh_h('Сколько людей нужно') + '</div>' + dsh_stepHtml(p.headcount) +
+    '<button type="button" class="btn gold full" id="dshMi" style="margin:8px 0 6px">' + dsh_h('+ Пригласить на эту должность') + '</button>' +
+    '<button type="button" class="dsh-mi" id="dshMr">' + icon('edit', 20) + '<span>' + dsh_h('Переименовать') + '</span></button>' +
+    '<button type="button" class="dsh-mi bad" id="dshMx">' + icon('trash', 20) + '<span>' + dsh_h('Удалить должность') + '</span></button>');
+  var box = $('layer');
+  dsh_stepBind(box, p.headcount, async function (n) { try { await dsh_hcSet(p.id, n); await dsh_after(); } catch (e) { toast(dsh_err(e)); } });
+  $('dshMi').onclick = function () { closeLayer(); dsh_invite(id); };
+  $('dshMr').onclick = function () { dsh_rename('p', id); };
+  $('dshMx').onclick = function () { closeLayer(); dsh_remove('p', id); };
+}
+function dsh_nameForm(title, sub, val, withPos, onOk) {
+  sheet(sheetHead(h(title), sub ? h(sub) : '') +
+    '<label class="f">' + dsh_h(withPos === 'pos' || withPos === 'rp' ? 'Название должности' : 'Название службы') + '<input class="in" id="dshNm" autocomplete="off" maxlength="60" value="' + h(val || '') + '"></label>' +
+    (withPos === 'dept' ? '<label class="f">' + dsh_h('Первая должность — не обязательно') + '<input class="in" id="dshNp" autocomplete="off" maxlength="60" placeholder="' + dsh_h('Например: Курьер') + '"></label>' : '') +
+    (withPos === 'dept' || withPos === 'pos' ? '<div class="pft">' + dsh_h('Сколько людей нужно') + '</div>' + dsh_stepHtml(1) : '') +
+    '<button type="button" class="btn dark full" id="dshOk" style="margin-top:8px">' + dsh_h(val ? 'Сохранить' : 'Добавить') + '</button>');
+  var get = withPos === 'dept' || withPos === 'pos' ? dsh_stepBind($('layer'), 1, null) : null;
+  setTimeout(function () { try { $('dshNm').focus(); } catch (e) {} }, 60);
+  $('dshNm').onkeydown = function (e) { if (e.key === 'Enter') $('dshOk').click(); };
+  $('dshOk').onclick = async function () {
+    var v = $('dshNm').value.trim().replace(/\s+/g, ' '); if (!v) return toast(dsh_t('Укажите название'));
+    v = v.charAt(0).toUpperCase() + v.slice(1);
+    var np = $('dshNp') ? $('dshNp').value.trim().replace(/\s+/g, ' ') : '';
+    if (np) np = np.charAt(0).toUpperCase() + np.slice(1);
+    this.disabled = true;
+    try { await onOk(v, get ? get() : null, np); } catch (e) { this.disabled = false; toast(dsh_err(e)); }
+  };
+}
+function dsh_addDept() {
+  if (!dsh_edit()) return;
+  dsh_nameForm(dsh_t('Новая служба'), dsh_t('Служба — часть заведения: приёмка, цех, доставка. В неё добавляются должности.'), '', 'dept', async function (nm, n, np) {
+    if ((S.depts || []).some(function (d) { return String(d.name).toLowerCase() === nm.toLowerCase(); })) throw new Error(dsh_t('Такая служба уже есть'));
+    var r = await dsh_rpc('dept_create', { p_name: nm, p_name_uz: null, p_positions: np ? [{ name: np, access: 'staff', headcount: n }] : [] });
+    if (np) await dsh_hcNew(r, null, nm, np, n);
+    closeLayer(); var d0 = null;
+    await dsh_after(dsh_t('Служба добавлена'));
+    (S.depts || []).some(function (d) { if (d.name === nm) { d0 = d; return true; } return false; }); if (d0) { DSH.open['d' + d0.id] = 1; DSH.sel = 'd' + d0.id; if (S.view === 'shtat') dsh_draw(); }
+  });
+}
+function dsh_addPos(did) {
+  if (!dsh_edit()) return; var d = dsh_findD(did) || (S.depts || []).filter(function (x) { return String(x.id) === String(did); })[0]; if (!d) return;
+  dsh_nameForm(dsh_t('Новая должность'), dsh_t('Служба') + ': ' + dsh_nm(d), '', 'pos', async function (nm, n) {
+    if ((S.pos || []).some(function (p) { return String(p.dept_id) === String(d.id) && String(p.name).toLowerCase() === nm.toLowerCase(); })) throw new Error(dsh_t('Такая должность в службе уже есть'));
+    var r = await dsh_rpc('positions_add', { p_dept: d.id, p_positions: [{ name: nm, access: 'staff', headcount: n }] });
+    await dsh_hcNew(r, d.id, null, nm, n);
+    closeLayer(); DSH.open['d' + d.id] = 1;
+    await dsh_after(dsh_t('Должность добавлена'));
+  });
+}
+/* численность новой должности: из ответа сервера (id) или по названию после перечитывания (демо) */
+async function dsh_hcNew(r, did, dname, pname, n) {
+  if (n == null) return;
+  var pid = null;
+  try { var c = r && (r.created || (r.data && r.data.created)); if (Array.isArray(c)) c.forEach(function (x) { if (x && String(x.name).toLowerCase() === pname.toLowerCase()) pid = x.id; }); } catch (e) {}
+  if (pid == null) {
+    dsh_stale();
+    try { await loadBase(); } catch (e) {}
+    var dd = did != null ? did : ((S.depts || []).filter(function (x) { return x.name === dname; })[0] || {}).id;
+    (S.pos || []).forEach(function (p) { if (String(p.dept_id) === String(dd) && String(p.name).toLowerCase() === pname.toLowerCase()) pid = p.id; });
+  }
+  if (pid != null) { try { await dsh_hcSet(pid, n); } catch (e) { console.warn('[dsh] headcount', e); } }
+}
+function dsh_rename(k, id) {
+  if (!dsh_edit()) return;
+  var x = k === 'd' ? dsh_findD(id) : (dsh_find(id) || {}).p; if (!x) return;
+  dsh_nameForm(dsh_t(k === 'd' ? 'Переименовать службу' : 'Переименовать должность'), '', x.name, k === 'd' ? 'rd' : 'rp', async function (nm) {
+    if (nm === x.name) { closeLayer(); return; }
+    var t = k === 'd' ? 'departments' : 'positions';
+    var u = await sb.from(t).update({ name: nm }).eq('id', k === 'd' ? x.id : (+x.id || x.id));
+    if (u && u.error) throw u.error;
+    if (!dsh_sv()) { try { sxRoles(function (R) { R.depts = R.depts || {}; R.pos = R.pos || {}; if (k === 'd') { R.depts[x.id] = Object.assign({}, R.depts[x.id] || {}, { name: nm }); (R.newDepts || []).forEach(function (d) { if (String(d.id) === String(x.id)) d.name = nm; }); } else { R.pos[x.id] = Object.assign({}, R.pos[x.id] || {}, { name: nm }); (R.newPos || []).forEach(function (p) { if (String(p.id) === String(x.id)) p.name = nm; }); } }); } catch (e) {} }
+    closeLayer(); await dsh_after(dsh_t('Сохранено'));
+  });
+}
+async function dsh_remove(k, id) {
+  if (!dsh_edit()) return;
+  if (k === 'd') {
+    var d = dsh_findD(id); if (!d) return;
+    if (d.dir) return toast(dsh_t('Службу «Руководство» удалить нельзя'));
+    var ppl = []; d.positions.forEach(function (p) { p.people.forEach(function (x) { ppl.push(x.short || dsh_short(x.name)); }); });
+    if (ppl.length) return toast(dsh_t('В службе работают: {l}. Сначала переведите их на другую должность.', { l: (ppl.slice(0, 4).join(', ') + (ppl.length > 4 ? '…' : '')).replace(/\.$/, '') }), 4500);
+    if (!(await askSure(dsh_t('Удалить службу «{d}»?', { d: dsh_nm(d) }), { ok: dsh_t('Удалить'), danger: true, sub: d.positions.length ? dsh_t('Вместе с ней — должности: {l}', { l: d.positions.map(dsh_nm).join(', ') }) : '' }))) return;
+    try { await dsh_rpc('dept_remove', { p_dept: d.id }); if (DSH.sel === 'd' + d.id) DSH.sel = null; await dsh_after(dsh_t('Служба удалена')); } catch (e) { toast(dsh_err(e)); }
+  } else {
+    var f = dsh_find(id); if (!f) return; var p = f.p;
+    if (p.people.length) return toast(dsh_t('На должности работают: {l}. Сначала переведите их.', { l: p.people.map(function (x) { return x.short || dsh_short(x.name); }).slice(0, 4).join(', ').replace(/\.$/, '') }), 4500);
+    if (!(await askSure(dsh_t('Удалить должность «{p}»?', { p: dsh_nm(p) }), { ok: dsh_t('Удалить'), danger: true, sub: dsh_t('Служба') + ': ' + dsh_nm(f.d) }))) return;
+    try { await dsh_rpc('position_remove', { p_id: +p.id || p.id }); var A = dsh_hcAll(); delete A[String(p.id)]; dsh_hcSave(); if (DSH.sel === 'p' + p.id) DSH.sel = null; await dsh_after(dsh_t('Должность удалена')); } catch (e) { toast(dsh_err(e)); }
+  }
+}
+/* после приглашения (форма закрыта) — перерисовать штат или виджет */
+(function () {
+  var cl0 = closeLayer;
+  closeLayer = function () {
+    var r = cl0.apply(this, arguments);
+    try { if (S.view === 'shtat' && $('dshRoot')) setTimeout(function () { if (S.view === 'shtat') dsh_draw(); }, 30); else if (S.view === 'home' && $('dshHome')) setTimeout(dsh_homeCard, 30); } catch (e) {}
+    return r;
+  };
+})();
+
+/* ----- 3D «ОФИС» (three.js как у 3D-отеля: h3dLib) ----- */
+function dsh_glOk() { try { var c = document.createElement('canvas'); return !!(window.WebGLRenderingContext && (c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl'))); } catch (e) { return false; } }
+function dsh_weak() { try { return (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 3 || matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
+function dsh_3dKill() {
+  var G = DSH.g3; DSH.g3 = null; if (!G) return;
+  try { G.off && G.off(); } catch (e) {}
+  try { G.scene.traverse(function (o) { if (o.geometry) o.geometry.dispose(); if (o.material) { [].concat(o.material).forEach(function (m) { if (m.map) m.map.dispose(); m.dispose(); }); } }); } catch (e) {}
+  try { G.r.dispose(); if (G.r.forceContextLoss) G.r.forceContextLoss(); } catch (e) {}
+}
+function dsh_3dFallback(box, D, why) { DSH.hint = why; dsh_viewSet('org'); dsh_paint(); dsh_viewSet('3d'); }
+async function dsh_3d(box, D) {
+  var H = Math.max(380, Math.min(innerHeight - 250, dsh_wide() ? 620 : 600));
+  box.innerHTML = '<div class="dsh-3d" id="dsh3" style="--dsh3h:' + H + 'px"><div class="dsh3-L" id="dsh3L"></div><div class="dsh3-tool"><button type="button" id="dsh3R" aria-label="' + dsh_h('Прямо') + '">' + dsh_h('Прямо') + '</button></div>' +
+    '<div class="card empty" id="dsh3W" style="position:absolute;inset:auto 12px 12px 12px;margin:0">' + dsh_h('Строим офис…') + '</div></div>' +
+    '<div class="dsh3-leg"><span><span class="d" style="background:#38C98D;box-shadow:0 0 6px #38C98D"></span>' + dsh_h('Человек') + '</span><span><span class="d" style="background:transparent;border:2px solid #F0B13D;box-shadow:0 0 6px #F0B13D"></span>' + dsh_h('Вакансия') + '</span><span><span class="d" style="background:#6FA8FF"></span>' + dsh_h('Ждём первого входа') + '</span><span>' + dsh_h('Потяните — повернуть и прокрутить · стол — открыть') + '</span></div>';
+  if (!dsh_glOk()) return dsh_3dFallback(box, D, dsh_t('3D недоступен на этом телефоне (нет WebGL) — показана схема.'));
+  var seq = DSH.seq;
+  try { await Promise.race([h3dLib(), new Promise(function (res, rej) { setTimeout(function () { rej(new Error('timeout')); }, 15000); })]); }
+  catch (e) { if (seq === DSH.seq && S.view === 'shtat' && dsh_viewGet() === '3d') dsh_3dFallback(box, D, dsh_t('Не удалось загрузить 3D (нужен интернет) — показана схема.')); return; }
+  if (seq !== DSH.seq || S.view !== 'shtat' || !$('dsh3')) return;
+  try { DSH.g3 = dsh_3dBuild($('dsh3'), $('dsh3L'), D); if ($('dsh3W')) $('dsh3W').remove(); }
+  catch (e) { console.warn('[dsh] 3d', e); dsh_3dKill(); dsh_3dFallback(box, D, dsh_t('3D не запустился на этом телефоне — показана схема.')); }
+}
+/* планировка по данным: комнаты-службы (маленькие — по две в ряд), столы — места по штату (люди, вакансии; должность без численности — серый стол) */
+function dsh_3dPlan(D) {
+  var FW = 9.4, HD = 1.25, RD = 3.3, rooms = [];
+  D.depts.forEach(function (d) {
+    var seats = [];
+    d.positions.forEach(function (p) {
+      p.people.forEach(function (x) { seats.push({ k: x.status === 'invited' ? 'inv' : 'man', m: x, p: p, d: d }); });
+      for (var i = 0; i < p.vacancies; i++) seats.push({ k: 'vac', p: p, d: d });
+      if (!p.people.length && !p.vacancies) seats.push({ k: 'gray', p: p, d: d });
+    });
+    if (!seats.length) seats.push({ k: 'addp', d: d });
+    rooms.push({ d: d, seats: seats, n: seats.length });
+  });
+  var rows = [], i = 0;
+  while (i < rooms.length) {
+    var a = rooms[i], b = rooms[i + 1];
+    if (a.n <= 2 && b && a.n + b.n <= 3) { rows.push([a, b]); i += 2; } else { rows.push([a]); i++; }
+  }
+  var z = 3.0, out = [];
+  rows.forEach(function (row) {
+    var tot = row.reduce(function (s, r) { return s + Math.min(3, r.n); }, 0), x = 0, depth = 0;
+    row.forEach(function (r) {
+      var cols = row.length > 1 ? r.n : Math.min(3, r.n), w = row.length > 1 ? FW * Math.min(3, r.n) / tot : FW, rr = Math.ceil(r.n / cols);
+      r.x0 = x; r.x1 = x + w; r.z0 = z; r.cols = cols; r.rows = rr; x += w;
+      r.seats.forEach(function (s, j) { var c = j % cols, q = Math.floor(j / cols); s.x = r.x0 + (c + 0.5) * w / cols; s.z = z + HD + q * RD + RD * 0.42; });
+      depth = Math.max(depth, HD + rr * RD);
+    });
+    row.forEach(function (r) { r.z1 = z + depth; out.push(r); });
+    z += depth;
+  });
+  return { FW: FW, FD: Math.max(z, 6), rooms: out, rows: rows };
+}
+function dsh_3dBuild(stage, lroot, D) {
+  var T3 = window.THREE, weak = dsh_weak(), light = document.documentElement.getAttribute('data-lx') === 'light';
+  var W = stage.clientWidth, H = stage.clientHeight;
+  var r = new T3.WebGLRenderer({ antialias: !weak, alpha: true });
+  /* одинаковые цвета в three r147 (CDN) и новее: без управления цветом, вывод как есть, «старый» свет */
+  try { if (T3.ColorManagement) { if ('enabled' in T3.ColorManagement) T3.ColorManagement.enabled = false; if ('legacyMode' in T3.ColorManagement) T3.ColorManagement.legacyMode = true; } } catch (e) {}
+  try { if ('outputColorSpace' in r && T3.LinearSRGBColorSpace) r.outputColorSpace = T3.LinearSRGBColorSpace; if ('useLegacyLights' in r) r.useLegacyLights = true; } catch (e) {}
+  r.setPixelRatio(Math.min(window.devicePixelRatio || 1, weak ? 1 : 2)); r.setSize(W, H);
+  r.shadowMap.enabled = !weak; if (!weak) r.shadowMap.type = T3.PCFSoftShadowMap;
+  stage.insertBefore(r.domElement, stage.firstChild);
+  var scene = new T3.Scene(), P = dsh_3dPlan(D), FW = P.FW, FD = P.FD;
+  var C = light ? { floor: 0xd9cfbd, base: 0xc8bca6, wall: 0xb9ab92, desk: 0x9c7a4e, chair: 0x6f6658, mon: 0x2a2a2a, tint: [0xe6dccb, 0xe0d8c8, 0xe8e0cf, 0xdfd6c3] }
+    : { floor: 0x0f0d0a, base: 0x0f0d0a, wall: 0x2c271f, desk: 0x4a3a26, chair: 0x22201c, mon: 0x0c0c0c, tint: [0x1d1b17, 0x181b19, 0x1e1a15, 0x1a1815] };
+  var g = new T3.Group(); g.position.set(-FW / 2, 0, -FD / 2); scene.add(g);
+  var Mt = function (c, o) { return new T3.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.7, metalness: 0.1 }, o || {})); };
+  var GEO = {}; function bg(w, hh, d) { var k = w + ':' + hh + ':' + d; return GEO[k] || (GEO[k] = new T3.BoxGeometry(w, hh, d)); }
+  var box = function (w, hh, d, m, x, y, z, noSh) { var o = new T3.Mesh(bg(w, hh, d), m); o.position.set(x, y, z); if (!weak && !noSh) { o.castShadow = true; o.receiveShadow = true; } g.add(o); return o; };
+  var gold = Mt(0xd2ae66, { roughness: 0.3, metalness: 0.9, emissive: 0x2a1e06 });
+  var wallM = Mt(C.wall), deskM = Mt(C.desk, { roughness: 0.5 }), chairM = Mt(C.chair), monM = Mt(C.mon, { roughness: 0.2, metalness: 0.6 });
+  var emM = Mt(0x38c98d, { emissive: 0x1f9a68, emissiveIntensity: 0.7, roughness: 0.4 }), saM = Mt(0x6fa8ff, { emissive: 0x2a5aa8, emissiveIntensity: 0.6, roughness: 0.4 });
+  var amM = new T3.MeshBasicMaterial({ color: 0xf0b13d }), grM = new T3.MeshBasicMaterial({ color: light ? 0x8f8676 : 0x6f685a });
+  var scrOn = new T3.MeshBasicMaterial({ color: 0x2a6f55 }), scrOff = new T3.MeshBasicMaterial({ color: 0x050505 });
+  var shM = new T3.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: light ? 0.16 : 0.35, depthWrite: false });
+  var blobG = new T3.CircleGeometry(1, weak ? 16 : 28);
+  function blob(x, z, s) { if (!weak) return; var o = new T3.Mesh(blobG, shM); o.rotation.x = -Math.PI / 2; o.scale.set(s, s * 0.7, 1); o.position.set(x, 0.045, z); g.add(o); }
+  /* пол, комнаты, стены */
+  box(FW + 0.6, 0.3, FD + 0.6, Mt(C.base), FW / 2, -0.16, FD / 2);
+  box(FW - 0.06, 0.04, 2.94, Mt(light ? 0xeadfc6 : 0x2a2316, { roughness: 0.9 }), FW / 2, 0.02, 1.5);
+  P.rooms.forEach(function (rm, i) { box(rm.x1 - rm.x0 - 0.06, 0.04, rm.z1 - rm.z0 - 0.06, Mt(C.tint[i % C.tint.length], { roughness: 0.9 }), (rm.x0 + rm.x1) / 2, 0.02, (rm.z0 + rm.z1) / 2); });
+  var WT = 0.14, WH = 1.15, LH = 0.42;
+  box(FW + WT, WH, WT, wallM, FW / 2, WH / 2, 0); box(WT, WH, FD, wallM, 0, WH / 2, FD / 2);
+  box(FW + WT, 0.05, WT + 0.02, gold, FW / 2, WH, 0, 1); box(WT + 0.02, 0.05, FD, gold, 0, WH, FD / 2, 1);
+  box(WT, LH, FD, wallM, FW, LH / 2, FD / 2); box(FW - 1.8, LH, WT, wallM, (FW - 1.8) / 2, LH / 2, FD);
+  /* перегородки между рядами (проход посередине) и между комнатами в ряду */
+  var zs = [3.0]; P.rows.forEach(function (row) { zs.push(row[0].z1); }); zs.pop();
+  zs.forEach(function (z) { var w = (FW - 1.8) / 2; box(w, LH, WT, wallM, w / 2, LH / 2, z); box(w, LH, WT, wallM, FW - w / 2, LH / 2, z); box(w, 0.03, WT + 0.02, gold, w / 2, LH, z, 1); box(w, 0.03, WT + 0.02, gold, FW - w / 2, LH, z, 1); });
+  P.rows.forEach(function (row) { if (row.length > 1) { var x = row[0].x1, z0 = row[0].z0, z1 = row[0].z1; box(WT, LH, z1 - z0 - 1.6, wallM, x, LH / 2, z0 + (z1 - z0 - 1.6) / 2); } });
+  var world = function (x, y, z) { g.updateMatrixWorld(); return g.localToWorld(new T3.Vector3(x, y, z)); };
+  var segS = weak ? 10 : 18;
+  var capG = T3.CapsuleGeometry ? new T3.CapsuleGeometry(0.24, 0.42, 4, segS) : new T3.CylinderGeometry(0.24, 0.24, 0.9, segS), headG = new T3.SphereGeometry(0.2, segS, Math.round(segS * 0.7));
+  function desk(x, z, on) {
+    box(1.5, 0.08, 0.75, deskM, x, 0.62, z - 0.25);
+    box(0.06, 0.6, 0.6, deskM, x - 0.7, 0.3, z - 0.25); box(0.06, 0.6, 0.6, deskM, x + 0.7, 0.3, z - 0.25);
+    box(0.62, 0.42, 0.04, monM, x, 0.9, z - 0.5);
+    var s = new T3.Mesh(new T3.PlaneGeometry(0.56, 0.36), on ? scrOn : scrOff); s.position.set(x, 0.9, z - 0.477); g.add(s);
+    box(0.5, 0.08, 0.5, chairM, x, 0.42, z + 0.35); box(0.5, 0.5, 0.07, chairM, x, 0.7, z + 0.6);
+    blob(x, z - 0.1, 1.05);
+  }
+  function person(x, z, mat) {
+    var b = new T3.Mesh(capG, mat); b.position.set(x, 0.85, z + 0.3); if (!weak) b.castShadow = true; g.add(b);
+    var hd = new T3.Mesh(headG, mat); hd.position.set(x, 1.42, z + 0.3); if (!weak) hd.castShadow = true; g.add(hd);
+  }
+  var haloT = (function () { var c = document.createElement('canvas'); c.width = c.height = 64; var x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,.55)'); gr.addColorStop(0.6, 'rgba(255,255,255,.12)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return new T3.CanvasTexture(c); })();
+  function halo(color, size, op) { var s = new T3.Sprite(new T3.SpriteMaterial({ map: haloT, color: color, blending: T3.AdditiveBlending, transparent: true, depthWrite: false, opacity: op })); s.scale.set(size, size, 1); return s; }
+  /* подписи HTML поверх сцены + точки нажатия */
+  var LB = [], HIT = [];
+  function lab(pos, html, cls, o) { o = o || {}; var el = document.createElement('div'); el.className = 'dsh3-l ' + (cls || ''); el.innerHTML = html; lroot.appendChild(el); LB.push({ p: pos, el: el, ax: o.ax == null ? 0.5 : o.ax, ay: o.ay == null ? 0.5 : o.ay, dy: o.dy || 0 }); return el; }
+  function hit(pos, act, rad) { HIT.push({ p: pos, a: act, r: rad || 34 }); }
+  /* кабинет владельца */
+  var own = D.owner;
+  var ox = FW * 0.3;
+  desk(ox, 1.9, true); person(ox, 1.9, Mt(0xd2ae66, { metalness: 0.7, roughness: 0.3, emissive: 0x3a2808 }));
+  if (own) { lab(world(ox, 1.45, 2.2), h(dsh_ini(own.name)), 'dsh3-ini g'); lab(world(ox + 1.0, 0.8, 1.9), '<small>' + dsh_h('Владелец') + '</small>' + h(own.name), 'dsh3-own', { ax: 0 }); hit(world(ox, 1.0, 1.9), { k: 'own', id: own.member_id }, 44); hit(world(ox + 2.6, 0.8, 1.9), { k: 'own', id: own.member_id }, 40); }
+  P.rooms.forEach(function (rm) {
+    var sg = lab(world(rm.x0 + 0.3, 0.05, rm.z0 + 0.3), h(dsh_nm(rm.d)) + (rm.d.vacancies ? ' <span style="color:#F0B13D;font-size:12px">· ' + rm.d.vacancies + '</span>' : ''), 'dsh3-sign', { ax: 0, ay: 0 });
+    hit(world(rm.x0 + 1.2, 0.05, rm.z0 + 0.55), { k: 'dept', id: rm.d.id }, 40);
+    rm.seats.forEach(function (s) {
+      var x = s.x, z = s.z, pn = s.p ? h(dsh_nm(s.p)) : '';
+      if (s.k === 'man' || s.k === 'inv') {
+        desk(x, z, true); person(x, z, s.k === 'inv' ? saM : emM);
+        lab(world(x, 1.45, z + 0.3), h(s.m.initials || dsh_ini(s.m.name)), 'dsh3-ini' + (s.k === 'inv' ? ' inv' : ''));
+        lab(world(x, 0.0, z + 0.62), '<div class="dsh3-pos">' + pn + '</div><div class="dsh3-nm' + (s.k === 'inv' ? ' inv' : '') + '">' + h(s.m.short || dsh_short(s.m.name)) + '</div>', 'dsh3-ml', { ay: 0, dy: -2 });
+        hit(world(x, 0.7, z), { k: 'man', id: s.m.member_id }); hit(world(x, 0, z + 0.9), { k: 'man', id: s.m.member_id }, 30);
+      } else if (s.k === 'vac') {
+        desk(x, z, false);
+        var ring = new T3.Mesh(new T3.RingGeometry(0.66, 0.75, weak ? 24 : 48), amM); ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.06, z); g.add(ring);
+        [[0, -0.64, 1.56, 0.04], [0, 0.14, 1.56, 0.04], [-0.77, -0.25, 0.04, 0.8], [0.77, -0.25, 0.04, 0.8]].forEach(function (q) { box(q[2], 0.03, q[3], amM, x + q[0], 0.675, z + q[1], 1); });
+        var hl = halo(0xf0b13d, 3.0, light ? 0.45 : 0.75); hl.position.copy(world(x, 0.8, z)); scene.add(hl);
+        lab(world(x, 1.15, z + 0.3), '+', 'dsh3-plus');
+        lab(world(x, 0.0, z + 0.62), '<div class="dsh3-pos">' + pn + '</div><div class="dsh3-vac">' + dsh_h('+ Добавить') + '</div>', 'dsh3-ml', { ay: 0, dy: -2 });
+        hit(world(x, 0.7, z), { k: 'vac', id: s.p.id }); hit(world(x, 0, z + 0.9), { k: 'vac', id: s.p.id }, 30);
+      } else if (s.k === 'gray') {
+        desk(x, z, false);
+        [[0, -0.64, 1.56, 0.03], [0, 0.14, 1.56, 0.03]].forEach(function (q) { box(q[2], 0.02, q[3], grM, x + q[0], 0.672, z + q[1], 1); });
+        lab(world(x, 0.0, z + 0.62), '<div class="dsh3-pos">' + pn + '</div><div class="dsh3-gr">' + dsh_h('сколько нужно?') + '</div>', 'dsh3-ml', { ay: 0, dy: -2 });
+        hit(world(x, 0.7, z), { k: 'pos', id: s.p.id }); hit(world(x, 0, z + 0.9), { k: 'pos', id: s.p.id }, 30);
+      } else {
+        lab(world(x, 0.0, z), '<div class="dsh3-gr">' + dsh_h('+ Должность') + '</div>', 'dsh3-ml');
+        hit(world(x, 0, z), { k: 'addp', id: s.d.id }, 40);
+      }
+    });
+  });
+  /* свет */
+  scene.add(new T3.HemisphereLight(light ? 0xffffff : 0xfff0d8, light ? 0x8a7a60 : 0x0d0a06, light ? 1.0 : 0.8));
+  var key = new T3.DirectionalLight(0xffe1aa, light ? 1.3 : 2.0); key.position.set(-6, 14, 6);
+  if (!weak) { key.castShadow = true; var sz = Math.max(FD, FW) / 2 + 3; key.shadow.mapSize.set(1024, 1024); Object.assign(key.shadow.camera, { left: -sz, right: sz, top: sz, bottom: -sz, near: 1, far: 60 }); key.shadow.bias = -0.0008; }
+  scene.add(key);
+  /* камера: аксонометрия, поворот пальцем (±40°) и прокрутка вдоль этажа */
+  var unitsW = FW + 2.5, unitsH = unitsW * H / W, el = 50 * Math.PI / 180, dist = 40;
+  var cam = new T3.OrthographicCamera(-unitsW / 2, unitsW / 2, unitsH / 2, -unitsH / 2, 0.1, 200);
+  var visZ = unitsH / Math.sin(el), zTop = -FD / 2 + visZ / 2 - 0.6, zBot = FD / 2 - visZ / 2 + 0.6;
+  var V = { yaw: 5 * Math.PI / 180, tz: Math.min(zTop, Math.max(zTop, zBot)) };
+  if (zBot < zTop) V.tz = 0;
+  function clampZ() { if (zBot < zTop) V.tz = 0; else V.tz = Math.max(zTop, Math.min(zBot, V.tz)); }
+  var v3 = new T3.Vector3(), raf = 0, dead = false;
+  function draw() {
+    raf = 0; if (dead) return;
+    cam.position.set(Math.sin(V.yaw) * Math.cos(el) * dist + 0.3, Math.sin(el) * dist, Math.cos(V.yaw) * Math.cos(el) * dist + V.tz);
+    cam.lookAt(0.3, 0, V.tz); cam.updateMatrixWorld();
+    r.render(scene, cam);
+    for (var i = 0; i < LB.length; i++) { var it = LB[i]; v3.copy(it.p).project(cam); var x = (v3.x * 0.5 + 0.5) * W, y = (-v3.y * 0.5 + 0.5) * H; var vis = y > -60 && y < H + 60; it.el.style.display = vis ? '' : 'none'; if (vis) it.el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + (y + it.dy).toFixed(1) + 'px) translate(' + (-it.ax * 100) + '%,' + (-it.ay * 100) + '%)'; }
+  }
+  function req() { if (!raf) raf = requestAnimationFrame(draw); }
+  function scr(p) { v3.copy(p).project(cam); return [(v3.x * 0.5 + 0.5) * W, (-v3.y * 0.5 + 0.5) * H]; }
+  function tap(px, py) {
+    var best = null, bd = 1e9;
+    HIT.forEach(function (o) { var s = scr(o.p), d = Math.hypot(s[0] - px, s[1] - py); if (d < o.r && d < bd) { bd = d; best = o; } });
+    if (!best) return; var a = best.a;
+    if (a.k === 'own' || a.k === 'man') dsh_person(a.id);
+    else if (a.k === 'vac') dsh_invite(a.id);
+    else if (a.k === 'pos') { if (dsh_edit()) dsh_menuP(a.id); }
+    else if (a.k === 'dept') { if (dsh_edit()) dsh_menuD(a.id); }
+    else if (a.k === 'addp') { if (dsh_edit()) dsh_addPos(a.id); }
+  }
+  var cv = r.domElement, pd = null;
+  function pdn(e) { pd = { x: e.clientX, y: e.clientY, yaw: V.yaw, tz: V.tz, mv: 0, id: e.pointerId }; try { cv.setPointerCapture(e.pointerId); } catch (x) {} }
+  function pmv(e) { if (!pd || e.pointerId !== pd.id) return; var dx = e.clientX - pd.x, dy = e.clientY - pd.y; pd.mv = Math.max(pd.mv, Math.abs(dx) + Math.abs(dy)); V.yaw = Math.max(-0.7, Math.min(0.7, pd.yaw + dx / W * 1.6)); V.tz = pd.tz - dy / H * visZ; clampZ(); req(); }
+  function pup(e) { if (!pd || e.pointerId !== pd.id) return; var b = cv.getBoundingClientRect(), mv = pd.mv; pd = null; if (mv < 8) tap(e.clientX - b.left, e.clientY - b.top); }
+  function whl(e) { if (zBot < zTop) return; var t0 = V.tz; V.tz += e.deltaY / H * visZ * 0.6; clampZ(); if (V.tz !== t0) { e.preventDefault(); req(); } }
+  cv.addEventListener('pointerdown', pdn); cv.addEventListener('pointermove', pmv); cv.addEventListener('pointerup', pup); cv.addEventListener('pointercancel', function () { pd = null; });
+  cv.addEventListener('wheel', whl, { passive: false });
+  if ($('dsh3R')) $('dsh3R').onclick = function () { V.yaw = 5 * Math.PI / 180; req(); };
+  var rsT = null; function rs() { clearTimeout(rsT); rsT = setTimeout(function () { if (!dead && DSH.g3 && DSH.g3.r === r && S.view === 'shtat') { dsh_3dKill(); dsh_3d($('dshBody'), DSH.data); } }, 250); }
+  window.addEventListener('resize', rs);
+  draw();
+  window.__dsh3 = { hits: HIT.length, labels: LB.length, rooms: P.rooms.length, weak: weak, rev: T3.REVISION, tap: function (k, id) { var o = HIT.filter(function (x) { return x.a.k === k && (id == null || String(x.a.id) === String(id)); })[0]; if (!o) return false; var s = scr(o.p); tap(s[0], s[1]); return true; } };
+  return { r: r, scene: scene, off: function () { dead = true; window.removeEventListener('resize', rs); if (raf) cancelAnimationFrame(raf); } };
+}
+/* ушли с экрана — освободить WebGL */
+(function () {
+  var rn0 = render;
+  render = function () { if (S.view !== 'shtat' && DSH.g3) dsh_3dKill(); return rn0.apply(this, arguments); };
+})();
+
+/* ---------- виджет «Штат» на главной владельца ---------- */
+async function dsh_homeCard() {
+  if (S.view !== 'home' || !dsh_isDir() || !$('main')) return;
+  var hs = DSH.hseq = (DSH.hseq || 0) + 1;
+  var D; try { D = await dsh_overview(true); } catch (e) { return; }
+  var m = $('main'); if (S.view !== 'home' || !m || hs !== DSH.hseq) return;
+  var T = D.totals, big = T.vacancies > 0 || T.people === 0, nx = dsh_next(D);
+  var el = $('dshHome'); if (!el) { el = document.createElement('div'); el.id = 'dshHome'; }
+  var html;
+  if (big) {
+    var seats = Math.max(T.seats, T.filled), pc = seats ? Math.round(T.filled / seats * 100) : 0;
+    html = '<h2>' + dsh_h('Штат') + '<span class="v">' + h(D.venue && D.venue.name || '') + '</span></h2>' +
+      '<div class="dsh-wn"><div><b>' + T.depts + '</b><span>' + h(dsh_t(dsh_f(T.depts, 'службы', 'служба', 'служб'))) + '</span></div><div><b>' + T.positions + '</b><span>' + h(dsh_t(dsh_f(T.positions, 'должности', 'должность', 'должностей'))) + '</span></div>' +
+      '<div class="pe"><b>' + T.people + '</b><span>' + h(dsh_t(dsh_f(T.people, 'человека', 'человек', 'человек'))) + '</span></div><div class="va"><b>' + T.vacancies + '</b><span>' + h(dsh_t(dsh_f(T.vacancies, 'вакансии', 'вакансия', 'вакансий'))) + '</span></div></div>' +
+      (seats ? '<div class="dsh-bar" role="progressbar" aria-valuemin="0" aria-valuemax="' + seats + '" aria-valuenow="' + T.filled + '"><i style="width:' + pc + '%"></i></div><div class="dsh-bt">' + h(dsh_t('{a} из {b} мест занято', { a: T.filled, b: seats })) + '</div>' : '') +
+      '<div class="dsh-nx' + (nx.k === 'ok' ? ' ok' : '') + '"><b>' + dsh_h('Следующий шаг:') + '</b> ' + h(nx.t) + '</div>' +
+      '<div class="dsh-wb' + (nx.k === 'inv' ? '' : ' one') + '"><button type="button" class="btn gold" id="dshHo">' + dsh_h('Открыть штат') + '</button>' + (nx.k === 'inv' ? '<button type="button" class="btn ghost" id="dshHi">' + dsh_h('+ Пригласить') + '</button>' : '') + '</div>';
+    el.className = 'card dsh-w';
+  } else {
+    var sub = T.headcount_set ? dsh_t('Штат укомплектован: {a} из {b}', { a: T.filled, b: Math.max(T.seats, T.filled) }) : dsh_t('{p} · численность не задана', { p: T.people + ' ' + dsh_t(dsh_f(T.people, 'человека', 'человек', 'человек')) });
+    html = '<button type="button" class="dsh-wl" id="dshHo" style="background:none;border:0;padding:0"><span class="pl-ic pl-g" style="flex:none;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;background:var(--gold);color:#1b1610">' + icon('users', 18) + '</span><span class="t"><b>' + dsh_h('Штат') + '</b><small>' + h(sub) + '</small></span>' + icon('chev', 16) + '</button>';
+    el.className = 'card dsh-w dsh-wsm';
+  }
+  if (el._h !== html) { el.innerHTML = html; el._h = html; }
+  el.querySelector('#dshHo').onclick = function () { dsh_open(); };
+  if ($('dshHi')) $('dshHi').onclick = function () { if (nx.p) dsh_invite(nx.p.id); };
+  /* место (сортировка главной 92f/92t по data-cp): большой — сразу после блока смены и «Сейчас» (1.42, никогда не уходит под «Ещё»);
+     свёрнутый — под «Ещё сегодня» (55) */
+  el.setAttribute('data-cp', big ? '1.42' : '55');
+  if (!el.parentNode) { var a1 = $('homeNow'); m.insertBefore(el, a1 && a1.parentNode === m ? a1.nextSibling : m.firstChild); }
+  try { if (typeof cf_homeSort === 'function') cf_homeSort(); } catch (e) {}
+  if (big && el.parentNode !== m) { var a2 = $('homeNow'); m.insertBefore(el, a2 && a2.parentNode === m ? a2.nextSibling : m.firstChild); }
+}
+function dsh_f(n, f24, f1, f5) { var m = Math.abs(n) % 100, k = m % 10; return m > 10 && m < 20 ? f5 : k === 1 ? f1 : k >= 2 && k <= 4 ? f24 : f5; }
+W3.home.push(function () { if (!dsh_isDir()) return; [0, 250, 900, 1800].forEach(function (ms) { setTimeout(function () { try { dsh_homeCard(); } catch (e) { console.warn(e); } }, ms); }); });
+
+/* ---------- входы: «Пульт» (рядом с «Персонал»), «Команда» (кнопка «Штат») ---------- */
+PL_SEC.shtat = ['Штат', 'users'];
+(function () {
+  var pf0 = PL_FN; PL_FN = function (id) { if (id === 'shtat') return function (box) { if (box) box.innerHTML = ''; S.sub.desk = null; setTimeout(function () { dsh_open(); }, 0); }; return pf0.apply(this, arguments); };
+  var ok0 = plDeskOk; plDeskOk = function (id) { if (id === 'shtat') return dsh_isDir(); return ok0.apply(this, arguments); };
+})();
+window.addEventListener('load', function () {
+  try {
+    var pg0 = plGroups;
+    plGroups = function () {
+      var G = pg0.apply(this, arguments); if (!dsh_isDir() || !Array.isArray(G)) return G;
+      G.forEach(function (g) { g.ids = (g.ids || []).filter(function (x) { return x !== 'shtat'; }); });
+      var gi = -1, at = 0; G.forEach(function (g, i) { var k = g.ids.indexOf('staff'); if (k < 0) k = g.ids.indexOf('roles'); if (gi < 0 && k >= 0) { gi = i; at = k; } });
+      if (gi < 0) { G.unshift({ t: 'Люди', c: 'g', ids: ['shtat'] }); return G; }
+      G[gi].ids.splice(at, 0, 'shtat'); return G;
+    };
+  } catch (e) { console.warn(e); }
+  try {
+    if (typeof vTeam === 'function') {
+      var t0 = vTeam;
+      vTeam = async function () {
+        var r = await t0.apply(this, arguments);
+        try {
+          var m = $('main'); if (S.view === 'team' && m && dsh_can() && !$('dshTeamB')) {
+            var g = document.createElement('div'); g.className = 'grid2'; g.id = 'dshTeamG';
+            g.innerHTML = '<button type="button" class="btn ghost full" id="dshTeamB">' + dsh_h('Штат') + '</button>';
+            var inv = $('nav_inv'); m.insertBefore(g, inv && inv.parentNode === m ? inv.nextSibling : m.firstChild);
+            $('dshTeamB').onclick = function () { dsh_open(); };
+          }
+        } catch (e) {}
+        return r;
+      };
+    }
+  } catch (e) { console.warn(e); }
+});
+if (/[?&]w4dbg/.test(location.search)) window.__dsh = { open: dsh_open, data: function () { return DSH.data; }, ov: dsh_overview, invite: dsh_invite, hcSet: dsh_hcSet, S: function () { return S; } };
 
 
 /* ===== ВОЛНА 4 · 92zt-tg.js ===== */

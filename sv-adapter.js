@@ -1840,3 +1840,89 @@
   }
 })(typeof window !== 'undefined' ? window : globalThis);
 /* === end 92ai === */
+/* === 92zs === */
+/* Часть dzs (92zs-shtat): экран «Штат» и виджет на главной. Блок не трогает код выше: как 92z — оборачивает SVAdapter.make / supabase.createClient
+   и дополняет SV.rpcMap (только то, чего ещё нет).
+   staff_overview и position_headcount_set (0034) — в блоке 92zr (часть А), здесь не дублируются; id служб сервера экран сам сводит по sid.
+   dept_create / positions_add / dept_remove / position_remove (0033) — p_dept: id приложения → id сервера.
+   Нет rpc на сервере (PGRST202) — ответ с ошибкой как есть: экран сам соберёт штат из сотрудников и должностей. После записи — перечитать справочник. */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dzs) return; A.__dzs = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dzs) return cl; SV.__dzs = true;
+    var real = SV.real, R = SV.rpcMap; if (!R) return cl;
+    function ds(loc) { if (loc == null || loc === '') return null; var M = (SV.dep && SV.dep.toSrv) || {}; if (M[loc] != null) return M[loc]; return /^d?\d+$/.test(String(loc)) ? +String(loc).replace(/^d/, '') : loc; }
+    function dl(id) { var M = (SV.dep && SV.dep.toLoc) || {}; return id == null ? null : M[id] != null ? M[id] : id; }
+    function stale() { try { SV.stale('base'); } catch (e) {} }
+    if (!R.dept_create) R.dept_create = async function (a) { a = a || {}; var r = await real.rpc('dept_create', { p_name: a.p_name, p_name_uz: a.p_name_uz == null ? null : a.p_name_uz, p_positions: a.p_positions || [] }); stale(); return r; };
+    if (!R.positions_add) R.positions_add = async function (a) { a = a || {}; var r = await real.rpc('positions_add', { p_dept: ds(a.p_dept), p_positions: a.p_positions || [] }); stale(); return r; };
+    if (!R.dept_remove) R.dept_remove = async function (a) { a = a || {}; var r = await real.rpc('dept_remove', { p_dept: ds(a.p_dept) }); stale(); return r; };
+    if (!R.position_remove) R.position_remove = async function (a) { a = a || {}; var r = await real.rpc('position_remove', { p_id: a.p_id }); stale(); return r; };
+    return cl;
+  }
+  A.dzsExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92zs === */
+/* === 92zr === */
+/* Часть dzr (92zr-onboard, 0034_shtat.sql): штат и первый вход владельца. Блок не трогает код выше: как 92z — оборачивает
+   SVAdapter.make / supabase.createClient и дополняет SV.rpcMap и SV.exec.
+   - venue_create: если в параметрах есть p_struct (мастер регистрации: службы → должности → численность) — rpc venue_create_struct
+     (заведение, службы, должности и численность одной транзакцией); без p_struct — прежний venue_create (те же параметры);
+   - position_headcount_set (только владелец), staff_overview (владелец — всё, руководитель — свои службы) — напрямую;
+     после изменения численности справочник перечитывается;
+   - headcount в справочнике должностей (S.pos): при чтении positions — колонка headcount с сервера (если миграция 0034 ещё не
+     применена — поля просто нет, ошибок нет). */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dzr) return; A.__dzr = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dzr) return cl; SV.__dzr = true;
+    var real = SV.real, R = SV.rpcMap; if (!R) return cl;
+    var VC = ['p_name', 'p_type', 'p_first', 'p_last', 'p_lang', 'p_gender'];
+    R.venue_create = async function (a) {
+      a = a || {}; var b = {};
+      VC.forEach(function (k) { if (a[k] !== undefined) b[k] = a[k]; });
+      if (Array.isArray(a.p_struct) && a.p_struct.length) { b.p_struct = a.p_struct; return real.rpc('venue_create_struct', b); }
+      return real.rpc('venue_create', b);
+    };
+    R.position_headcount_set = async function (a) {
+      a = a || {};
+      var n = a.p_n == null || a.p_n === '' ? null : Math.round(+a.p_n);
+      var r = await real.rpc('position_headcount_set', { p_id: a.p_id, p_n: n });
+      if (!r.error) { try { SV.stale('base'); SV.__hcAt = 0; } catch (e) {} }
+      return r;
+    };
+    R.staff_overview = async function () { return real.rpc('staff_overview', {}); };
+    /* численность — в теневую таблицу positions после каждой загрузки справочника */
+    async function hc() {
+      if (!SV.venueId || !SV.at.base || SV.__hcAt === SV.at.base) return;
+      SV.__hcAt = SV.at.base;
+      try {
+        var r = await real.from('positions').select('id,headcount').eq('venue_id', SV.venueId);
+        if (r.error) return;
+        var M = {}; (r.data || []).forEach(function (p) { M[p.id] = p.headcount == null ? null : +p.headcount; });
+        (SV.T.positions || []).forEach(function (p) { var k = p.sid != null ? p.sid : p.id; if (Object.prototype.hasOwnProperty.call(M, k)) p.headcount = M[k]; });
+      } catch (e) {}
+    }
+    SV.hcSync = hc;
+    var ex0 = SV.exec;
+    SV.exec = async function (qq) {
+      if (qq && qq.t === 'positions' && qq.op === 'select' && SV.venueId) { try { await SV.load('base'); await hc(); } catch (e) {} }
+      return ex0.apply(this, arguments);
+    };
+    return cl;
+  }
+  A.dzrExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92zr === */
