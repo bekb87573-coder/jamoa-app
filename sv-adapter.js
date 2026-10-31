@@ -401,7 +401,12 @@
     function schP(r) {
       var k = r.kind, p = { p_member: r.employee_id, p_day: r.day, p_kind: 'work', p_preset: null, p_start: r.t_start ? String(r.t_start).slice(0, 5) : null, p_end: r.t_end ? String(r.t_end).slice(0, 5) : null, p_week: false };
       if (KIND2[k]) { p.p_kind = KIND2[k]; p.p_start = p.p_end = null; }
-      else if (/^p\d+$/.test(k)) p.p_preset = +k.slice(1);
+      else if (/^p\d+$/.test(k)) {
+        p.p_preset = +k.slice(1);
+        /* 31.10: «своё время на этот день» — если часы клетки отличаются от часов смены, сервер иначе ставит время смены; шлём без смены, со своими часами */
+        var ps = (SV.T.shift_types || []).filter(function (s) { return String(s.id) === String(p.p_preset); })[0];
+        if (ps && p.p_start && p.p_end && (String(ps.start_time || '').slice(0, 5) !== p.p_start || String(ps.end_time || '').slice(0, 5) !== p.p_end)) p.p_preset = null;
+      }
       else if (!p.p_start) { var e = (SV.T.employees || []).filter(function (x) { return x.id === r.employee_id; })[0]; var st = (SV.T.shift_types || []).filter(function (s) { return e && s.dept_id === e.dept_id && s.active; }); if (st.length) p.p_preset = st[0].id; }
       return p;
     }

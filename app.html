@@ -51,6 +51,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-cyr.js"></script>
 <script src="uz-w4-daily.js"></script>
 <script src="uz-w4-earn.js"></script>
+<script src="uz-w4-empsched.js"></script>
 <script src="uz-w4-explain.js"></script>
 <script src="uz-w4-features.js"></script>
 <script src="uz-w4-fixes.js"></script>
@@ -51467,6 +51468,445 @@ async function dzt_fFill() {
     }
   } catch (e) { console.warn('92zy', e); }
 })();
+
+
+/* ===== ВОЛНА 4 · 92zz-empsched.js ===== */
+/* ===== 92zz-empsched — отзыв первого пилота (химчистка, 31.10), префикс es_ =====
+   1. «Пригласить сотрудника»: в «Смена» — вариант «Свои часы» (начало и конец, шаг 15 мин, длительность «9 ч», через полночь можно).
+      Свои часы сохраняются как смена службы: если у службы уже есть смена с таким временем — берём её, иначе создаём смену «10:00–19:00»
+      (shift_types → в режиме сервера preset_save; новых миграций нет). Нет прав создавать смены — ближайшая смена службы + свои часы в строке графика (t_start/t_end).
+   2. «График» — вариант «По дням недели» (чипы Пн…Вс). График при приглашении заполняется от «Первой смены» до конца месяца (не меньше 14 дней).
+      Тот же вариант — в «Заполнить по схеме» (График команды); заполненные дни без вопроса не трогаем, как у других схем.
+   3. Карточка сотрудника (Обзор и Смены): блок «График и часы работы» — текущая схема и смена; «Изменить график» (владелец и руководитель своих людей):
+      смена (или свои часы), схема, дата начала → «Применить» перезаписывает БУДУЩИЕ дни до конца месяца (прошлые, отработанные, отпуск и больничный — не трогаем),
+      спрашивает «Изменится N дней», затем напоминает «Опубликовать изменения» (уведомление сотруднику).
+   4. «Из контактов» в форме приглашения — Contact Picker API (только Chrome на Android); на iPhone — короткая подсказка, на компьютере кнопки нет.
+   Узбекский: w4/uz/empsched.js. Журнал: w4/log/dempsched.md. */
+
+var ES = { own: false, s: '', e: '', wd: [0, 1, 2, 3, 4], d3wd: [0, 1, 2, 3, 4], pend: null };
+function es_uz() { try { return uiLang() === 'uz'; } catch (e) { return false; } }
+function es_L(ru, uz) { return es_uz() ? uz : ru; }
+function es_T(s) { try { return trUi(s); } catch (e) { return s; } }
+function es_min(t) { var p = String(t || '0:0').split(':'); return (+p[0]) * 60 + (+p[1] || 0); }
+function es_dur(s, e) { var d = (es_min(e) - es_min(s) + 1440) % 1440; return d || 1440; }
+function es_durTxt(m) { var hh = Math.floor(m / 60), mm = m % 60; return es_uz() ? hh + ' soat' + (mm ? ' ' + mm + ' daq' : '') : hh + ' ч' + (mm ? ' ' + mm + ' мин' : ''); }
+function es_wdN() { return es_uz() ? ['Du', 'Se', 'Ch', 'Pa', 'Ju', 'Sh', 'Ya'] : ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']; }
+function es_wdTxt(L) { var N = es_wdN(); return L.slice().sort().map(function (i) { return N[i]; }).join(' '); }
+function es_dayN(a, b) { return Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 864e5) + 1; }
+function es_patName(p, wd) { if (p === 'wd') return es_T('По дням недели') + (wd && wd.length ? ': ' + es_wdTxt(wd) : ''); var x = (typeof CF_PAT !== 'undefined' ? CF_PAT : []).filter(function (y) { return y[0] === p; })[0]; return x ? x[1] : p; }
+
+/* ---------- стили: только токены приложения ---------- */
+(function () {
+  var st = document.createElement('style'); st.id = 'esCss'; st.textContent =
+    '.es-wd{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 0}.es-wd .pick{min-width:44px;min-height:40px;justify-content:center;padding:0 8px}' +
+    '.es-tm{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-top:8px}.es-tm .f{margin:0;min-width:0}.es-tm input{min-width:0;width:100%}' +
+    '.es-dur{font-size:13px;color:var(--muted);margin-top:6px;white-space:normal}.es-dur b{color:var(--ink);font-weight:700}' +
+    '.es-kv{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:10px;margin:4px 0 2px}.es-kv .meta{margin:0}.es-kv .name{font-weight:600;font-size:15px;line-height:1.3;overflow-wrap:anywhere;white-space:normal}' +
+    '.es-ct{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:-2px 0 8px}.es-ct .btn{min-height:40px}.es-ct svg{flex:none}' +
+    '#cfPat,#esPat{flex-wrap:wrap}';
+  document.head.appendChild(st);
+})();
+
+/* ---------- общие расчёты ---------- */
+/* рабочие и выходные дни: [день, работа?] */
+function es_days(pat, wd, from, n) {
+  if (pat === 'wd') { var out = []; for (var i = 0; i < n; i++) { var d = addDays(from, i); out.push([d, wd.indexOf(weekday(d)) >= 0]); } return out; }
+  return cf_patDays(pat, from, n);
+}
+/* P = { code, ts: [начало, конец] | null } */
+function es_rows(empId, pat, wd, from, to, P) {
+  return es_days(pat, wd, from, Math.max(1, es_dayN(from, to))).map(function (x) {
+    return { employee_id: empId, day: x[0], kind: x[1] ? P.code : 'o', t_start: x[1] && P.ts ? P.ts[0] : null, t_end: x[1] && P.ts ? P.ts[1] : null };
+  });
+}
+function es_near(dept, s) {
+  var best = 1e9, k = null;
+  deptShifts(dept).forEach(function (t) { var d = Math.abs(es_min(t5(t.start_time)) - es_min(s)); d = Math.min(d, 1440 - d); if (d < best) { best = d; k = t.code; } });
+  return k;
+}
+/* свои часы → смена службы с таким временем (есть — берём, нет — создаём); без прав — ближайшая смена + время в строке графика */
+async function es_preset(dept, s, e) {
+  var t = deptShifts(dept).filter(function (x) { return t5(x.start_time) === s && t5(x.end_time) === e; })[0];
+  if (t) return { code: t.code, ts: null, made: false };
+  var L = deptShifts(dept, true), name = s + '–' + e, sort = L.reduce(function (m, x) { return Math.max(m, x.sort || 0); }, 0) + 1;
+  if (L.some(function (x) { return String(x.name).trim() === name; })) name = name + ' ·';
+  var code = typeof dh_code === 'function' ? dh_code(dept) : null;
+  if (!code) { var b = new Uint8Array(3); crypto.getRandomValues(b); code = 's' + Array.prototype.map.call(b, function (x) { return (x % 36).toString(36); }).join(''); }
+  try {
+    var u = await sb.from('shift_types').insert({ dept_id: dept, code: code, name: name, start_time: s, end_time: e, sort: sort, active: true }).select();
+    if (u && !u.error && u.data && u.data.length) { if (!S.st.some(function (x) { return x.id === u.data[0].id; })) S.st.push(u.data[0]); return { code: u.data[0].code, ts: null, made: true }; }
+  } catch (x) { console.warn('es preset', x); }
+  /* режим сервера: смена без быстрой смены (preset = null) + своё время — schedule_set берёт p_start/p_end только без preset */
+  if (window.JAMOA_DEMO === false) return { code: 'u', ts: [s, e], made: false };
+  var near = es_near(dept, s);
+  return near ? { code: near, ts: [s, e], made: false } : null;
+}
+function es_shiftTxt(dept, code, ts) {
+  var t = stFor(dept, code), a = ts ? ts[0] : t && t5(t.start_time), b = ts ? ts[1] : t && t5(t.end_time);
+  var nm = t ? t.name : ts ? '' : (KD(code) || {}).label || '';
+  if (!a || !b) return es_T(nm);
+  var rg = a + '–' + b;
+  return (!nm || nm === rg || nm === rg + ' ·' ? '' : es_T(nm) + ' ') + rg + ' · ' + es_durTxt(es_dur(a, b));
+}
+/* блок «Свои часы»: два поля времени и длительность */
+function es_tmHtml(pfx, s, e) {
+  var night = es_min(e) <= es_min(s);
+  return '<div class="es-tm"><label class="f">' + es_T('Начало') + '<input class="in" type="time" step="900" id="' + pfx + 'S" value="' + h(s) + '"></label><label class="f">' + es_T('Конец') + '<input class="in" type="time" step="900" id="' + pfx + 'E" value="' + h(e) + '"></label></div>' +
+    '<div class="es-dur" id="' + pfx + 'D">' + es_durHtml(s, e) + '</div>';
+}
+function es_durHtml(s, e) {
+  if (!s || !e) return h(es_L('Укажите начало и конец', 'Boshlanishi va tugashini koʻrsating'));
+  if (s === e) return '<span style="color:var(--bad)">' + h(es_L('Начало и конец совпадают', 'Boshlanishi va tugashi bir xil')) + '</span>';
+  var night = es_min(e) < es_min(s);
+  return h(es_L('Продолжительность', 'Davomiyligi')) + ': <b class="num">' + h(es_durTxt(es_dur(s, e))) + '</b>' + (night ? ' · ' + h(es_L('до', '')) + ' <span class="num">' + h(e) + '</span> ' + h(es_L('следующего дня', 'ertasi kuni gacha')) : '');
+}
+function es_bindTm(pfx, onCh) {
+  ['S', 'E'].forEach(function (k) { var el = $(pfx + k); if (!el) return; el.oninput = el.onchange = function () { var s = $(pfx + 'S').value, e = $(pfx + 'E').value; var d = $(pfx + 'D'); if (d) d.innerHTML = es_durHtml(s, e); onCh(s, e); }; });
+}
+function es_wdHtml(id, L) {
+  var N = es_wdN();
+  return '<div class="es-wd" id="' + id + '" role="group" aria-label="' + h(es_T('Рабочие дни')) + '">' + N.map(function (n, i) { return '<button type="button" class="pick' + (L.indexOf(i) >= 0 ? ' on' : '') + '" data-eswd="' + i + '" aria-pressed="' + (L.indexOf(i) >= 0) + '">' + n + '</button>'; }).join('') + '</div>' +
+    '<div class="meta" style="margin:4px 0 0;white-space:normal">' + h(es_L('Выбранные дни — рабочие, остальные — выходные', 'Tanlangan kunlar — ish kunlari, qolganlari — dam olish')) + '</div>';
+}
+function es_bindWd(id, L, onCh) {
+  var box = $(id); if (!box) return;
+  box.querySelectorAll('[data-eswd]').forEach(function (b) { b.onclick = function () { var i = +b.getAttribute('data-eswd'), k = L.indexOf(i); if (k >= 0) L.splice(k, 1); else L.push(i); b.classList.toggle('on', k < 0); b.setAttribute('aria-pressed', String(k < 0)); if (onCh) onCh(); }; });
+}
+
+/* ---------- схемы: «По дням недели» ---------- */
+(function () {
+  try {
+    if (typeof CF_PAT !== 'undefined' && !CF_PAT.some(function (x) { return x[0] === 'wd'; })) CF_PAT.push(['wd', 'По дням недели', 'выбранные дни недели — рабочие']);
+    var pd0 = cf_patDays;
+    cf_patDays = function (pat, from, n) { if (pat !== 'wd') return pd0.apply(this, arguments); return es_days('wd', ES.wd, from, n); };
+    if (typeof D3_SCH !== 'undefined' && !D3_SCH.some(function (x) { return x[0] === 'wd'; })) D3_SCH.push(['wd', 'По дням недели', 1, 0]);
+  } catch (e) { console.warn('92zz', e); }
+})();
+
+/* ---------- 1–2, 4. форма «Пригласить сотрудника» ---------- */
+function es_invPos() {
+  var L = $('layer'); if (!L) return null;
+  var b = L.querySelector('[data-cfpos].on'), v = b ? b.getAttribute('data-cfpos') : ($('cfPos') ? $('cfPos').value : '');
+  if (!v || v === 'other') v = $('cfPos') ? $('cfPos').value : '';
+  return S.pos.filter(function (p) { return String(p.id) === String(v); })[0] || null;
+}
+function es_invOwnUI() {
+  var sh = $('cfSh'); if (!sh) return;
+  sh.querySelectorAll('[data-cfsh]').forEach(function (b) { b.classList.toggle('on', !ES.own && b.getAttribute('data-es0') === '1'); });
+  var o = $('esOwnB'); if (o) { o.classList.toggle('on', ES.own); o.setAttribute('aria-pressed', String(ES.own)); }
+  var w = $('esOwnW');
+  if (ES.own && !w) { w = document.createElement('div'); w.id = 'esOwnW'; w.innerHTML = es_tmHtml('esI', ES.s, ES.e); sh.insertAdjacentElement('afterend', w); es_bindTm('esI', function (s, e) { ES.s = s; ES.e = e; }); }
+  if (!ES.own && w) w.remove();
+}
+function es_invInject(fresh) {
+  var L = $('layer'); if (!L || !$('cfPat')) return;
+  if (fresh) { ES.own = false; ES.s = ''; ES.e = ''; ES.wd = [0, 1, 2, 3, 4]; ES.pend = null; }
+  /* свои часы */
+  var sh = $('cfSh');
+  if (sh && !$('esOwnB')) {
+    sh.querySelectorAll('[data-cfsh]').forEach(function (b) { if (b.classList.contains('on')) b.setAttribute('data-es0', '1'); });
+    var on = sh.querySelector('[data-cfsh].on'), t = null;
+    if (on) { var p = es_invPos(); t = p ? stFor(p.dept_id, on.getAttribute('data-cfsh')) : null; }
+    if (!ES.s) { ES.s = t ? t5(t.start_time) : '09:00'; ES.e = t ? t5(t.end_time) : '18:00'; }
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'pick'; b.id = 'esOwnB'; b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = '<span>' + h(es_T('Свои часы')) + '</span>';
+    sh.appendChild(b);
+    b.onclick = function () { ES.own = true; es_invOwnUI(); try { $('esIS').focus(); } catch (e) {} };
+    es_invOwnUI();
+  }
+  /* по дням недели */
+  var pon = $('cfPat').querySelector('.pick.on');
+  if (pon && pon.getAttribute('data-cfpat') === 'wd' && !$('esWdI')) {
+    var w = document.createElement('div'); w.innerHTML = es_wdHtml('esWdI', ES.wd); $('cfPat').insertAdjacentElement('afterend', w); es_bindWd('esWdI', ES.wd);
+  }
+  /* из контактов */
+  es_ctInject();
+}
+/* выбор смены готовой кнопкой — «Свои часы» выключаются (обработчик 92f перерисует форму) */
+document.addEventListener('click', function (ev) {
+  var t = ev.target && ev.target.closest; if (!t) return;
+  if (ev.target.closest('#cfSh [data-cfsh]')) { ES.own = false; return; }
+  var go = ev.target.closest('#cfGo'); if (!go || go._esGo) return;
+  ES.pend = null;
+  var pon = $('cfPat') && $('cfPat').querySelector('.pick.on'), pat = pon ? pon.getAttribute('data-cfpat') : '52';
+  if (pat === 'wd' && !ES.wd.length) { ev.preventDefault(); ev.stopImmediatePropagation(); return toast(es_L('Выберите рабочие дни', 'Ish kunlarini tanlang')); }
+  var hasSh = !!($('cfSh') && $('cfSh').querySelector('[data-cfsh]'));
+  if (!hasSh) return;
+  ES.pend = { pat: pat, wd: ES.wd.slice(), code: null, ts: null, at: Date.now() };
+  if (!ES.own) return;
+  /* свои часы: сначала смена службы с этим временем, потом обычное добавление 92f */
+  ev.preventDefault(); ev.stopImmediatePropagation();
+  var s = ES.s, e = ES.e, p = es_invPos();
+  if (!s || !e) return toast(es_L('Укажите начало и конец смены', 'Smena boshlanishi va tugashini koʻrsating'));
+  if (s === e) return toast(es_L('Начало и конец совпадают', 'Boshlanishi va tugashi bir xil'));
+  if (!$('cfN') || !$('cfN').value.trim()) return toast(es_T('Укажите фамилию и имя'));
+  if (!p) return toast(es_T('Выберите должность'));
+  go.disabled = true;
+  es_preset(p.dept_id, s, e).then(function (P) {
+    go.disabled = false;
+    if (!P) return toast(es_L('Нет смен в службе', 'Xizmatda smenalar yoʻq'));
+    ES.pend.code = P.code; ES.pend.ts = P.ts;
+    go._esGo = 1; try { if (go.onclick) go.onclick.call(go, ev); } finally { go._esGo = 0; }
+  });
+}, true);
+/* смена из «Своих часов» уходит в карточку нового сотрудника (cf_shift — первый экран новичка) */
+(function () {
+  if (!sb || !sb.functions || typeof sb.functions.invoke !== 'function') return;
+  var inv0 = sb.functions.invoke;
+  sb.functions.invoke = function (n, opt) {
+    try {
+      var b = opt && opt.body;
+      if (n === 'staff-admin' && b && b.action === 'create' && ES.pend && ES.pend.code && b.cf_shift) opt = Object.assign({}, opt, { body: Object.assign({}, b, { cf_shift: ES.pend.code }) });
+    } catch (e) {}
+    return inv0.call(this, n, opt);
+  };
+})();
+/* график нового сотрудника: выбранная схема (или дни недели), своя смена, от «Первой смены» до конца месяца (не меньше 14 дней) */
+(function () {
+  var f0 = sb.from;
+  sb.from = function (t) {
+    var q = f0.apply(this, arguments);
+    if (t !== 'schedule' || !ES.pend || !q || typeof q.insert !== 'function') return q;
+    var ins0 = q.insert;
+    q.insert = function (rows) {
+      var a = Array.prototype.slice.call(arguments), P = ES.pend;
+      try {
+        if (P && Date.now() - P.at < 120000 && Array.isArray(rows) && rows.length && rows[0].employee_id && rows[0].day) {
+          ES.pend = null;
+          var from = rows.map(function (r) { return r.day; }).sort()[0], to = lastDay(from.slice(0, 7)), to14 = addDays(from, 13); if (to14 > to) to = to14;
+          var w = rows.filter(function (r) { return r.kind && r.kind !== 'o'; })[0], code = P.code || (w && w.kind);
+          if (code) a[0] = es_rows(rows[0].employee_id, P.pat, P.wd, from, to, { code: code, ts: P.ts });
+        }
+      } catch (e) { console.warn('92zz', e); }
+      return ins0.apply(this, a);
+    };
+    return q;
+  };
+})();
+
+/* «Из контактов» — Contact Picker API (Chrome на Android) */
+function es_ctOk() { try { return 'contacts' in navigator && 'ContactsManager' in window; } catch (e) { return false; } }
+function es_ios() { try { return /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); } catch (e) { return false; } }
+function es_tel(t) {
+  var s = String(t || '').trim(), d = s.replace(/\D/g, '');
+  if (d.length === 12 && d.slice(0, 3) === '998') return '+' + d;
+  if (d.length === 14 && d.slice(0, 5) === '00998') return '+' + d.slice(2);
+  if (d.length === 9 && s.charAt(0) !== '+') return '+998' + d;
+  return s;
+}
+function es_ctInject() {
+  var P = $('cfP'); if (!P || $('esCtW')) return;
+  var ok = es_ctOk(), ios = !ok && es_ios(); if (!ok && !ios) return;
+  var w = document.createElement('div'); w.className = 'es-ct'; w.id = 'esCtW';
+  w.innerHTML = ok ? '<button type="button" class="btn ghost sm" id="esCt">' + icon('phone', 16) + '<span>' + h(es_T('Из контактов')) + '</span></button><span class="meta" style="margin:0;white-space:normal">' + h(es_L('имя и номер из телефонной книги', 'ism va raqam telefon kitobidan')) + '</span>'
+    : '<span class="meta" style="margin:0;white-space:normal">' + h(es_L('Выбор из контактов работает на Android', 'Kontaktlardan tanlash Android’da ishlaydi')) + '</span>';
+  var lab = P.closest('label') || P; lab.insertAdjacentElement('afterend', w);
+  if ($('esCt')) $('esCt').onclick = async function () {
+    try {
+      var L = await navigator.contacts.select(['name', 'tel'], { multiple: false }), c = L && L[0]; if (!c) return;
+      var nm = (c.name || []).filter(Boolean)[0] || '', tel = (c.tel || []).filter(Boolean)[0] || '';
+      if (nm && $('cfN')) { $('cfN').value = String(nm).trim(); $('cfN').dispatchEvent(new Event('input', { bubbles: true })); }
+      if (tel && $('cfP')) { $('cfP').value = es_tel(tel); $('cfP').dispatchEvent(new Event('input', { bubbles: true })); }
+      if (!nm && !tel) toast(es_L('В контакте нет имени и номера', 'Kontaktda ism va raqam yoʻq'));
+    } catch (e) { if (!(e && e.name === 'AbortError')) toast(es_L('Не удалось открыть контакты', 'Kontaktlarni ochib boʻlmadi')); }
+  };
+}
+
+/* ---------- 2. «Заполнить по схеме» → «По дням недели» ---------- */
+function es_d3Inject() {
+  var L = $('layer'), pk = L && L.querySelector('.w3-pk'); if (!pk || !$('scFrom')) return;
+  var on = pk.querySelector('[data-sc="wd"].on'); if (!on) return;
+  if (!$('esWdD')) { var w = document.createElement('div'); w.innerHTML = es_wdHtml('esWdD', ES.d3wd); pk.insertAdjacentElement('afterend', w); es_bindWd('esWdD', ES.d3wd); }
+  var stg = $('scStag'); if (stg && stg.closest('label')) stg.closest('label').hidden = true; /* «чередовать людей» — не для дней недели */
+}
+/* кнопки окна 92f/д3 получают свои обработчики после sheet() — перехватываем нажатие раньше (capture), только для «По дням недели» */
+document.addEventListener('click', function (ev) {
+  var b = ev.target && ev.target.closest && ev.target.closest('#scGo,#scEmpty,#scAll'); if (!b) return;
+  var L = $('layer'); if (!L || !L.querySelector('.w3-pk [data-sc="wd"].on')) return;
+  ev.preventDefault(); ev.stopImmediatePropagation();
+  es_d3Plan(b.id === 'scGo' ? false : b.id === 'scEmpty' ? 'empty' : 'all');
+}, true);
+async function es_d3Plan(mode) {
+  var L = $('layer'), dept = S.sub.tsDept, k = L.querySelector('[data-sk].on'), from = $('scFrom').value;
+  var ids = Array.prototype.filter.call(L.querySelectorAll('[data-sp]'), function (c) { return c.checked; }).map(function (c) { return c.getAttribute('data-sp'); });
+  if (!ids.length) return toast(es_T('Отметьте сотрудников'));
+  if (!ES.d3wd.length) return toast(es_L('Выберите рабочие дни', 'Ish kunlarini tanlang'));
+  if (!k || !from) return;
+  var code = k.getAttribute('data-sk'), to = lastDay(from.slice(0, 7)), rows = [];
+  ids.forEach(function (id) { rows = rows.concat(es_rows(id, 'wd', ES.d3wd, from, to, { code: code, ts: null })); });
+  var ex = await qSafe(sb.from('schedule').select('*').in('employee_id', ids).gte('day', from).lte('day', to)), have = {};
+  ((ex && ex.data) || []).forEach(function (x) { if (x.kind) have[x.employee_id + '|' + x.day] = x; });
+  var conf = rows.filter(function (r) { var x = have[r.employee_id + '|' + r.day]; return x && (x.kind !== r.kind || x.t_start); }).length;
+  if (conf && !mode) {
+    var g = $('scGo'); if (!g) return;
+    var d = document.createElement('div');
+    d.innerHTML = '<div class="note t-warn" style="margin:8px 0"><span>' + h(es_T('Уже заполнено дней')) + '</span>: <b class="num">' + conf + '</b>. <span>' + h(es_T('Их не трогаем, если не скажете.')) + '</span></div><div class="w3-acts"><button type="button" class="btn gold" id="scEmpty">' + h(es_T('Только пустые дни')) + '</button><button type="button" class="btn ghost" id="scAll">' + h(es_T('Перезаписать и их')) + '</button></div>';
+    g.replaceWith(d);
+    return;
+  }
+  if (mode === 'empty') rows = rows.filter(function (r) { return !have[r.employee_id + '|' + r.day]; });
+  if (!rows.length) { closeLayer(); return toast(es_T('Пустых дней нет — ничего не меняли')); }
+  var u = await sb.from('schedule').upsert(rows, { onConflict: 'employee_id,day' }); if (u.error) return toast(err(u.error));
+  closeLayer(); S.sub.grid = null; toast(es_T('Заполнено смен') + ': ' + rows.filter(function (r) { return r.kind !== 'o'; }).length); vTeamSched();
+}
+
+/* перехват окна: форма приглашения и «Заполнить по схеме» */
+(function () {
+  var sh0 = sheet;
+  sheet = function (html) {
+    var was = !!$('cfN');
+    var r = sh0.apply(this, arguments);
+    try {
+      var s = String(html || '');
+      if (s.indexOf('id="cfPat"') >= 0) es_invInject(!was);
+      else if (s.indexOf('id="scFrom"') >= 0) es_d3Inject();
+    } catch (e) { console.warn('92zz', e); }
+    return r;
+  };
+})();
+
+/* ---------- 3. карточка сотрудника: «График и часы работы» ---------- */
+/* текущая схема и смена по графику: 4 недели вокруг сегодняшнего дня */
+function es_guess(e, rows) {
+  var td = today(), by = {}; rows.forEach(function (r) { if (r.kind) by[r.day] = r; });
+  var fut = rows.filter(function (r) { return r.day >= td && isW(r.kind); }), all = rows.filter(function (r) { return isW(r.kind); });
+  var src = fut.length ? fut : all, cnt = {}, best = null;
+  src.forEach(function (r) { var k = r.kind + '|' + t5(r.t_start) + '|' + t5(r.t_end); cnt[k] = (cnt[k] || 0) + 1; if (!best || cnt[k] > cnt[best]) best = k; });
+  var sh = null; if (best) { var p = best.split('|'); sh = { code: p[0], ts: p[1] && p[2] ? [p[1], p[2]] : null }; }
+  /* схема: 4 недели с завтрашнего дня (что будет); мало записей впереди — 4 недели до сегодня */
+  function win(from) { var o = []; for (var i = 0; i < 28; i++) { var d = addDays(from, i), x = by[d]; if (x && (isW(x.kind) || x.kind === 'o')) o.push([i, d, isW(x.kind)]); } return o; }
+  var D = win(addDays(td, 1)); if (D.length < 8) D = win(addDays(td, -27));
+  var pat = null, wd = null;
+  if (D.length >= 8 && D.some(function (x) { return x[2]; })) {
+    var W = {}, okW = true; D.forEach(function (x) { var w = weekday(x[1]); if (W[w] === undefined) W[w] = x[2]; else if (W[w] !== x[2]) okW = false; });
+    if (okW && Object.keys(W).length === 7) {
+      wd = Object.keys(W).filter(function (k) { return W[k]; }).map(Number).sort();
+      pat = wd.join('') === '01234' ? '52' : wd.join('') === '012345' ? '61' : 'wd';
+    } else {
+      [['22', 2, 2], ['31', 3, 1]].forEach(function (c) {
+        if (pat) return; var cyc = c[1] + c[2];
+        for (var off = 0; off < cyc && !pat; off++) if (D.every(function (x) { return (((x[0] - off) % cyc + cyc) % cyc < c[1]) === x[2]; })) pat = c[0];
+      });
+    }
+  }
+  return { sh: sh, pat: pat, wd: wd };
+}
+async function es_card() {
+  if (S.view !== 'emp' || typeof DG === 'undefined') return;
+  var e = emp(S.sub.empId), tab = DG.tab, seq = DG.seq; if (!e || (tab !== 'ov' && tab !== 'sh')) return;
+  var td = today(), to = lastDay(addDays(td, 1).slice(0, 7)), a = addDays(td, -27), b = addDays(td, 28); if (to > b) b = to;
+  var r = await qSafe(sb.from('schedule').select('*').eq('employee_id', e.id).gte('day', a).lte('day', b));
+  if (seq !== DG.seq || S.view !== 'emp') return;
+  var body = $('dgBody'); if (!body) return;
+  var rows = (r && r.data) || [], G = es_guess(e, rows), can = typeof dg_can === 'function' ? dg_can(e) && e.active !== false : isDirector();
+  var left = rows.filter(function (x) { return x.day >= td && x.day <= to && isW(x.kind); }).length;
+  var old = $('esCard'); if (old) old.remove();
+  var c = document.createElement('div'); c.className = 'card'; c.id = 'esCard';
+  c.innerHTML = '<h2>' + h(es_T('График и часы работы')) + '</h2>' +
+    '<div class="es-kv"><div><div class="meta">' + h(es_T('График')) + '</div><div class="name">' + h(G.pat ? es_patName(G.pat, G.pat === 'wd' ? G.wd : null) : rows.length ? es_T('Свой график') : es_T('не задан')) + '</div></div>' +
+    '<div><div class="meta">' + h(es_T('Смена')) + '</div><div class="name">' + h(G.sh ? es_shiftTxt(e.dept_id, G.sh.code, G.sh.ts) : '—') + '</div></div></div>' +
+    '<div class="meta" style="margin:6px 0 0;white-space:normal">' + h(es_L('Рабочих дней до', '')) + ' <span class="num">' + dm(to) + '</span>' + h(es_L('', ' gacha ish kunlari')) + ': <b class="num">' + left + '</b></div>' +
+    (can ? '<button type="button" class="btn ghost full" id="esEdit" style="margin-top:10px;min-height:44px">' + icon('cal', 16) + '<span>' + h(es_T('Изменить график')) + '</span></button>' : '');
+  var first = body.querySelector(':scope > .card');
+  if (tab === 'ov' && first) first.insertAdjacentElement('afterend', c); else body.insertBefore(c, body.firstChild);
+  if ($('esEdit')) $('esEdit').onclick = function () { es_editSheet(e, G); };
+}
+function es_editSheet(e, G) {
+  var dept = e.dept_id, sh = deptShifts(dept);
+  if (!sh.length) return toast(es_L('Нет смен в службе — добавьте их в «Смены службы»', 'Xizmatda smenalar yoʻq — «Xizmat smenalari»da qoʻshing'));
+  var g0 = G.sh && stFor(dept, G.sh.code) ? G.sh : null;
+  var c = { code: g0 ? g0.code : sh[0].code, own: !!(g0 && g0.ts), s: '', e: '', pat: G.pat || '52', wd: G.wd && G.wd.length ? G.wd.slice() : [0, 1, 2, 3, 4], from: addDays(today(), 1) };
+  var t0 = stFor(dept, c.code); c.s = g0 && g0.ts ? g0.ts[0] : t0 ? t5(t0.start_time) : '09:00'; c.e = g0 && g0.ts ? g0.ts[1] : t0 ? t5(t0.end_time) : '18:00';
+  function draw() {
+    var to = lastDay(c.from.slice(0, 7));
+    var html = sheetHead(es_T('Изменить график'), h(e.first_name + ' ' + e.last_name) + ' · ' + h(posName(e.position_id))) +
+      '<div class="pft" style="margin-top:6px">' + h(es_T('Смена')) + '</div><div class="chips" id="esSh" style="flex-wrap:wrap;flex:none">' +
+      sh.map(function (t) { return '<button type="button" class="pick' + (!c.own && t.code === c.code ? ' on' : '') + '" data-esk="' + h(t.code) + '"><span>' + h(es_T(t.name)) + '</span> <small class="num">' + t5(t.start_time) + '–' + t5(t.end_time) + '</small></button>'; }).join('') +
+      '<button type="button" class="pick' + (c.own ? ' on' : '') + '" id="esOwnC"><span>' + h(es_T('Свои часы')) + '</span></button></div>' +
+      (c.own ? es_tmHtml('esC', c.s, c.e) : '') +
+      '<div class="pft" style="margin-top:10px">' + h(es_T('График')) + '</div><div class="chips" id="esPat" style="flex:none">' +
+      CF_PAT.map(function (x) { return '<button type="button" class="pick' + (x[0] === c.pat ? ' on' : '') + '" data-espat="' + x[0] + '" title="' + h(es_T(x[2])) + '"><span class="num">' + h(es_T(x[1])) + '</span></button>'; }).join('') + '</div>' +
+      (c.pat === 'wd' ? es_wdHtml('esWdC', c.wd) : '') +
+      '<label class="f" style="margin-top:10px">' + h(es_L('С даты', 'Qaysi kundan')) + '<input class="in" type="date" id="esFrom" min="' + today() + '" value="' + c.from + '"></label>' +
+      '<div class="note t-mute" style="margin:6px 0 10px;white-space:normal">' + h(es_L('Изменятся дни с', '')) + ' <b class="num">' + dm(c.from) + '</b> ' + h(es_L('по', 'dan')) + ' <b class="num">' + dm(to) + '</b>' + h(es_L('.', ' gacha boʻlgan kunlar oʻzgaradi.')) + ' ' +
+      h(es_L('Прошедшие дни, отработанные смены, отпуск и больничный не меняются.', 'Oʻtgan kunlar, ishlangan smenalar, taʼtil va kasallik oʻzgarmaydi.')) + '</div>' +
+      '<button type="button" class="btn gold full" id="esApply">' + h(es_T('Применить')) + '</button>';
+    sheet(html);
+    var L = $('layer');
+    L.querySelectorAll('[data-esk]').forEach(function (b) { b.onclick = function () { c.code = b.getAttribute('data-esk'); c.own = false; draw(); }; });
+    $('esOwnC').onclick = function () { if (!c.own) { var t = stFor(dept, c.code); if (t && !c.s) { c.s = t5(t.start_time); c.e = t5(t.end_time); } } c.own = true; draw(); try { $('esCS').focus(); } catch (x) {} };
+    if (c.own) es_bindTm('esC', function (s, en) { c.s = s; c.e = en; });
+    L.querySelectorAll('[data-espat]').forEach(function (b) { b.onclick = function () { c.pat = b.getAttribute('data-espat'); draw(); }; });
+    if (c.pat === 'wd') es_bindWd('esWdC', c.wd);
+    $('esFrom').onchange = function () { if (this.value) { c.from = this.value < today() ? today() : this.value; draw(); } };
+    $('esApply').onclick = function () { es_apply(e, c, this); };
+  }
+  draw();
+}
+async function es_apply(e, c, btn) {
+  var dept = e.dept_id, td = today();
+  if (c.pat === 'wd' && !c.wd.length) return toast(es_L('Выберите рабочие дни', 'Ish kunlarini tanlang'));
+  if (c.own && (!c.s || !c.e)) return toast(es_L('Укажите начало и конец смены', 'Smena boshlanishi va tugashini koʻrsating'));
+  if (c.own && c.s === c.e) return toast(es_L('Начало и конец совпадают', 'Boshlanishi va tugashi bir xil'));
+  var from = c.from < td ? td : c.from, to = lastDay(from.slice(0, 7));
+  btn.disabled = true;
+  try {
+    var P = c.own ? await es_preset(dept, c.s, c.e) : { code: c.code, ts: null };
+    if (!P) { btn.disabled = false; return toast(es_L('Нет смен в службе', 'Xizmatda smenalar yoʻq')); }
+    var rows = es_rows(e.id, c.pat, c.wd, from, to, P);
+    var rr = await Promise.all([
+      qSafe(sb.from('schedule').select('*').eq('employee_id', e.id).gte('day', from).lte('day', to)),
+      qSafe(sb.from('attendance').select('*').eq('employee_id', e.id).gte('day', from).lte('day', to))
+    ]);
+    var have = {}, came = {}, kept = 0;
+    ((rr[0] && rr[0].data) || []).forEach(function (x) { have[x.day] = x; });
+    ((rr[1] && rr[1].data) || []).forEach(function (a) { if (a.clock_in) came[a.day] = 1; });
+    rows = rows.filter(function (r) {
+      if (r.day < td || came[r.day]) return false;
+      var x = have[r.day]; if (x && (x.kind === 'h' || x.kind === 'b')) { kept++; return false; }
+      return !x || (x.kind || 'o') !== r.kind || t5(x.t_start) !== t5(r.t_start) || t5(x.t_end) !== t5(r.t_end);
+    });
+    btn.disabled = false;
+    if (!rows.length) { if (P.made) es_inv(); return toast(es_L('Ничего не изменится — график уже такой', 'Hech narsa oʻzgarmaydi — jadval allaqachon shunday')); }
+    var n = rows.length, last = rows[rows.length - 1].day;
+    var q = es_L('Изменится ' + n + ' ' + plural(n, 'день', 'дня', 'дней'), n + ' kun oʻzgaradi');
+    var sub = es_L('С ' + dm(rows[0].day) + ' по ' + dm(last) + '. ', dm(rows[0].day) + ' dan ' + dm(last) + ' gacha. ') + es_patName(c.pat, c.wd) + ' · ' + es_shiftTxt(dept, P.code, P.ts) +
+      (kept ? es_L('. Отпуск и больничный не трогаем: ' + kept, '. Taʼtil va kasallik oʻzgarmaydi: ' + kept) : '');
+    if (!(await askSure(q, { ok: 'Применить', cancel: 'Отмена', sub: sub }))) return;
+    btn.disabled = true;
+    var u = await sb.from('schedule').upsert(rows, { onConflict: 'employee_id,day' });
+    btn.disabled = false;
+    if (u && u.error) return toast(err(u.error));
+    es_inv();
+    es_done(e, c, P, n, rows[0].day, last);
+  } catch (x) { btn.disabled = false; console.warn('92zz', x); toast(err(x)); }
+}
+function es_inv() { try { if (typeof dg_inv === 'function') dg_inv(); } catch (x) {} S.sub.grid = null; try { if (typeof SHC !== 'undefined') Object.keys(SHC).forEach(function (k) { if (k.indexOf('|') > 0) delete SHC[k]; }); } catch (x) {} }
+function es_done(e, c, P, n, a, b) {
+  var what = es_patName(c.pat, c.wd) + ' · ' + es_shiftTxt(e.dept_id, P.code, P.ts);
+  sheet(sheetHead(es_T('График изменён'), h(e.first_name + ' ' + e.last_name)) +
+    '<div class="note t-ok" style="margin-top:10px;white-space:normal"><b>' + h(es_L('Изменено дней', 'Oʻzgargan kunlar')) + ': <span class="num">' + n + '</span></b> · <span class="num">' + dm(a) + '–' + dm(b) + '</span><div class="meta" style="margin:4px 0 0;white-space:normal">' + h(what) + '</div></div>' +
+    '<div class="note t-warn" style="margin:8px 0 10px;white-space:normal">' + h(es_L('Опубликуйте изменения — сотрудник получит уведомление о новом графике.', 'Oʻzgarishlarni eʼlon qiling — xodim yangi jadval haqida bildirishnoma oladi.')) + '</div>' +
+    '<div class="w3-acts"><button type="button" class="btn ghost" id="esLater">' + h(es_T('Позже')) + '</button><button type="button" class="btn gold" id="esPub">' + h(es_T('Опубликовать изменения')) + '</button></div>');
+  function back() { closeLayer(); if (S.view === 'emp' && S.sub.empId === e.id) vEmp(); }
+  $('esLater').onclick = back;
+  $('esPub').onclick = async function () {
+    this.disabled = true;
+    try {
+      var title = es_L('Ваш график изменён', 'Jadvalingiz oʻzgardi'), text = es_L('С ' + dm(a) + ': ', dm(a) + ' dan: ') + what;
+      if (typeof dg_note === 'function') await dg_note(e.id, 'sched', title, text, a); else await w3Notify(e.id, title, text, 'sched', null, false);
+      toast(es_L('Опубликовано — сотрудник получил уведомление', 'Eʼlon qilindi — xodim bildirishnoma oldi'), 3000);
+    } catch (x) { console.warn('92zz', x); toast(err(x)); }
+    back();
+  };
+  $('shx') && ($('shx').onclick = back);
+}
+(function () {
+  if (typeof vEmp !== 'function') return;
+  var ve0 = vEmp;
+  vEmp = async function () { var r = await ve0.apply(this, arguments); try { await es_card(); } catch (x) { console.warn('92zz card', x); } return r; };
+})();
+if (/[?&]w4dbg/.test(location.search)) window.__es = { ES: ES, guess: es_guess, rows: es_rows, tel: es_tel, S: S };
 
 
 /* ===== ВОЛНА 4 · 93-u45.js ===== */
