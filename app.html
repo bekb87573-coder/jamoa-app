@@ -68,6 +68,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-mgr.js"></script>
 <script src="uz-w4-mgr2.js"></script>
 <script src="uz-w4-misc.js"></script>
+<script src="uz-w4-motion.js"></script>
 <script src="uz-w4-nav.js"></script>
 <script src="uz-w4-onboard.js"></script>
 <script src="uz-w4-owner.js"></script>
@@ -87,6 +88,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-support.js"></script>
 <script src="uz-w4-tasks2.js"></script>
 <script src="uz-w4-tg.js"></script>
+<script src="uz-w4-typefix.js"></script>
 <script src="uz-w4-types.js"></script>
 <script src="uz-w4-u0.js"></script>
 <script src="uz-w4-u45.js"></script>
@@ -51610,6 +51612,601 @@ async function dz_fOvFill() {
 })();
 
 
+/* ===== ВОЛНА 4 · 92zm-motion.js ===== */
+/* ===== 92zm · Движение в 12 местах (решение владельца 31.10) =====
+   Место 1 «Пришёл» — вариант B (игровой: человечек входит в дверь, дверь закрывается, метка подпрыгивает).
+   Места 2–12 — вариант C (премиальный: золотые линии, маска, блик, досчёт в фирменном шрифте).
+   Образец — страница вариантов scratchpad/motion/index.html: те же ключевые кадры, длительности и задержки
+   (запись «имя длительность задержка [кривая]», как атрибут a="" на странице).
+   Правила: базовый стиль = итоговый кадр, ключевые кадры задают только начало; prefers-reduced-motion — анимаций нет,
+   сразу итоговый кадр (своей настройки «уменьшить движение» в приложении нет); анимация запускается, когда блок виден
+   (IntersectionObserver), наблюдатели и таймеры снимаются при уходе с экрана; частые места (1, 3, 12) не блокируют
+   нажатия. Встраивание — обёртками (cb_press, cb_after, phAfterClock, quickToggle, cd_done, sb.rpc, fnQuizResult,
+   fnRate, openRef) и наблюдателем DOM; чужие фрагменты не правятся. Префикс dmo_. */
+var DMO = { nav: 0, vk: '', played: {}, clk: null, p1: null, p1tm: 0, tkUntil: 0, tkView: '', io: [], tm: 0, outTm: 0, seen: {} };
+var DMO_E = { sp: 'cubic-bezier(.34,1.56,.64,1)', lin: 'linear', io: 'cubic-bezier(.65,0,.35,1)' };
+function dmo_rm() { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } }
+function dmo_t(s) { try { return trUi(s); } catch (e) { return s; } }
+function dmo_e(s) { return h(dmo_t(s)); }
+function dmo_ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+function dmo_j(k, d) { try { var v = JSON.parse(dmo_ls(k) || 'null'); return v == null ? d : v; } catch (e) { return d; } }
+function dmo_me() { return S.me ? S.me.id : ''; }
+/* «имя длительность задержка [кривая]» → CSS animation; off — сколько секунд уже прошло (продолжение после перерисовки) */
+function dmo_a(el, spec, off) {
+  if (!el || dmo_rm()) return el;
+  off = +off || 0;
+  el.style.animation = String(spec).split(';').map(function (s) {
+    var k = s.trim().split(/\s+/), d = +k[1], dl = +(k[2] || 0) - off, e = 'cubic-bezier(.2,.8,.2,1)';
+    k.slice(3).forEach(function (x) { if (DMO_E[x]) e = DMO_E[x]; });
+    return 'dmo-' + k[0] + ' ' + d + 's ' + e + ' ' + dl.toFixed(3) + 's 1 ' + (/^clip/.test(k[0]) ? 'backwards' : 'both'); /* маска после конца не держится — не обрезает тени и рамки */
+  }).join(',');
+  return el;
+}
+/* все [data-a] и [data-c] внутри root */
+function dmo_run(root, off) {
+  if (!root || dmo_rm()) return;
+  root.querySelectorAll('[data-a]').forEach(function (el) { dmo_a(el, el.getAttribute('data-a'), off); });
+  root.querySelectorAll('[data-c]').forEach(function (el) { dmo_cntIn(el, +el.getAttribute('data-cd') || 1, +el.getAttribute('data-ct') || 0, off); });
+}
+function dmo_fmt(n, dec, sep) { var s = (dec ? n.toFixed(dec) : String(Math.round(n))).split('.'); s[0] = s[0].replace(/\B(?=(\d{3})+(?!\d))/g, sep); return s.join(','); }
+function dmo_cnt(el, to, dur, del, off, dec, sep) {
+  if (!el || dmo_rm()) return;
+  var t0 = Date.now() - (+off || 0) * 1000, D = dur * 1000, T = del * 1000;
+  (function f() {
+    if (!el.isConnected) return; /* ушли с экрана — счётчик останавливается сам */
+    var p = Math.min(1, Math.max(0, (Date.now() - t0 - T) / D)); p = 1 - Math.pow(1 - p, 3);
+    el.textContent = dmo_fmt(to * p, dec, sep);
+    if (p < 1) requestAnimationFrame(f);
+  })();
+}
+/* досчёт первого числа в тексте элемента (формат числа сохраняется: «3,85 млн», «462 000», «1004») */
+function dmo_cntIn(el, dur, del, off) {
+  if (!el || dmo_rm()) return;
+  if (el.namespaceURI === 'http://www.w3.org/2000/svg') { /* в SVG — только число целиком (tspan) */
+    var sv = String(el.textContent).trim(), sx = parseFloat(sv.replace(/[   ]/g, '').replace(',', '.'));
+    if (/^[\d   ]+(,\d+)?$/.test(sv) && sx > 0) dmo_cnt(el, sx, dur, del, off, sv.indexOf(',') >= 0 ? sv.split(',')[1].length : 0, '');
+    return;
+  }
+  var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), n, m = null;
+  while ((n = w.nextNode())) { if (n.parentNode && n.parentNode.classList && n.parentNode.classList.contains('dmo-n')) return; m = /\d[\d   ]*(?:,\d+)?/.exec(n.nodeValue); if (m) break; }
+  if (!n || !m) return;
+  var raw = m[0].replace(/[   ]+$/, ''), to = parseFloat(raw.replace(/[   ]/g, '').replace(',', '.'));
+  if (!isFinite(to) || to === 0) return;
+  var sm = /[   ]/.exec(raw), sep = sm ? sm[0] : '', dec = raw.indexOf(',') >= 0 ? raw.split(',')[1].length : 0;
+  var pre = n.nodeValue.slice(0, m.index), post = n.nodeValue.slice(m.index + raw.length), sp = document.createElement('span'), par = n.parentNode;
+  sp.className = 'dmo-n'; sp.textContent = raw;
+  if (pre) par.insertBefore(document.createTextNode(pre), n); par.insertBefore(sp, n); if (post) par.insertBefore(document.createTextNode(post), n); par.removeChild(n);
+  dmo_cnt(sp, to, dur, del, off, dec, sep);
+}
+/* запуск, когда блок виден; наблюдатель снимается при уходе с экрана (dmo_scan → смена экрана) */
+function dmo_vis(el, fn) {
+  if (!el) return;
+  var r = el.getBoundingClientRect();
+  if ((r.bottom > 0 && r.top < innerHeight && r.width > 0) || !('IntersectionObserver' in window)) return fn();
+  var io = new IntersectionObserver(function (es) {
+    if (!es.some(function (e) { return e.isIntersecting; })) return;
+    io.disconnect(); var i = DMO.io.indexOf(io); if (i >= 0) DMO.io.splice(i, 1); fn();
+  });
+  io.observe(el); DMO.io.push(io);
+}
+function dmo_once(k) { if (DMO.played[k] === DMO.nav) return false; DMO.played[k] = DMO.nav; return true; }
+function dmo_mark(el, k) { if (!el || el.getAttribute('data-dmo' + k)) return false; el.setAttribute('data-dmo' + k, '1'); return true; }
+var DMO_SHEEN = '<i class="dmo-sheen" aria-hidden="true"></i>';
+var DMO_TICK = 'M3 8.5l3.2 3L13 4.5';
+
+/* ---------- стили ---------- */
+(function () {
+  var st = document.createElement('style'); st.id = 'dmoCss';
+  st.textContent =
+    '.dmo-rel{position:relative}.dmo-clip{position:relative;overflow:hidden}' +
+    '.dmo-sheen{position:absolute;top:-20%;bottom:-20%;left:0;width:30%;background:linear-gradient(90deg,transparent,rgba(230,201,135,.28),transparent);opacity:0;pointer-events:none;z-index:4}' +
+    '.dmo-dr{stroke-dasharray:100;stroke-dashoffset:0}.dmo-svg{display:block;overflow:visible}' +
+    '.dmo-tap{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:rgba(255,255,255,.5);pointer-events:none;opacity:0;z-index:5}' +
+    '.dmo-gl{height:1px;background:var(--gold);transform-origin:left}' +
+    '.dmo-glc{height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent);transform-origin:center}' +
+    '.dmo-ser{font-family:var(--serif,"Cormorant Garamond",Georgia,serif);font-weight:600}' +
+    '.dmo-cap{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}' +
+    /* 1. Пришёл (B) */
+    '.dmo-p1{position:relative}.dmo-door{position:absolute;right:14px;top:40px;width:62px;height:70px;pointer-events:none;z-index:3}' +
+    '.dmo-p1 .hm-shb{position:relative}.dmo-in{display:inline-block}.dmo-old{position:absolute;left:0;top:0;white-space:nowrap;opacity:0;pointer-events:none}' +
+    '.dmo-b0{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--gbtn,linear-gradient(180deg,#E8CC8E,#CFA654));color:#17181A;opacity:0;z-index:2;pointer-events:none;border-radius:inherit}' +
+    '#clk.dmo-rel{overflow:hidden}#clk.dmo-rel>svg,#clk.dmo-rel>span:not(.dmo-b0){display:inline-block}' +
+    /* 2. итог смены (C) */
+    '.dmo-p2 .dmo-big{font-size:40px;line-height:1.05;text-align:center;color:var(--goldink,var(--gold))}.dmo-p2 .dmo-big small{font-size:20px}' +
+    '.dmo-p2 .dmo-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:12px}' +
+    /* 3. Готово (C) */
+    '.trw.dmo-tk{position:relative;overflow:hidden}.trw.dmo-tk .tk-c{border-color:var(--gold)!important;background:transparent!important;position:relative}' +
+    '.trw.dmo-tk .tk-c svg{position:absolute;inset:3px;width:auto;height:auto}' +
+    '.trw.dmo-tk .tgo{opacity:.55}.trw.dmo-tk .ttl{text-decoration:line-through;text-decoration-color:var(--gold)}' +
+    /* 4. тест дня (C) */
+    '.dmo-qz{position:relative;width:200px;max-width:100%;height:110px;margin:0 auto}.dmo-qz>svg{position:absolute;inset:0;width:100%;height:100%}' +
+    '.dmo-qz .qzscore{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);margin:0;text-align:center}' +
+    /* 5. рейтинг (C) */
+    '.qzme.dmo-clip .qzscore{display:inline-block}.dmo-was{font-size:12px}' +
+    /* 8. табель (C) */
+    '.dmo-scan{position:absolute;top:6px;bottom:6px;left:0;width:2px;background:linear-gradient(transparent,var(--gold),transparent);opacity:0;pointer-events:none;z-index:3}' +
+    /* 9. отчёт (C) */
+    '.dmo-rg{display:flex;align-items:center;gap:14px;margin:10px 0 12px}.dmo-rg svg{flex:none}.dmo-rg .dmo-ser{font-size:22px;line-height:1.1}' +
+    '#doMon.dmo-p9 .do-kpi>div:first-child{display:none}#doMon.dmo-p9 .do-dr{border-top:1px solid;border-image:linear-gradient(90deg,var(--gold),transparent) 1}' +
+    /* 10. обмен сменами (C) */
+    '.dmo-xc{position:relative;height:150px;max-width:270px;margin:14px auto 0}.dmo-xc>svg{position:absolute;inset:0;width:100%;height:100%}' +
+    '.dmo-xd{position:absolute;top:14px;width:84px;height:122px;padding:0 4px;text-align:center;border-radius:14px;background:var(--card2,var(--card));border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:11px;color:var(--muted)}' +
+    '.dmo-xd b{font-size:30px;line-height:1;color:var(--ink)}.dmo-xd em{font-style:normal;font-size:9.5px;line-height:1.15;color:var(--goldink,var(--gold))}' +
+    '.dmo-chsw{position:relative;display:inline-block}.dmo-chsw>.chip:first-child{position:absolute;left:0;top:0;opacity:0;white-space:nowrap}' +
+    /* 11. допуски (C) */
+    '.dmo-dk{position:relative;text-align:center;overflow:hidden;padding:4px 0 10px}.dmo-dk .dmo-lvn{position:relative;height:34px}.dmo-dk .dmo-lvn span{position:absolute;left:0;right:0;font-size:28px;line-height:34px}' +
+    /* 12. пусто (C) */
+    '.dmo-em{text-align:center;padding:18px 8px 16px}.dmo-em svg{margin:0 auto}.dmo-em .dmo-ser{font-size:24px;margin-top:12px;color:var(--ink)}.dmo-em .meta{white-space:normal}' +
+    '.dmo-em.sm{padding:8px 4px 6px}.dmo-em.sm .dmo-ser{font-size:19px;margin-top:6px}' +
+    /* 7. премия / штраф (C) */
+    '.dmo-env{position:relative;height:330px;max-width:300px;margin:0 auto}.dmo-env>svg{position:absolute;left:0;right:0;bottom:16px;width:100%;max-width:260px;margin:0 auto}' +
+    '.dmo-envc{position:absolute;left:34px;right:34px;top:8px;max-width:240px;margin:0 auto;text-align:center;border:1px solid var(--gold);border-radius:18px;padding:13px 14px;background:var(--card);overflow:hidden;z-index:3}' +
+    /* ключевые кадры (как на странице вариантов) */
+    '@keyframes dmo-fi{from{opacity:0}}@keyframes dmo-fo{from{opacity:1}to{opacity:0}}' +
+    '@keyframes dmo-foU{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-10px)}}' +
+    '@keyframes dmo-up{from{opacity:0;transform:translateY(12px)}}@keyframes dmo-sl{from{opacity:0;transform:translateX(-24px)}}' +
+    '@keyframes dmo-pop{0%{opacity:0;transform:scale(.3)}60%{opacity:1;transform:scale(1.18)}100%{transform:scale(1)}}' +
+    '@keyframes dmo-drw{from{stroke-dashoffset:100}}@keyframes dmo-gx{from{transform:scaleX(0)}}' +
+    '@keyframes dmo-tap{0%{opacity:0;transform:scale(.3)}25%{opacity:.85;transform:scale(.7)}100%{opacity:0;transform:scale(1.5)}}' +
+    '@keyframes dmo-sheen{0%{opacity:1;transform:translateX(-120%) skewX(-18deg)}100%{opacity:1;transform:translateX(420%) skewX(-18deg)}}' +
+    '@keyframes dmo-drop{0%{opacity:0;transform:translateY(-70px)}55%{opacity:1;transform:translateY(5px)}75%{transform:translateY(-3px)}100%{transform:none}}' +
+    '@keyframes dmo-clipR{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}@keyframes dmo-clipU{from{clip-path:inset(100% 0 0 0)}to{clip-path:inset(0 0 0 0)}}' +
+    '@keyframes dmo-dot{0%{opacity:1;offset-distance:0%}100%{opacity:1;offset-distance:100%}}' +
+    '@keyframes dmo-dooro{0%{opacity:1;transform:scaleX(1)}35%{opacity:1;transform:scaleX(.12)}75%{opacity:1;transform:scaleX(.12)}100%{opacity:1;transform:scaleX(1)}}' +
+    '@keyframes dmo-dimT{from{text-decoration-color:transparent}}@keyframes dmo-dimO{from{opacity:1}}' +
+    '@keyframes dmo-rise{0%{transform:translateY(120px)}100%{transform:none}}@keyframes dmo-flap{0%{transform:scaleY(1)}100%{transform:scaleY(-1)}}' +
+    '@keyframes dmo-segOn{from{stroke:var(--line)}}@keyframes dmo-scan{0%{opacity:1;left:0}100%{opacity:0;left:100%}}' +
+    '@keyframes dmo-ring{from{stroke-dasharray:0 100}}' +
+    '@keyframes dmo-swapA{0%{transform:translate(-132px,0) rotate(0)}50%{transform:translate(-68px,-36px) rotate(-6deg)}100%{transform:none}}' +
+    '@keyframes dmo-swapB{0%{transform:translate(132px,0) rotate(0)}50%{transform:translate(68px,36px) rotate(6deg)}100%{transform:none}}' +
+    '.dmo-svg g[data-a^="pop"]{transform-box:fill-box;transform-origin:center}' +
+    '@media (prefers-reduced-motion:reduce){[class*="dmo-"],[class*="dmo-"] *,.trw.dmo-tk *{animation:none!important;transition:none!important}}';
+  document.head.appendChild(st);
+})();
+
+/* ---------- наблюдатель: экраны, которые рисуются асинхронно ---------- */
+function dmo_scan() {
+  DMO.tm = 0; if (!S.me) return;
+  var vk = S.view + '|' + (S.view === 'desk' ? (S.sub && S.sub.desk) || '' : '');
+  if (vk !== DMO.vk) { DMO.vk = vk; DMO.nav++; DMO.io.forEach(function (o) { o.disconnect(); }); DMO.io = []; }
+  var F = [dmo_p1scan, dmo_p4scan, dmo_p5scan, dmo_p6scan, dmo_p8scan, dmo_p9scan, dmo_p10scan, dmo_p11scan, dmo_p12scan];
+  for (var i = 0; i < F.length; i++) { try { F[i](); } catch (e) { console.warn('dmo', e); } }
+}
+(function () {
+  function start() {
+    if (DMO.mo || !document.body) return;
+    DMO.mo = new MutationObserver(function (ms) {
+      for (var i = 0; i < ms.length; i++) { var t = ms[i].target; if (!(t.classList && t.classList.contains('dmo-n'))) { if (!DMO.tm) DMO.tm = setTimeout(dmo_scan, 60); return; } }
+    });
+    DMO.mo.observe(document.body, { childList: true, subtree: true });
+  }
+  if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+})();
+
+/* =========================================================================================
+   1. «Пришёл» — вариант B: человечек входит в дверь, дверь закрывается, «На смене с …» падает сверху,
+   метка «Вовремя» подпрыгивает (при опоздании — спокойно проявляется). 0 — нажатие; дверь убирается после 2,4 с,
+   карточка «Смена» дальше выглядит как раньше. Нажимать «Ушёл» и всё остальное можно сразу.
+   ========================================================================================= */
+var DMO_DOOR = '<svg class="dmo-door dmo-svg" viewBox="0 0 62 70" aria-hidden="true" data-a="fo .3 2.1">' +
+  '<rect x="20" y="4" width="34" height="62" rx="3" fill="#121416" stroke="#9C7A35" stroke-width="1.5"/>' +
+  '<g data-a="sl .55 .45 sp"><circle cx="37" cy="26" r="7" fill="#E6C987"/><rect x="29" y="35" width="16" height="22" rx="7" fill="#D1A958"/></g>' +
+  '<rect x="20" y="4" width="34" height="62" rx="3" fill="#2B261C" stroke="#9C7A35" stroke-width="1.5" style="transform-origin:20px 35px;opacity:0" data-a="dooro .9 .3"/>' +
+  '<line x1="2" y1="66" x2="60" y2="66" stroke="#2A2D31" stroke-width="2"/></svg>';
+function dmo_p1scan() {
+  var P = DMO.p1; if (!P) return;
+  var off = (Date.now() - P.t0) / 1000; if (off > 2.4) return;
+  var w = $('cbClock'), card = w && w.querySelector('.hm-sh'); if (!card || card.getAttribute('data-dmo1') === String(P.t0)) return;
+  var stK = ''; try { stK = cb_state().k; } catch (e) {} if (stK !== 'on' && stK !== 'q_in') return;
+  card.setAttribute('data-dmo1', String(P.t0));
+  if (dmo_rm()) return; /* «Уменьшить движение»: сразу итоговое состояние — карточка как есть */
+  card.classList.add('dmo-p1');
+  var big = card.querySelector('.hm-shb'), chip = card.querySelector('.hm-shc'), btn = $('clk');
+  card.insertAdjacentHTML('beforeend', DMO_DOOR);
+  if (big && !big.querySelector('.dmo-in')) {
+    var inn = document.createElement('span'); inn.className = 'dmo-in';
+    while (big.firstChild) inn.appendChild(big.firstChild);
+    big.appendChild(inn); inn.setAttribute('data-a', 'drop .55 .75');
+    var old = document.createElement('span'); old.className = 'dmo-old'; old.textContent = dmo_t('Вы не на смене'); old.setAttribute('data-a', 'foU .2 .55'); big.appendChild(old);
+  }
+  if (chip) chip.setAttribute('data-a', P.late ? 'fi .45 1.15' : 'pop .45 1.15 sp');
+  if (btn && !btn.querySelector('.dmo-b0')) {
+    btn.classList.add('dmo-rel');
+    for (var i = 0; i < btn.children.length; i++) btn.children[i].setAttribute('data-a', 'pop .4 .8 sp');
+    btn.insertAdjacentHTML('beforeend', '<span class="dmo-b0" aria-hidden="true" data-a="fo .2 .5">' + icon('pin', 22) + '<span>' + dmo_e('Пришёл') + '</span></span><i class="dmo-tap" aria-hidden="true" data-a="tap .5 .2"></i>');
+  }
+  dmo_run(card, off);
+  clearTimeout(DMO.p1tm);
+  DMO.p1tm = setTimeout(function () { /* после анимации — убрать дверь и служебные слои, карточка как была */
+    DMO.p1tm = 0; document.querySelectorAll('.dmo-door,.dmo-old,.dmo-b0,.dmo-tap').forEach(function (x) { x.remove(); });
+  }, Math.max(0, (2.45 - off) * 1000));
+}
+(function () {
+  if (typeof cb_press === 'function') {
+    var cp0 = cb_press;
+    cb_press = function (action, btn, sure) { DMO.clk = { action: action, t: Date.now(), sure: sure }; return cp0.apply(this, arguments); };
+  }
+  if (typeof cb_after === 'function') {
+    var ca0 = cb_after;
+    cb_after = async function (action, r) {
+      var d = r && r.data, clk = DMO.clk && DMO.clk.action === action && Date.now() - DMO.clk.t < 60000 ? DMO.clk : null;
+      if (action === 'out' && d && d.ok && clk && clk.sure !== 'kiosk') DMO.out = { t: Date.now(), d: d };
+      var res = await ca0.apply(this, arguments);
+      try {
+        if (action === 'in' && d && d.ok && clk && clk.sure !== 'kiosk' && S.att && !S.att.clock_out) { DMO.p1 = { t0: clk.t, late: !!(S.att.is_late && S.att.late_min > 0) }; dmo_p1scan(); }
+      } catch (e) {}
+      setTimeout(function () { DMO.out = null; }, 1500);
+      return res;
+    };
+  }
+  if (typeof phAfterClock === 'function') {
+    var pa0 = phAfterClock;
+    phAfterClock = function (action, then) {
+      if (action === 'out' && DMO.out) { var o = DMO.out; DMO.out = null; return pa0.call(this, action, function () { if (then) then(); dmo_p2wait(o); }); }
+      return pa0.apply(this, arguments);
+    };
+  }
+})();
+
+/* =========================================================================================
+   2. «Ушёл» — итог смены, вариант C: золотая дуга дня от прихода до ухода, точка «садится»,
+   «Заработано сегодня» досчитывается крупно в фирменном шрифте. Лист открывается после фото закрытия (если оно нужно).
+   ========================================================================================= */
+function dmo_p2wait(o) {
+  clearTimeout(DMO.outTm); var n = 0;
+  (function tryOpen() {
+    DMO.outTm = 0; if (!S.me || S.view !== 'home') return;
+    var L = $('layer'); if (L && L.innerHTML.trim() && n++ < 40) { DMO.outTm = setTimeout(tryOpen, 500); return; }
+    if (L && !L.innerHTML.trim()) dmo_p2(o);
+  })();
+}
+async function dmo_p2(o) {
+  var a = S.att || {}, d = o.d || {}, me = S.me, earn = null, tk = null, mon = null;
+  try { var E = await earnToday(me, null, today()); earn = E && E.total != null ? +E.total : null; } catch (e) {}
+  try { var r = await sb.from('tasks').select('*').eq('assignee_id', me.id).eq('day', today()); var L = (r && r.data) || []; if (L.length) tk = [L.filter(function (t) { return t.status === 'done'; }).length, L.length]; } catch (e) {}
+  try { if (typeof ca_month === 'function') { var X = await ca_month(me); if (X && X.acc > 0) mon = X.acc; } } catch (e) {}
+  if (!S.me || S.view !== 'home' || ($('layer') && $('layer').innerHTML.trim())) return;
+  var tin = a.clock_in ? hm(a.clock_in) : '', tout = a.clock_out ? hm(a.clock_out) : hm(new Date().toISOString());
+  var wm = d.worked_min != null ? d.worked_min : a.worked_min; try { if (CB.day && CB.day.day === today() && CB.day.n > 1) wm = CB.day.min; } catch (e) {}
+  var ARC = 'M20 110 A110 110 0 0 1 240 110', monTxt = '';
+  if (mon) { var mn = ''; try { mn = h(ca_monName(today().slice(0, 7), true)) + ' '; } catch (e) {}
+    monTxt = mn + '<span class="num">' + (mon >= 1e6 ? String(Math.round(mon / 1e4) / 100).replace('.', ',') : money(mon)) + '</span> <span>' + dmo_e(mon >= 1e6 ? 'млн сум' : 'сум') + '</span>'; }
+  var html = '<div class="dmo-p2">' + sheetHead(dmo_e('Итог смены') + ' · <span class="num">' + h(dm(today())) + '</span>', '') +
+    '<svg class="dmo-svg" viewBox="0 0 260 132" style="width:100%;max-width:340px;margin:6px auto 0" aria-hidden="true">' +
+    '<path d="' + ARC + '" fill="none" stroke="var(--line)" stroke-width="2" stroke-dasharray="3 5"/>' +
+    '<path class="dmo-dr" pathLength="100" d="' + ARC + '" fill="none" stroke="var(--gold)" stroke-width="2.5" stroke-linecap="round" data-a="drw 1.4 .25 io"/>' +
+    '<circle r="6" fill="var(--gold)" style="offset-path:path(\'' + ARC + '\');offset-distance:100%" data-a="dot 1.4 .25 io"/>' +
+    '<text x="20" y="128" font-size="10" fill="var(--muted)" text-anchor="middle">' + h(tin) + '</text><text x="240" y="128" font-size="10" fill="var(--muted)" text-anchor="middle">' + h(tout) + '</text>' +
+    '<text x="130" y="72" text-anchor="middle" font-size="12" fill="var(--muted)">' + dmo_e('отработано') + '</text>' +
+    '<text x="130" y="97" text-anchor="middle" font-size="24" fill="var(--ink)" font-family="Cormorant Garamond, Georgia, serif" font-weight="600">' + h(wm != null ? fmtMin(wm) : '—') + '</text></svg>' +
+    '<div class="dmo-glc" style="margin:16px 0 12px" data-a="gx .7 1.4"></div>' +
+    (earn > 0 ? '<div class="meta" style="font-size:11px;text-align:center">' + dmo_e('Заработано сегодня') + '</div>' +
+      '<div class="dmo-ser num dmo-big"><span data-c="1" data-cd="1.2" data-ct="1.4">' + money(earn) + '</span> <small>' + dmo_e('сум') + '</small></div>' : '') +
+    ((tk || monTxt) ? '<div class="dmo-chips" data-a="fi .5 2.3">' + (tk ? '<span class="chip ' + (tk[0] === tk[1] ? 't-ok' : 't-info') + '"><span>' + dmo_e('Задачи') + '</span> <b class="num">' + tk[0] + '</b> <span>' + dmo_e('из') + '</span> <b class="num">' + tk[1] + '</b></span>' : '') +
+      (monTxt ? '<span class="chip t-gold">' + monTxt + '</span>' : '') + '</div>' : '') +
+    '<button type="button" class="btn gold full" id="dmoP2ok" style="margin-top:14px">' + dmo_e('Понятно') + '</button></div>';
+  sheet(html);
+  var b = $('dmoP2ok'); if (b) b.onclick = closeLayer;
+  var box = document.querySelector('#layer .dmo-p2'); dmo_run(box, 0);
+}
+
+/* =========================================================================================
+   3. «Готово» — вариант C: по строке скользит золотой блик, тонкая золотая галочка, линия зачёркивания,
+   строка гаснет до полутона. 0,85 с от нажатия; список перерисовывается сразу после (другие строки можно нажимать).
+   ========================================================================================= */
+function dmo_p3(id, t0) {
+  var off = (Date.now() - t0) / 1000; if (off > 0.85) return;
+  document.querySelectorAll('[data-tk="' + id + '"]').forEach(function (b) {
+    var row = b.closest('.trw'); if (!row || row.classList.contains('dmo-tk')) return;
+    row.classList.add('dmo-tk');
+    if (dmo_rm()) return;
+    var c = row.querySelector('.tk-c'), ttl = row.querySelector('.ttl'), go2 = row.querySelector('.tgo');
+    row.insertAdjacentHTML('afterbegin', '<i class="dmo-sheen" style="width:40%" aria-hidden="true" data-a="sheen .5 .25 io"></i>');
+    if (c) c.innerHTML = '<svg class="dmo-svg" viewBox="0 0 16 16" aria-hidden="true"><path class="dmo-dr" pathLength="100" d="' + DMO_TICK + '" fill="none" stroke="var(--goldink,var(--gold))" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" data-a="drw .3 .35"/></svg>';
+    if (ttl) ttl.setAttribute('data-a', 'dimT .3 .5');
+    if (go2) go2.setAttribute('data-a', 'dimO .3 .55');
+    dmo_run(row, off);
+  });
+  DMO.tkUntil = Math.max(DMO.tkUntil, t0 + 900); DMO.tkView = S.view;
+}
+function dmo_defer(reload) {
+  if (typeof reload !== 'function') return reload;
+  return function () {
+    var self = this, args = arguments, w = DMO.tkUntil - Date.now(), v = S.view;
+    if (w <= 0 || dmo_rm()) return reload.apply(self, args);
+    setTimeout(function () { if (S.view === v) reload.apply(self, args); }, w); /* ушли с экрана — перерисовывать нечего */
+  };
+}
+(function () {
+  if (typeof quickToggle === 'function') {
+    var q0 = quickToggle;
+    quickToggle = function (t, reload, btn) { if (t && t.status !== 'done') DMO.tkClk = { id: t.id, t: Date.now() }; return q0.call(this, t, dmo_defer(reload), btn); };
+  }
+  if (typeof cd_done === 'function') {
+    var d0 = cd_done;
+    cd_done = function (t, reload, btn) { if (t) DMO.tkClk = { id: t.id, t: Date.now() }; return d0.call(this, t, dmo_defer(reload), btn); };
+  }
+  var r0 = sb.rpc;
+  sb.rpc = function (n, a) {
+    var p = r0.apply(this, arguments);
+    if (n === 'task_status' && a && a.p_status === 'done') {
+      var c = DMO.tkClk && DMO.tkClk.id === a.p_id && Date.now() - DMO.tkClk.t < 20000 ? DMO.tkClk : { t: Date.now() };
+      Promise.resolve(p).then(function (x) {
+        if (!x || x.error) return; var st = x.data && x.data.status;
+        if (st && st !== 'done') return; /* «на проверке» — это ещё не «Готово» */
+        try { dmo_p3(a.p_id, c.t); } catch (e) {}
+      }, function () {});
+    }
+    return p;
+  };
+})();
+
+/* =========================================================================================
+   4. Тест дня — результат, вариант C: золотые ветви рисуются по сторонам, счёт поднимается из-под маски,
+   золотая черта, строка с баллами и временем, блик. Только сразу после 10-го ответа; при повторном открытии — итоговый кадр.
+   ========================================================================================= */
+function dmo_branches() {
+  var lf = function (x, y, r, d) { return '<g data-a="pop .3 ' + d + '"><ellipse cx="' + x + '" cy="' + y + '" rx="5" ry="10" transform="rotate(' + r + ' ' + x + ' ' + y + ')"/></g>'; };
+  return '<svg class="dmo-svg" viewBox="0 0 200 110" aria-hidden="true">' +
+    '<path class="dmo-dr" pathLength="100" d="M70 100 C40 90 28 60 34 22" fill="none" stroke="var(--gold)" stroke-opacity=".75" stroke-width="2" data-a="drw .9 .2 io"/>' +
+    '<path class="dmo-dr" pathLength="100" d="M130 100 C160 90 172 60 166 22" fill="none" stroke="var(--gold)" stroke-opacity=".75" stroke-width="2" data-a="drw .9 .2 io"/>' +
+    '<g fill="var(--gold)">' + lf(38, 40, -25, '.5') + lf(34, 62, -50, '.65') + lf(46, 82, -70, '.8') + lf(162, 40, 25, '.5') + lf(166, 62, 50, '.65') + lf(154, 82, 70, '.8') + '</g></svg>';
+}
+var DMO_QZ = null;
+function dmo_p4(box, fresh) {
+  var hero = box && box.querySelector('.qzhero'), sc = hero && hero.querySelector('.qzscore'); if (!sc || !dmo_mark(hero, '4')) return;
+  hero.classList.remove('qzpop'); hero.classList.add('dmo-clip');
+  var wrap = document.createElement('div'); wrap.className = 'dmo-qz'; wrap.innerHTML = dmo_branches();
+  sc.parentNode.insertBefore(wrap, sc); wrap.appendChild(sc); sc.setAttribute('data-a', 'clipU .7 .7');
+  var msg = wrap.nextElementSibling; if (msg && msg.classList.contains('meta')) msg.setAttribute('data-a', 'fi .4 1.2');
+  var stats = hero.querySelector('.stats'); if (stats) { stats.insertAdjacentHTML('beforebegin', '<div class="dmo-gl" style="margin:12px 30px;transform-origin:center" data-a="gx .6 1.3"></div>'); stats.setAttribute('data-a', 'up .4 1.5'); }
+  hero.insertAdjacentHTML('afterbegin', '<i class="dmo-sheen" aria-hidden="true" data-a="sheen 1 1.4 io"></i>');
+  if (fresh) dmo_vis(hero, function () { dmo_run(hero, 0); });
+}
+function dmo_p4scan() { if (S.view !== 'fun' || !DMO_QZ) return; var b = $('fn'); if (b && b.querySelector('.qzhero .qzscore') && !b.querySelector('.qzhero[data-dmo4]')) dmo_p4(b, false); }
+(function () {
+  if (typeof fnQuizResult !== 'function') return;
+  var f0 = fnQuizResult;
+  fnQuizResult = function (box, D, fresh) { var r = f0.apply(this, arguments); DMO_QZ = 1; try { dmo_p4(box, !!fresh); } catch (e) { console.warn('dmo4', e); } return r; };
+})();
+
+/* =========================================================================================
+   5. Рейтинг — «ваше место», вариант C: цифра места поднимается из-под маски, под ней золотая черта,
+   балл досчитывается, полосы «Дисциплина / Задачи / Тест дня» растут, блик. «было N» — если место изменилось
+   с прошлого просмотра (запоминается на этом телефоне). У владельца (без «ваше место») — растут полосы в списке.
+   ========================================================================================= */
+function dmo_p5scan() {
+  if (S.view !== 'fun') return; var box = $('fn'); if (!box) return;
+  var me = box.querySelector('.qzme'), anim = false;
+  if (me && me.querySelector('.qzscore') && dmo_mark(me, '5')) {
+    var sc = me.querySelector('.qzscore'), pl = parseInt(sc.textContent, 10), per = S.sub.fP || 'month';
+    var k = 'dmo-rate:' + dmo_me() + ':' + per + ':' + today().slice(0, 7), was = +dmo_ls(k) || 0;
+    if (pl > 0) dmo_ls(k, String(pl));
+    var ball = me.querySelector('.meta b.num'); if (ball) { ball.setAttribute('data-c', '1'); ball.setAttribute('data-cd', '1.2'); ball.setAttribute('data-ct', '.5'); }
+    me.classList.add('dmo-clip'); sc.setAttribute('data-a', 'clipU .6 .2');
+    sc.insertAdjacentHTML('afterend', '<div class="dmo-gl" style="width:46px;height:2px" data-a="gx .5 .6"></div>' +
+      (was && pl > 0 && was !== pl ? '<div class="meta dmo-was"><span>' + dmo_e('было') + '</span> <b class="num">' + was + '</b></div>' : ''));
+    me.querySelectorAll('.qzm i').forEach(function (i, n) { i.style.transformOrigin = 'left'; i.setAttribute('data-a', 'gx .8 ' + (0.6 + n * 0.15).toFixed(2)); });
+    me.insertAdjacentHTML('afterbegin', '<i class="dmo-sheen" aria-hidden="true" data-a="sheen 1 1.6 io"></i>');
+    anim = true;
+  }
+  var rows = [].slice.call(box.querySelectorAll('.qzr:not([data-dmo5])'), 0, 12);
+  rows.forEach(function (r, n) { r.setAttribute('data-dmo5', '1'); r.querySelectorAll('.qzm i').forEach(function (i, j) { i.style.transformOrigin = 'left'; i.setAttribute('data-a', 'gx .8 ' + (0.3 + n * 0.06 + j * 0.15).toFixed(2)); }); });
+  if ((anim || rows.length) && dmo_once('p5' + (S.sub.fP || 'm') + (S.sub.fPos || ''))) {
+    if (me && anim) dmo_vis(me, function () { dmo_run(me, 0); });
+    rows.forEach(function (r) { dmo_vis(r, function () { dmo_run(r, 0); }); });
+  }
+}
+
+/* =========================================================================================
+   6. Мой расчёт / расчётный лист — вариант C: строки «пишутся» по очереди слева направо, золотая черта
+   перед «К выплате», итог досчитывается. Сумма вверху досчитывается вместе со строками.
+   ========================================================================================= */
+function dmo_p6scan() {
+  if (S.view !== 'payslip') return;
+  var top = document.querySelector('#main .ps-top'), cards = document.querySelectorAll('#main .ps-card');
+  if (!top || !cards.length || !dmo_mark(top, '6')) return;
+  var lines = [].slice.call(document.querySelectorAll('#main .ps-card .ps-line')), n = lines.length, step = n > 1 ? Math.min(0.25, 1.0 / (n - 1)) : 0.25;
+  lines.forEach(function (l, i) { l.setAttribute('data-a', 'clipR .4 ' + (0.2 + i * step).toFixed(2)); });
+  var bs = document.querySelectorAll('#main .ps-card .ps-line.b'), pay = bs.length ? bs[bs.length - 1] : null;
+  if (pay) {
+    pay.insertAdjacentHTML('beforebegin', '<div class="dmo-gl" style="margin:8px 0 2px" data-a="gx .6 1.5"></div>');
+    var pv = pay.querySelector('.ps-val'); if (pv) { pv.setAttribute('data-c', '1'); pv.setAttribute('data-cd', '1'); pv.setAttribute('data-ct', '1.7'); }
+  }
+  var big = top.querySelector('.ps-big'); if (big) { big.setAttribute('data-c', '1'); big.setAttribute('data-cd', '1.2'); big.setAttribute('data-ct', '.2'); }
+  if (!dmo_once('p6')) return;
+  dmo_vis(top, function () { dmo_run(top, 0); });
+  [].forEach.call(cards, function (c) { dmo_vis(c, function () { dmo_run(c, 0); }); });
+}
+
+/* =========================================================================================
+   7. Премия и штраф — вариант C: конверт открывается, из него поднимается карточка с золотой рамкой и бликом.
+   Штраф — без конверта и без движения «радости»: карточка спокойно проявляется, с причиной.
+   Открывается по нажатию на уведомление «Премия» / «Штраф»; кнопка «Мой расчёт» ведёт туда же, куда раньше.
+   ========================================================================================= */
+function dmo_p7(n, cont) {
+  var fine = n.title === 'Штраф', parts = String(n.body || '').split(' · '), amt = parts.shift() || '', why = parts.join(' · ');
+  var am = /^([+−-]?)\s*([\d\s ]+)/.exec(amt), num = am ? am[2].trim() : amt, mon = '';
+  try { mon = ca_monName(String(n.at || today()).slice(0, 7)); } catch (e) {}
+  var card = '<div class="dmo-cap">' + dmo_e(fine ? 'Штраф' : 'Премия') + (mon ? ' · ' + h(mon) : '') + '</div>' +
+    '<div class="dmo-ser num" style="font-size:36px;line-height:1.1;margin-top:6px;color:' + (fine ? 'var(--bad)' : 'var(--goldink,var(--gold))') + '">' + (fine ? '−' : '+') + '<span' + (fine ? '' : ' data-c="1" data-cd=".8" data-ct="1.1"') + '>' + h(num) + '</span></div>' +
+    '<div class="meta" style="font-size:12px;white-space:normal">' + dmo_e('сум') + (why ? ' · ' + h(why) : '') + '</div>' +
+    (n.at ? '<div class="meta" style="font-size:11px;margin-top:6px"><span class="num">' + h(dm(String(n.at).slice(0, 10))) + ' ' + h(hm(n.at)) + '</span></div>' : '');
+  var html = fine
+    ? '<div class="dmo-p7">' + sheetHead(dmo_e('Штраф'), '') + '<div class="card" style="margin-top:10px;text-align:center;border-left:3px solid var(--dj-fbad,var(--bad))" data-a="fi .5 .2">' + card + '</div>'
+    : '<div class="dmo-p7">' + sheetHead(dmo_e('Премия'), '') + '<div class="dmo-env">' +
+      '<svg class="dmo-svg" viewBox="0 0 260 120" aria-hidden="true"><rect x="20" y="10" width="220" height="110" rx="10" fill="color-mix(in srgb,var(--gold) 10%,var(--card))" stroke="var(--gold)"/></svg>' +
+      '<div class="dmo-envc" data-a="rise .9 .65 io">' + DMO_SHEEN.replace('aria-hidden', 'data-a="sheen .8 1.5 io" aria-hidden') + card + '</div>' +
+      '<svg class="dmo-svg" viewBox="0 0 260 120" aria-hidden="true" style="pointer-events:none;z-index:4"><path d="M20 40 L130 95 L240 40 L240 120 L20 120 Z" fill="var(--card)" stroke="var(--gold)"/>' +
+      '<path d="M20 10 L130 70 L240 10" fill="color-mix(in srgb,var(--gold) 22%,var(--card))" stroke="var(--gold)" style="transform-origin:130px 10px;transform:scaleY(-1)" data-a="flap .5 .2 io"/></svg></div>';
+  html += '<div class="grid2" style="margin-top:12px"><button type="button" class="btn ghost" id="dmoP7x">' + dmo_e('Закрыть') + '</button><button type="button" class="btn gold" id="dmoP7go">' + dmo_e('Мой расчёт') + '</button></div></div>';
+  sheet(html);
+  $('dmoP7x').onclick = closeLayer; $('dmoP7go').onclick = function () { cont(); };
+  dmo_run(document.querySelector('#layer .dmo-p7'), 0);
+}
+(function () {
+  if (typeof openRef !== 'function') return;
+  var o0 = openRef;
+  openRef = async function (rt, rid, nid, title) {
+    var self = this, args = arguments;
+    if (rt === 'payslip' && (title === 'Премия' || title === 'Штраф') && !DMO.p7skip) {
+      var n = (S.notif || []).filter(function (x) { return x.id === +nid; })[0];
+      if (n) { try { if (nid) markRead(+nid); } catch (e) {} return dmo_p7(n, function () { DMO.p7skip = 1; try { return o0.apply(self, args); } finally { DMO.p7skip = 0; } }); }
+    }
+    return o0.apply(this, arguments);
+  };
+})();
+
+/* =========================================================================================
+   8. Табель — вариант C: золотая линия проходит по дням слева направо и «проявляет» табель,
+   итоги (явки, часы, опоздания, прогулы) досчитываются.
+   ========================================================================================= */
+function dmo_p8scan() {
+  if (S.view !== 'cdtab') return;
+  var tw = document.querySelector('#main .cd-tw'), sum = document.querySelector('#main .cd-sum');
+  if (!tw || !dmo_mark(tw, '8')) return;
+  var card = tw.parentNode; card.classList.add('dmo-rel');
+  tw.setAttribute('data-a', 'clipR 1.2 .2 lin');
+  card.insertAdjacentHTML('beforeend', '<i class="dmo-scan" aria-hidden="true" data-a="scan 1.2 .2 lin"></i>');
+  var T = [[1, 1.2], [1, 1.3], [0.5, 1.4], [0.4, 1.6]];
+  if (sum && dmo_mark(sum, '8')) sum.querySelectorAll('.stat .v').forEach(function (v, i) { var x = T[Math.min(i, 3)]; v.setAttribute('data-c', '1'); v.setAttribute('data-cd', x[0]); v.setAttribute('data-ct', x[1]); });
+  if (!dmo_once('p8')) return;
+  dmo_vis(card, function () { dmo_run(card, 0); if (sum) dmo_run(sum, 0); });
+}
+
+/* =========================================================================================
+   9. Отчёт владельца (Пульт → Отчёты) — вариант C: золотое кольцо выполнения смен рисуется до процента,
+   службы выходят строками с тонкими золотыми разделителями.
+   ========================================================================================= */
+function dmo_ring(pct, size, sw, txt) {
+  var r = size / 2 - sw, c = size / 2;
+  return '<svg class="dmo-svg" width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '" aria-hidden="true"><circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="var(--line)" stroke-width="' + sw + '"/>' +
+    '<circle pathLength="100" cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="var(--gold)" stroke-width="' + sw + '" stroke-linecap="round" style="stroke-dasharray:' + pct + ' 100" transform="rotate(-90 ' + c + ' ' + c + ')" data-a="ring 1.2 .2 io"/>' +
+    '<text x="' + c + '" y="' + (c + 6) + '" text-anchor="middle" font-family="Cormorant Garamond, Georgia, serif" font-weight="700" font-size="' + Math.round(size * 0.23) + '" fill="var(--goldink,var(--gold))">' + txt + '</text></svg>';
+}
+function dmo_p9scan() {
+  if (S.view !== 'desk' || !S.sub || S.sub.desk !== 'rep') return;
+  var mon = $('doMon'), kpi = mon && mon.querySelector('.do-kpi'); if (!kpi || !dmo_mark(mon, '9')) return;
+  var b = kpi.querySelector('div:first-child b'), m = b && /(\d[\d\s ]*)\s*\/\s*(\d[\d\s ]*)/.exec(b.textContent);
+  if (m) {
+    var a = +m[1].replace(/\D/g, ''), t = +m[2].replace(/\D/g, '');
+    if (t > 0) {
+      var p = Math.min(100, a / t * 100), pt = (Math.round(p * 10) / 10).toString().replace('.', ',');
+      var txt = '<tspan>' + pt + '</tspan>%';
+      kpi.insertAdjacentHTML('beforebegin', '<div class="dmo-rg">' + dmo_ring(+p.toFixed(1), 96, 7, txt) +
+        '<div><div class="dmo-ser"><span class="num">' + a + '</span> <span>' + dmo_e('из') + '</span> <span class="num">' + t + '</span></div><div class="meta">' + dmo_e('смен отработано') + '</div></div></div>');
+      mon.classList.add('dmo-p9');
+      var tsp = mon.querySelector('.dmo-rg tspan'); if (tsp) { tsp.setAttribute('data-c', '1'); tsp.setAttribute('data-cd', '1.2'); tsp.setAttribute('data-ct', '.2'); }
+    }
+  }
+  mon.querySelectorAll('.do-dr').forEach(function (r, i) { r.setAttribute('data-a', 'sl .4 ' + (0.9 + Math.min(i, 8) * 0.15).toFixed(2)); });
+  if (!dmo_once('p9' + (mon.querySelector('h2') || {}).textContent)) return;
+  dmo_vis(mon, function () { dmo_run(mon, 0); });
+}
+
+/* =========================================================================================
+   10. Обмен сменами — вариант C: две карточки дней меняются местами по золотой петле,
+   «Ждёт руководителя» спокойно сменяется на «Обмен подтверждён». Один раз — когда сотрудник впервые видит
+   подтверждённый обмен (статусы запоминаются на этом телефоне).
+   ========================================================================================= */
+function dmo_p10scan() {
+  if (S.view !== 'sched') return;
+  var xc = $('xcCard'); if (!xc || !dmo_mark(xc, '10')) return; /* карточка «Обмен сменами» в «Мой график»: подтверждённые из неё уходят в «Историю» */
+  var me = dmo_me();
+  Promise.resolve(sb.from('shift_exchanges').select('*').or('from_id.eq.' + me + ',to_id.eq.' + me)).then(function (q) {
+    var L = (q && q.data) || [], k = 'dmo-xc:' + me, first = !dmo_ls(k), M = dmo_j(k, {}), ch = null;
+    L.forEach(function (x) { var was = M[x.id]; if (x.status === 'done' && was && was !== 'done' && (!ch || String(x.updated_at || '') > String(ch.updated_at || ''))) ch = x; M[x.id] = x.status; });
+    dmo_ls(k, JSON.stringify(M));
+    if (!ch || first || !xc.isConnected || S.view !== 'sched') return;
+    dmo_p10(ch, xc);
+  }, function () {});
+}
+function dmo_p10(x, before) {
+  var me = dmo_me(), A = emp(x.from_id), B = emp(x.to_id), swap = x.kind === 'swap';
+  var nm = function (e) { return e && e.id === me ? dmo_t('вы') : e ? e.first_name : '—'; };
+  var rng = function (e, d, c) { try { var s = myShiftToday(e, d, c); return s && !s.off ? s.range : (s && s.name) || ''; } catch (z) { return ''; } };
+  var cells = x.cells || {};
+  var day = function (d, who, extra, anim) {
+    return '<div class="dmo-xd" style="' + extra + '" data-a="' + anim + '"><small>' + dmo_e(WD[weekday(d)]) + '</small><b class="dmo-ser">' + d.slice(8, 10) + '</b><span class="num">' + h(rng(A, d, d === x.from_day ? cells.fA : cells.tB) || '') + '</span><em><span>' + dmo_e('теперь') + '</span> ' + h(who) + '</em></div>';
+  };
+  var html = '<div class="card dmo-clip" data-dmo10c="1"><div class="dmo-cap">' + dmo_e('Обмен сменами') + '</div><div class="dmo-xc">' +
+    '<svg class="dmo-svg" viewBox="0 0 270 150" aria-hidden="true"><path class="dmo-dr" pathLength="100" d="M70 75 C110 20 160 20 200 75 C160 130 110 130 70 75" fill="none" stroke="var(--gold)" stroke-width="1.2" data-a="drw 1 .2"/></svg>' +
+    day(x.from_day, nm(B), 'left:calc(50% + 24px)', 'swapA 1 .5 io') + (swap ? day(x.to_day, nm(A), 'left:calc(50% - 108px);border-color:var(--gold)', 'swapB 1 .5 io') : '') + '</div>' +
+    '<div style="text-align:center;margin-top:8px"><span class="dmo-chsw"><span class="chip t-gold" data-a="fo .3 1.6">' + dmo_e('Ждёт руководителя') + '</span><span class="chip t-ok" data-a="fi .4 1.7">' + dmo_e('Обмен подтверждён') + '</span></span></div>' +
+    '<div class="dmo-ser" style="font-size:20px;text-align:center;margin-top:12px" data-a="up .4 1.9">' + dmo_e(swap ? 'Смены поменялись' : 'Смена передана') + '</div>' +
+    '<div class="meta" style="text-align:center">' + dmo_e('График обновлён') + '</div></div>';
+  before.insertAdjacentHTML('beforebegin', html);
+  var c = before.previousElementSibling; dmo_vis(c, function () { dmo_run(c, 0); });
+}
+
+/* =========================================================================================
+   11. Допуск к работе — вариант C: кольцо из делений (по числу навыков) загорается по одному до числа допусков,
+   название уровня сменяется в фирменном шрифте, золотая черта, последний выданный допуск. Анимация — когда
+   допусков стало больше с прошлого просмотра (или первый раз); иначе итоговый кадр. Только где допуски есть.
+   ========================================================================================= */
+function dmo_p11scan() {
+  if (S.view !== 'dkmy') return;
+  var lv = document.querySelector('#main .dk-lv'), D = typeof DK !== 'undefined' ? DK.my : null;
+  if (!lv || !D || !D.level || !dmo_mark(lv, '11')) return;
+  var L = D.skills || [], tot = L.length || D.level.total || 0, ok = D.level.approved || 0, n = D.level.level || 1; if (!tot) return;
+  var k = 'dmo-dk:' + dmo_me(), was = dmo_j(k, null), grow = !was || ok > was.ok;
+  dmo_ls(k, JSON.stringify({ ok: ok, lv: n }));
+  var seg = '', R = 62, gap = tot > 24 ? 1 : 3, newSeg = was ? Math.max(0, was.ok) : 0;
+  for (var j = 0; j < tot; j++) {
+    var a0 = (-90 + j * 360 / tot + gap) * Math.PI / 180, a1 = (-90 + (j + 1) * 360 / tot - gap) * Math.PI / 180;
+    var x0 = 75 + R * Math.cos(a0), y0 = 75 + R * Math.sin(a0), x1 = 75 + R * Math.cos(a1), y1 = 75 + R * Math.sin(a1), big = 360 / tot - 2 * gap > 180 ? 1 : 0;
+    seg += '<path d="M' + x0.toFixed(1) + ' ' + y0.toFixed(1) + ' A' + R + ' ' + R + ' 0 ' + big + ' 1 ' + x1.toFixed(1) + ' ' + y1.toFixed(1) + '" fill="none" stroke="' + (j < ok ? 'var(--gold)' : 'var(--line)') + '" stroke-width="8" stroke-linecap="round"' + (j < ok && (!was || j >= newSeg) ? ' data-a="segOn .25 ' + (0.3 + (j - (was ? newSeg : 0)) * 0.16).toFixed(2) + '"' : '') + '/>';
+  }
+  var nm = function (l) { return dmo_t(dk_lvName(l)); }, oldN = was && was.lv !== n ? was.lv : 0;
+  var last = L.filter(function (s) { return s.status === 'approved'; }).sort(function (a, b) { return String(b.approved_at || '').localeCompare(String(a.approved_at || '')); })[0];
+  var html = '<div class="dmo-dk">' + DMO_SHEEN.replace('aria-hidden', 'data-a="sheen .9 2 io" aria-hidden') +
+    '<svg class="dmo-svg" viewBox="0 0 150 150" width="150" height="150" style="margin:4px auto 0" aria-hidden="true">' + seg +
+    '<text x="75" y="84" text-anchor="middle" font-family="Cormorant Garamond, Georgia, serif" font-weight="700" font-size="34" fill="currentColor">' + ok + '/' + tot + '</text></svg>' +
+    '<div class="dmo-cap" style="margin-top:4px"><span>' + dmo_e('Уровень') + '</span> <span class="num">' + n + '</span></div>' +
+    '<div class="dmo-lvn">' + (oldN ? '<span class="dmo-ser" style="opacity:0" data-a="foU .35 1.3">' + h(nm(oldN)) + '</span>' : '') + '<span class="dmo-ser" style="color:var(--gold-hi,var(--gold))" data-a="up .4 ' + (oldN ? '1.45' : '.9') + '">' + h(nm(n)) + '</span></div>' +
+    '<div class="dmo-glc" style="margin:12px 20px" data-a="gx .6 1.6"></div>' +
+    (last ? '<div class="meta" style="white-space:normal" data-a="fi .3 1.8">' + h(dk_title(last)) + ' — ' + dmo_e('допуск выдан') + (last.approved_by ? '<br><span>' + dmo_e('Засчитал(а)') + '</span> ' + h(last.approved_by) : '') + '</div>' : '') + '</div>';
+  lv.insertAdjacentHTML('afterbegin', html);
+  var box = lv.querySelector('.dmo-dk');
+  if (grow) dmo_vis(box, function () { dmo_run(box, 0); });
+}
+
+/* =========================================================================================
+   12. Пустой экран — вариант C: тонкие золотые линии рисуют круг и галочку, надпись в фирменном шрифте.
+   Один раз при открытии экрана, дальше неподвижно (перерисовки списка не повторяют анимацию).
+   Задачи (Открытые, мои), «Мои задачи сегодня» на главной, Уведомления.
+   ========================================================================================= */
+function dmo_emGfx(sz) {
+  return '<svg class="dmo-svg" viewBox="0 0 120 120" width="' + sz + '" height="' + sz + '" aria-hidden="true">' +
+    '<circle class="dmo-dr" pathLength="100" cx="60" cy="60" r="50" fill="none" stroke="var(--gold)" stroke-opacity=".8" stroke-width="1" data-a="drw 1 .1 io"/>' +
+    '<circle cx="60" cy="60" r="42" fill="none" stroke="var(--gold)" stroke-opacity=".8" stroke-width=".6" stroke-dasharray="2 4" data-a="fi .6 .5"/>' +
+    '<path class="dmo-dr" pathLength="100" d="M40 62 l13 13 28-30" fill="none" stroke="var(--goldink,var(--gold))" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-a="drw .5 .7"/></svg>';
+}
+function dmo_em(el, title, sub, sm, key) {
+  if (!el || !dmo_mark(el, '12')) return;
+  el.classList.add('dmo-em'); if (sm) el.classList.add('sm');
+  el.innerHTML = dmo_emGfx(sm ? 64 : 120) + '<div class="dmo-ser" data-a="up .4 .9">' + title + '</div>' + (sub ? '<div class="meta" style="font-size:12px;margin-top:4px" data-a="fi .3 1.1">' + sub + '</div>' : '');
+  if (dmo_once('p12' + key)) dmo_vis(el, function () { dmo_run(el, 0); });
+}
+function dmo_p12scan() {
+  var v = S.view;
+  if (v === 'tasks' && (S.sub.tF || 'open') === 'open' && (S.sub.tScope || 'mine') === 'mine') {
+    var e = document.querySelector('#tl > .card.empty:not([data-dmo12])');
+    if (e) {
+      e.setAttribute('data-dmo12', 'w');
+      Promise.resolve(sb.from('tasks').select('*').eq('assignee_id', dmo_me()).eq('day', today())).then(function (r) {
+        var L = (r && r.data) || [], nd = L.filter(function (t) { return t.status === 'done'; }).length; if (!e.isConnected) return;
+        e.removeAttribute('data-dmo12');
+        if (L.length && nd === L.length) dmo_em(e, dmo_e('Всё сделано'), dmo_e('Хорошая смена. Новые задачи появятся здесь.'), false, 'tasks');
+        else dmo_em(e, dmo_e('Задач нет'), dmo_e('Новые задачи появятся здесь.'), false, 'tasks');
+      }, function () {});
+    }
+  }
+  if (v === 'home') { var mt = $('myTasks'), me2 = mt && mt.querySelector('.card > .empty:not([data-dmo12])'); if (me2) dmo_em(me2, dmo_e('На сегодня задач нет'), dmo_e('Новые задачи появятся здесь.'), true, 'home'); }
+  if (v === 'notif') { var ne = document.querySelector('#main > .card.empty:not([data-dmo12])'); if (ne) dmo_em(ne, dmo_e('Уведомлений пока нет'), dmo_e('Новое появится здесь.'), false, 'notif'); }
+}
+
+
 /* ===== ВОЛНА 4 · 92zq-ptr.js ===== */
 /* ===== 92zq — без перезагрузки при «потянуть вниз» на Android (31.10).
    Chrome на Android перезагружает страницу, если потянуть экран вниз в самом верху (pull-to-refresh).
@@ -54233,6 +54830,322 @@ document.addEventListener('click', async function (ev) {
 
 /* для проверок */
 window.__dvc = { go: function (v) { go(v); }, S: function () { return S; }, fdGo: function (t) { if (typeof fd_go === 'function') fd_go(t); }, fpGo: function (t) { FP.tab = t; fp_main(); }, open: dvc_open, owner: dvc_owner, name: dvc_vname, rows: dvc_exportRows, csv: dvc_csvText, demo: dvc_demoGet, fd: dvc_fdDemoList };
+
+
+/* ===== ВОЛНА 4 · 92zx-typefix.js ===== */
+/* ===== 92zx-typefix — правки по типам заведений (аудит w4/AUDIT_lishnee.md, раздел 6, Т1–Т12; префикс dtf_). Журнал w4/log/dtf.md =====
+   Решение владельца 31.10: каждое правило — сразу для ВСЕХ 22 типов. Тип — cg_type()/orgType(), службы — venueP().svc (или отделы S.depts).
+   1. «Ждут решения»: в ядре — без решений скрытых модулей (за счёт заведения, скидки, вынос, долг брони, отмены и скидки заказов, тойхона).
+   2. Словарь: в ядре — без слов кассы, PMS, склада, заказов; кухонные слова — только где есть кухня/цех/пищеблок; пояснения — под тип.
+   3. «Журнал здоровья перед сменой» в «Пульт → Заведение» — только при службах kitchen / gprod / gkfood.
+   4. «Сообщить о проблеме»: «Жалоба гостя / клиента / покупателя / пациента / родителя» по типу; гостиничные учебные записи — только у гостиниц.
+   5. «Передача смены»: владельцу не показывается; сотрудникам и руководителям — только должностям, которые передают смену; у АЗС — первой.
+   6. Ежедневная задача владельца «Проверить санитарный журнал за день» — только при кухне/цехе/пищеблоке (и в стартовом наборе).
+   7. Чужие слова в подсказках (тест дня, «6 официантов», «у ресепшена…», «стол 7 или кухня») — по типу.
+   8. «Управляющий» — всегда руководитель (правило «1–2 человека в службе» его не снимает).
+   9. Хостел и гостевой дом: «выручка его столов», «Зал, бар, касса, кухня» — по типу.
+  10. Стартовые инструкции для пекарни, аптеки, салона, автомойки/СТО, клиники, учебного центра, другого бизнеса (START_GUIDES + учебная база). */
+
+var DTF_LODG = ['hotel', 'hostel', 'guest'];
+var DTF_FOODH = ['rest', 'cafe', 'coffee', 'fast', 'toyxona', 'catering', 'chain'];
+var DTF_FOOD_SVC = ['kitchen', 'gprod', 'gkfood'];
+function dtf_core() { return typeof cm_on === 'function' && cm_on(); }
+function dtf_type() { try { var t = cg_type(); if (t) return t; } catch (e) {} try { return orgType(); } catch (e) { return ''; } }
+function dtf_new(t) { try { return cg_isNew(t || dtf_type()); } catch (e) { return false; } }
+function dtf_lodg(t) { return DTF_LODG.indexOf(t || dtf_type()) >= 0; }
+function dtf_horeca(t) { t = t || dtf_type(); return DTF_LODG.indexOf(t) >= 0 || DTF_FOODH.indexOf(t) >= 0; }
+function dtf_svc() { var v = null; try { v = venueP(); } catch (e) {} return v && Array.isArray(v.svc) ? v.svc : null; }
+var DTF_SVC_DEPT = { hall: 'fnb', bar: 'fnb', fb: 'fnb', acc: 'adm', supply: 'adm' };
+/* есть ли служба: по анкете; у учебного отеля без анкеты — по отделам */
+function dtf_has(list) {
+  var s = dtf_svc(); if (s) return s.some(function (x) { return list.indexOf(x) >= 0; });
+  try { if (S.depts && S.depts.length) return S.depts.some(function (d) { return list.indexOf(d.id) >= 0 || list.some(function (k) { return DTF_SVC_DEPT[k] === d.id; }); }); } catch (e) {}
+  return true;
+}
+function dtf_food() { return dtf_has(DTF_FOOD_SVC); }
+function dtf_hall() { var s = dtf_svc(); if (s) return s.indexOf('hall') >= 0; return dtf_has(['hall']); }
+function dtf_t(s) { try { return trUi(s); } catch (e) { return s; } }
+
+/* ---------- 1. «Ждут решения»: решения скрытых модулей — не в ядре ---------- */
+var DTF_DEC_OFF = ['pur', 'pay', 'cash', 'w4lcomp', 'w4ldisc', 'w4lexit', 'w4hdebt', 'w4cancel', 'w4disc', 'u0tyless'];
+(function () {
+  var d0 = d6Load; d6Load = async function () {
+    var L = await d0.apply(this, arguments); if (!dtf_core() || !Array.isArray(L)) return L;
+    return L.filter(function (i) { return !i || DTF_DEC_OFF.indexOf(i.k) < 0; });
+  };
+})();
+
+/* ---------- 2. Словарь ---------- */
+/* слова модулей (касса, PMS, склад, заказы, банкеты, бухгалтерия броней) — в ядре не показываются никому */
+var DTF_GL_MOD = ['PMS', 'Шахматка', 'F&B', 'PLU', 'ИКПУ', 'Z-отчёт', 'Сверка с Z-отчётом', 'Фискальная касса', 'Перенести в кассу', 'Депозит', 'Залог', 'Задаток',
+  'Предоплата', 'Проводка', 'Дебиторка', 'Акт', 'Себестоимость', 'Наценка', 'Инвентаризация', 'Списание', 'Ночной аудит', 'Овербукинг', 'Тариф BB', 'Тариф RO', 'Fidelio',
+  'Допродажа', 'Дозаказ', 'Стоп-лист', 'Модификатор', 'Курс подачи', 'Листок', 'Агрегатор', 'Безнал', 'Размен', 'Изъятие', 'Подотчёт', 'Пробковый сбор', 'Мини-бар', 'Талон',
+  'Рейс', 'Предзаказ', 'Загрузка', 'ADR', 'RevPAR', 'GOP'];
+/* слова кухни и цеха — только там, где есть кухня, цех или пищеблок */
+var DTF_GL_FOOD = ['Бракераж', 'Цех', 'Гастроёмкость', 'Заготовка'];
+/* пояснения под тип: [ключ, когда менять, ru, uz] */
+var DTF_GL_TXT = [
+  ['Выручка', function () { return !dtf_horeca(); }, 'Все деньги от клиентов за период, до вычета расходов.', 'Xarajatlarni ayirmasdan oldin davr boʻyicha mijozlardan tushgan barcha pul.'],
+  ['Процент от выручки', function () { return !dtf_hall(); }, 'Доля заработка сотрудника от его личных продаж или выручки смены.', 'Xodim ish haqining uning shaxsiy sotuvi yoki smena tushumidan ulushi.'],
+  ['Сдельно', function () { return !dtf_lodg() && dtf_food(); }, 'Оплата за каждую сделанную вещь: порцию, изделие, заготовку.', 'Har bir bajarilgan ish uchun haq: portsiya, mahsulot, tayyorlov.'],
+  ['Сдельно', function () { return !dtf_lodg() && !dtf_food(); }, 'Оплата за каждую сделанную единицу работы: услугу, изделие, задачу.', 'Har bir bajarilgan ish birligi uchun haq: xizmat, mahsulot, vazifa.'],
+  ['Эталон', function () { return !dtf_food(); }, 'Фото того, как должно выглядеть рабочее место или готовая работа.', 'Ish joyi yoki tayyor ish qanday koʻrinishi kerakligi surati.'],
+  ['Генуборка', function () { return !dtf_food(); }, 'Тщательная уборка по графику: окна, мебель, оборудование.', 'Jadval boʻyicha toʻliq tozalash: derazalar, mebel, jihozlar.']
+];
+function dtf_glText(g) {
+  if (!g || !g.k) return;
+  if (g.dtf_ru == null) { g.dtf_ru = g.ru; g.dtf_uz = g.uz; }
+  var r = null; DTF_GL_TXT.forEach(function (x) { if (!r && x[0] === g.k && x[1]()) r = x; });
+  g.ru = r ? r[2] : g.dtf_ru; g.uz = r ? r[3] : g.dtf_uz;
+}
+(function () {
+  var f0 = gl_fits;
+  gl_fits = function (g) {
+    if (!f0.apply(this, arguments)) return false;
+    if (dtf_core() && DTF_GL_MOD.indexOf(g.k) >= 0) return false;
+    if (DTF_GL_FOOD.indexOf(g.k) >= 0 && !dtf_food()) return false;
+    try { dtf_glText(g); } catch (e) {}
+    return true;
+  };
+})();
+
+/* ---------- 3. «Журнал здоровья перед сменой» — только при кухне, цехе, пищеблоке ---------- */
+(function () {
+  var o0 = cb_orgCard;
+  cb_orgCard = async function () {
+    var r = await o0.apply(this, arguments);
+    try { var x = $('cbHe'), l = x && x.closest('label'); if (l) l.style.display = dtf_food() ? 'flex' : 'none'; } catch (e) {}
+    return r;
+  };
+})();
+
+/* ---------- 4. «Сообщить о проблеме»: жалоба — по типу ---------- */
+var DTF_PR0 = PR_CAT[0];
+function dtf_whoCat() {
+  var t = dtf_type();
+  if (dtf_horeca(t)) return 'Жалоба гостя';
+  if (t === 'clinic') return 'Жалоба пациента';
+  if (t === 'kinder') return 'Жалоба родителя';
+  if (t === 'pharmacy' || t === 'bakery') return 'Жалоба покупателя';
+  return 'Жалоба клиента';
+}
+(function () {
+  var p0 = vProblem;
+  vProblem = async function () {
+    if (PR_CAT[0] === DTF_PR0 || /^Жалоба /.test(PR_CAT[0])) PR_CAT[0] = dtf_whoCat();
+    var r = await p0.apply(this, arguments);
+    try {
+      var inp = $('prP');
+      if (inp && !dtf_horeca()) inp.placeholder = dtf_t(dtf_food() ? 'например, цех, кухня или вход' : 'например, касса, склад или вход');
+      if (inp && !dtf_horeca()) { var lb = inp.closest('label'); if (lb && lb.firstChild && lb.firstChild.nodeType === 3) lb.firstChild.nodeValue = dtf_t('Где (место)'); }
+    } catch (e) {}
+    return r;
+  };
+})();
+/* учебные записи «Проблем» про отель (номер 305 и шум из бара, горничные, ресепшен) — только у гостиниц */
+function dtf_demoProblems() {
+  var DB = window.__DB; if (!DB || !Array.isArray(DB.problem_reports) || dtf_lodg()) return;
+  DB.problem_reports = DB.problem_reports.filter(function (p) { return !(p && (p.id === 802 || p.id === 803)); });
+  DB.problem_reports.forEach(function (p) { if (p && p.id === 801 && /горничн/.test(p.text || '')) { p.text = 'Старший смены повышает голос на сотрудников при клиентах.'; p.place = ''; } });
+}
+
+/* ---------- 5. «Передача смены» ---------- */
+/* должности, которые передают смену: касса, пост, стойка, круглосуточные и посменные точки (данные 92e-types и базовых VPOS) */
+var DTF_HO_DEPTS = ['fo', 'sec']; /* ресепшен и охрана гостиниц — всегда (Ресепшионист, Фронт-офис менеджер) */
+var DTF_HO_RX = /кассир|старш(ий|ая) смены|администратор|ресепш|фронт-офис|супервайзер|охран|приёмщик|провизор|фармацевт|заведующий аптекой|менеджер смены|менеджер зала|бармен|бариста|технолог производства|воспитател|дежурн/i;
+function dtf_hoOk() {
+  if (!S.me || isDirector()) return false;
+  var n = []; try { n = myPosNames(); } catch (e) {}
+  return DTF_HO_DEPTS.indexOf(S.me.dept_id) >= 0 || DTF_HO_DEPTS.indexOf(S.me.lead_dept) >= 0 || n.some(function (x) { return DTF_HO_RX.test(x || ''); });
+}
+function dtf_hoCut(o) { return Array.isArray(o) && !dtf_hoOk() ? o.filter(function (s) { return !s || s[0] !== 'handover'; }) : o; }
+(function () {
+  var t0 = toolSections; toolSections = function () { var o = t0.apply(this, arguments); return dtf_core() ? dtf_hoCut(o) : o; };
+  var a0 = sectionsAll; sectionsAll = function () { var o = a0.apply(this, arguments); return dtf_core() ? dtf_hoCut(o) : o; };
+  var s0 = sections; sections = function () {
+    var o = s0.apply(this, arguments); if (!dtf_core() || !Array.isArray(o)) return o;
+    o = dtf_hoCut(o);
+    /* АЗС: передача кассы и смены — главное, первой плиткой */
+    if (dtf_type() === 'fuel') { var i = o.findIndex(function (s) { return s && s[0] === 'handover'; }); if (i > 0) o.splice(0, 0, o.splice(i, 1)[0]); }
+    return o;
+  };
+  /* «Разделы» с группами (руководитель): у АЗС «Передача смены» — в группе «Люди», а не в «Ещё разделах» */
+  var g0 = nav_grpOf; nav_grpOf = function (id) {
+    if (id === 'handover' && dtf_type() === 'fuel' && !isLodging()) { var i = NAV_GRP.findIndex(function (g) { return g[0] === 'Люди'; }); if (i >= 0) return i; }
+    return g0.apply(this, arguments);
+  };
+  /* карточка «Смена заканчивается — передайте смену» — только тем, кто передаёт смену */
+  var h0 = dq_home; dq_home = async function () {
+    var r = await h0.apply(this, arguments);
+    try { if (dtf_core() && !dtf_hoOk()) { var b = $('dqHomeGo'), c = b && b.closest('.card'); if (c) c.remove(); } } catch (e) {}
+    return r;
+  };
+})();
+
+/* ---------- 6. ежедневная задача владельца про санитарный журнал — только при кухне, цехе, пищеблоке ---------- */
+var DTF_SAN = 'Проверить санитарный журнал за день';
+function dtf_dirTasks() {
+  var DB = window.__DB; if (!DB || dtf_food()) return;
+  var dirPos = {}; (DB.positions || []).forEach(function (p) { if (p && p.access === 'director') dirPos[p.id] = 1; });
+  var dirEmp = {}; (DB.employees || []).forEach(function (e) { if (e && e.role === 'director') dirEmp[e.id] = 1; });
+  ['tasks', 'task_templates'].forEach(function (k) {
+    if (!Array.isArray(DB[k])) return;
+    var L = DB[k].filter(function (t) { return !(t && (t.title === DTF_SAN || t.title === 'Проверить выручку и кассу дня') && (dirEmp[t.assignee_id] || dirEmp[t.employee_id] || dirPos[t.position_id] || (!t.assignee_id && !t.employee_id && !t.position_id))); });
+    if (L.length !== DB[k].length) { DB[k].length = 0; Array.prototype.push.apply(DB[k], L); }
+  });
+}
+(function () {
+  var f0 = cf_fixTasks; cf_fixTasks = function () { var r = f0.apply(this, arguments); try { dtf_dirTasks(); } catch (e) {} return r; };
+  /* стартовый набор (и на сервере): «Проверить выручку и кассу дня» (касса — модуль) → санитарный журнал при кухне, иначе не создаётся */
+  var k0 = startKitFor; startKitFor = function (type, pos) {
+    var L = k0.apply(this, arguments); if (pos !== 'Директор' || !Array.isArray(L) || !dtf_core()) return L;
+    var food = dtf_food();
+    return L.map(function (k) { return k && k[1] === 'Проверить выручку и кассу дня' ? (food ? [k[0], DTF_SAN, 'Kunlik sanitariya jurnalini tekshirish'].concat(k.slice(3)) : null) : k; }).filter(Boolean);
+  };
+})();
+
+/* ---------- 7, 9. чужие слова в подсказках: замена всей строки по типу (RU, UZ и кириллица) ----------
+   [строка как в коде, функция(узел) → новая строка RU или null]. Перевод новой строки — w4/uz/typefix.js. */
+var DTF_QZ = ' Один раз в день. Каждый правильный ответ — 10 баллов и плюс в рейтинг месяца.';
+var DTF_RT_TAIL = 'с множеством мелких задач нет преимущества перед поваром или охранником';
+var DTF_TXT = [
+  ['стандарты сервиса, кухня, безопасность, Ташкент.' + DTF_QZ, function () { if (dtf_new()) return 'наше дело, сервис, безопасность.' + DTF_QZ; if (!dtf_food()) return 'стандарты сервиса, безопасность, Ташкент.' + DTF_QZ; return null; }],
+  ['Задайте, сколько людей нужно по дням недели: например, «пятница вечер — 6 официантов». Недобор подсветится красным.', function () { return dtf_hall() ? null : 'Задайте, сколько людей нужно по дням недели: например, «пятница вечер — 6 сотрудников». Недобор подсветится красным.'; }],
+  ['Очки сравниваются внутри своей должности. Поэтому у ресепшена ' + DTF_RT_TAIL + '.', function () { return dtf_lodg() || dtf_new() ? null : 'Очки сравниваются внутри своей должности. Поэтому у официанта ' + DTF_RT_TAIL + '.'; }],
+  ['Очки сравниваются внутри своей должности: у ресепшена ' + DTF_RT_TAIL + '. Изменения сохраняются сами.', function () { return dtf_lodg() || dtf_new() ? null : 'Очки сравниваются внутри своей должности: у официанта ' + DTF_RT_TAIL + '. Изменения сохраняются сами.'; }],
+  ['выручка его столов ≈', function (n) {
+    if (dtf_new()) return null;
+    var m = n && n.parentElement && n.parentElement.parentElement, f = m && m.firstElementChild;
+    return f && /Официант|Ofitsiant|Офицант/i.test(f.textContent || '') ? null : 'выручка смены ≈';
+  }],
+  ['Зал, бар, касса, кухня — точки по должности', function () { var t = dtf_type(); return t === 'hostel' ? 'Стойка, комнаты, общая кухня — точки по должности' : t === 'guest' ? 'Стойка, номера, кухня — точки по должности' : null; }],
+  ['выручка его столов / чеков', function () { return dtf_hall() || dtf_has(['bar']) || dtf_new() ? null : 'выручка его смены'; }]
+];
+var DTF_MAP = null, DTF_MODE = null;
+function dtf_map() {
+  var mode = ''; try { mode = window.MLX_I18N ? MLX_I18N.mode : 'ru'; } catch (e) {}
+  if (DTF_MAP && DTF_MODE === mode) return DTF_MAP;
+  DTF_MAP = Object.create(null); DTF_MODE = mode;
+  DTF_TXT.forEach(function (r) { DTF_MAP[r[0]] = r; var u = dtf_t(r[0]); if (u && u !== r[0]) DTF_MAP[String(u).trim()] = r; });
+  return DTF_MAP;
+}
+function dtf_fixNode(n) {
+  var v = n.nodeValue; if (!v || v.length < 8) return;
+  var core = v.trim(), r = dtf_map()[core]; if (!r) return;
+  var to = null; try { to = r[1](n); } catch (e) {} if (!to) return;
+  var out = dtf_t(to); if (out !== core) n.nodeValue = v.replace(core, out);
+}
+function dtf_fix(root) {
+  if (!root) return;
+  if (root.nodeType === 3) return dtf_fixNode(root);
+  if (root.nodeType !== 1 || root.tagName === 'SCRIPT' || root.tagName === 'STYLE') return;
+  var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), n, L = []; while ((n = w.nextNode())) L.push(n); L.forEach(dtf_fixNode);
+}
+(function () {
+  function start() { new MutationObserver(function (ms) { ms.forEach(function (m) { if (m.type === 'characterData') dtf_fixNode(m.target); else m.addedNodes.forEach(dtf_fix); }); }).observe(document.body, { childList: true, subtree: true, characterData: true }); dtf_fix(document.body); }
+  if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+})();
+/* 9. «От чего считаем» процент: у заведений без зала и бара — без «выручки бара» и «всего зала», «его столов» → «его смены» */
+var DTF_SXB0 = Array.isArray(SX_BASES) ? SX_BASES.map(function (x) { return x.slice(); }) : null;
+function dtf_bases() {
+  if (!DTF_SXB0 || dtf_new()) return;
+  var hall = dtf_hall(), bar = dtf_has(['bar']), kit = dtf_has(['kitchen']), lod = dtf_lodg();
+  var L = DTF_SXB0.filter(function (x) { return x[0] === 'own' || (x[0] === 'hall' && hall) || (x[0] === 'bar' && bar) || (x[0] === 'kitchen' && kit) || ((x[0] === 'extra' || x[0] === 'direct') && lod); });
+  SX_BASES.splice(0, SX_BASES.length); Array.prototype.push.apply(SX_BASES, L.map(function (x) { return x.slice(); }));
+}
+
+/* ---------- 8. «Управляющий» — всегда руководитель ---------- */
+(function () {
+  var c0 = cg_struct; cg_struct = function () {
+    var R = c0.apply(this, arguments);
+    try { (R.pos || []).forEach(function (p) { if (p && p.access === 'staff' && /^Управляющ/.test(p.name || '')) p.access = 'manager'; }); } catch (e) {}
+    return R;
+  };
+})();
+/* учебная база нового типа строится в 92e (cg_boot) ДО этой части — то же правило для уже созданных людей и должностей */
+function dtf_demoMgr() {
+  var DB = window.__DB; if (!DB || window.JAMOA_DEMO === false || !dtf_new()) return;
+  var ids = {}; (DB.positions || []).forEach(function (p) { if (p && p.access === 'staff' && /^Управляющ/.test(p.name || '')) { p.access = 'manager'; ids[p.id] = 1; } });
+  if (!Object.keys(ids).length) return;
+  var act = (DB.employees || []).filter(function (e) { return e && e.active !== false; }), dir = act.filter(function (e) { return e.role === 'director'; })[0];
+  act.forEach(function (m) {
+    if (!ids[m.position_id] || m.role !== 'staff') return; m.role = 'manager'; m.manager_id = dir ? dir.id : null;
+    act.forEach(function (e) { if (e !== m && e.role === 'staff' && e.dept_id === m.dept_id && (!e.manager_id || (dir && e.manager_id === dir.id))) e.manager_id = m.id; });
+  });
+}
+try { dtf_demoMgr(); } catch (e) {}
+
+/* ---------- 10. стартовые инструкции новых типов (стартовый набор START_GUIDES — и для сервера; учебная база — сразу) ---------- */
+var DTF_GUIDES = {
+  'Пекарь': ['Работа пекаря', 'Novvoy ishi',
+    '1. Придите за 10 минут: чистая форма, шапочка, вымытые руки.\n2. Проверьте печь и температуру холодильников, запишите в журнал.\n3. Тесто и начинки — только по рецептуре, вес — на весах, не «на глаз».\n4. На каждой партии — маркировка: изделие, дата и время выпечки.\n5. Брак и остатки записывайте в тот же день с причиной.\n6. В конце смены — чистое рабочее место и фото для закрытия.',
+    '1. 10 daqiqa oldin keling: toza forma, qalpoq, yuvilgan qoʻllar.\n2. Pech va muzlatgichlar haroratini tekshirib, jurnalga yozing.\n3. Xamir va ichliklar — faqat retseptura boʻyicha, ogʻirlik — tarozida, «taxminan» emas.\n4. Har bir partiyada yorliq: mahsulot, pishirilgan sana va vaqt.\n5. Yaroqsiz mahsulot va qoldiqlarni oʻsha kuni sababi bilan yozing.\n6. Smena oxirida — toza ish joyi va yopish uchun surat.'],
+  'Продавец-кассир': ['Работа продавца', 'Sotuvchi ishi',
+    '1. До открытия проверьте витрину: ценники, сроки, чистое стекло.\n2. Поздоровайтесь с покупателем в первые секунды.\n3. Товар выдавайте чистыми руками или щипцами, в упаковке.\n4. Деньги — только через кассу, сдачу пересчитайте при покупателе.\n5. Товар с истекающим сроком снимите с витрины и запишите.\n6. В конце смены сдайте кассу старшему и уберите рабочее место.',
+    '1. Ochilishdan oldin vitrinani tekshiring: narx yorliqlari, muddatlar, toza oyna.\n2. Xaridor bilan dastlabki soniyalarda salomlashing.\n3. Mahsulotni toza qoʻl yoki qisqich bilan, qadoqda bering.\n4. Pul — faqat kassa orqali, qaytimni xaridor oldida sanang.\n5. Muddati tugayotgan mahsulotni vitrinadan olib, yozib qoʻying.\n6. Smena oxirida kassani kattaga topshiring va ish joyini yigʻishtiring.'],
+  'Провизор': ['Работа провизора', 'Provizor ishi',
+    '1. В начале смены запишите температуру и влажность, проверьте холодильник (+2…+8 °C).\n2. Рецептурные препараты — только по рецепту: проверьте дату и подпись врача.\n3. Объясните покупателю, как принимать препарат: доза, время, до или после еды.\n4. Не меняйте препарат без согласия покупателя; при сомнении — к врачу.\n5. Просроченное и брак — сразу в зону брака с записью.\n6. В конце смены закройте кассу, рецептурные препараты — в закрытый шкаф.',
+    '1. Smena boshida harorat va namlikni yozing, muzlatgichni tekshiring (+2…+8 °C).\n2. Retseptli dorilar — faqat retsept boʻyicha: sana va shifokor imzosini tekshiring.\n3. Xaridorga dorini qanday ichishni tushuntiring: doza, vaqt, ovqatdan oldin yoki keyin.\n4. Xaridor roziligisiz dorini almashtirmang; shubha boʻlsa — shifokorga.\n5. Muddati oʻtgan va yaroqsizlarni darhol yozuv bilan yaroqsizlar zonasiga oling.\n6. Smena oxirida kassani yoping, retseptli dorilar — yopiq shkafga.'],
+  'Фармацевт': ['Приёмка и выкладка', 'Qabul va terish',
+    '1. Приёмка: сверяйте накладную, серию и срок каждого препарата.\n2. Раскладывайте по правилу: меньший срок — вперёд.\n3. Препараты из холодильника не держите в зале дольше 5 минут.\n4. Покупателю объясните, как хранить препарат дома.\n5. Жалобы и побочные реакции записывайте и сообщайте заведующему.',
+    '1. Qabul: yuk xati, har bir dorining seriyasi va muddatini solishtiring.\n2. Qoidaga koʻra joylang: muddati qisqasi — oldinga.\n3. Muzlatgichdagi dorilarni zalda 5 daqiqadan ortiq ushlamang.\n4. Xaridorga dorini uyda qanday saqlashni tushuntiring.\n5. Shikoyat va nojoʻya taʼsirlarni yozib, mudirga xabar bering.'],
+  'Мастер-парикмахер': ['Работа мастера', 'Usta ishi',
+    '1. До первого клиента подготовьте место: чистые инструменты, полотенца, накидка.\n2. После каждого клиента — инструменты в дезинфекцию, расчёски и ножницы протереть.\n3. Перед работой уточните, что хочет клиент; покажите фото или образец.\n4. Не опаздывайте на запись; задержка больше 10 минут — предупредите администратора.\n5. После услуги уберите волосы с пола и кресла.\n6. В конце дня — чистое место и фото для закрытия.',
+    '1. Birinchi mijozgacha joyni tayyorlang: toza asboblar, sochiqlar, yopqich.\n2. Har bir mijozdan keyin — asboblar dezinfeksiyaga, taroq va qaychilarni arting.\n3. Ishdan oldin mijoz nima xohlashini aniqlang; surat yoki namuna koʻrsating.\n4. Yozuvga kechikmang; 10 daqiqadan ortiq kechikish boʻlsa — administratorni ogohlantiring.\n5. Xizmatdan keyin pol va kresloni sochdan tozalang.\n6. Kun oxirida — toza joy va yopish uchun surat.'],
+  'Мастер маникюра': ['Чистота инструментов', 'Asboblar tozaligi',
+    '1. После каждого клиента: мойка, дезинфекция, стерилизация инструментов.\n2. Пилки и бафы — одноразовые или личные для клиента.\n3. Перед работой осмотрите руки клиента; при ранках и грибке — не работать, сказать администратору.\n4. Работайте в перчатках, стол протирайте после каждого клиента.\n5. В конце дня запишите обработку инструментов в журнал.',
+    '1. Har bir mijozdan keyin: asboblarni yuvish, dezinfeksiya, sterilizatsiya.\n2. Egov va baflar — bir martalik yoki mijozning shaxsiysi.\n3. Ishdan oldin mijoz qoʻllarini koʻzdan kechiring; yara yoki zamburugʻ boʻlsa — ishlamang, administratorga ayting.\n4. Qoʻlqopda ishlang, stolni har bir mijozdan keyin arting.\n5. Kun oxirida asboblar ishlovini jurnalga yozing.'],
+  'Мойщик': ['Работа мойщика', 'Yuvuvchi ishi',
+    '1. Принимая машину, обойдите её с клиентом и сфотографируйте сколы и царапины.\n2. Попросите убрать ценные вещи из салона.\n3. Химию разводите по инструкции, работайте в перчатках и очках.\n4. Не направляйте струю высокого давления вблизи на фары, наклейки и уплотнители.\n5. Перед выдачей проверьте результат вместе с клиентом.\n6. В конце смены уберите бокс и сдайте инвентарь.',
+    '1. Mashinani qabul qilayotganda mijoz bilan aylanib chiqing, dogʻ va tirnalishlarni suratga oling.\n2. Salondan qimmatbaho buyumlarni olishni soʻrang.\n3. Kimyoviy vositani yoʻriqnoma boʻyicha suyultiring, qoʻlqop va koʻzoynakda ishlang.\n4. Yuqori bosimli oqimni faralar, yopishtirmalar va zichlagichlarga yaqindan yoʻnaltirmang.\n5. Berishdan oldin natijani mijoz bilan birga tekshiring.\n6. Smena oxirida boksni tozalang va jihozlarni topshiring.'],
+  'Автослесарь': ['Работа автослесаря', 'Avtochilangar ishi',
+    '1. Работу начинайте только по заказ-наряду от мастера-приёмщика.\n2. Машину на подъёмнике ставьте на упоры; под машиной без упоров не работайте.\n3. Снятые детали складывайте в коробку с номером машины.\n4. Нашли другую неисправность — сначала к мастеру-приёмщику; без согласия клиента не чинить.\n5. После ремонта — проверка и чистый салон: чехлы, коврики.',
+    '1. Ishni faqat usta-qabulchidan kelgan buyurtma-naryad boʻyicha boshlang.\n2. Koʻtargichdagi mashinani tayanchlarga qoʻying; tayanchsiz mashina tagida ishlamang.\n3. Yechilgan detallarni mashina raqami yozilgan qutiga soling.\n4. Boshqa nosozlik topsangiz — avval usta-qabulchiga; mijoz roziligisiz taʼmirlamang.\n5. Taʼmirdan keyin — tekshiruv va toza salon: gʻiloflar, gilamchalar.'],
+  'Медсестра': ['Работа медсестры', 'Hamshira ishi',
+    '1. До начала проверьте кабинет: стерильный материал, перчатки, сроки препаратов.\n2. Руки обрабатывайте до и после каждой процедуры.\n3. Перед процедурой сверьте ФИО и назначение врача.\n4. Использованные иглы — сразу в непрокалываемый контейнер.\n5. Медицинские отходы — в жёлтые пакеты с маркировкой.\n6. В конце смены — кварцевание кабинета и запись в журнал.',
+    '1. Boshlashdan oldin xonani tekshiring: steril material, qoʻlqoplar, dorilar muddati.\n2. Qoʻllarga har bir muolajadan oldin va keyin ishlov bering.\n3. Muolajadan oldin FIO va shifokor tayinlovini solishtiring.\n4. Ishlatilgan ignalar — darhol teshilmaydigan konteynerga.\n5. Tibbiy chiqindilar — yorliqli sariq paketlarga.\n6. Smena oxirida — xonani kvarslash va jurnalga yozish.'],
+  'Администратор-регистратор': ['Работа регистратуры', 'Registratura ishi',
+    '1. Откройте регистратуру за 15 минут до приёма, проверьте расписание врачей.\n2. Встречайте пациента, сверяйте ФИО, дату рождения и телефон.\n3. Врач задерживается — предупредите пациентов и предложите другое время.\n4. Личные данные пациентов не называйте вслух и не оставляйте на стойке.\n5. Жалобы записывайте и передавайте старшему администратору в тот же день.',
+    '1. Registraturani qabuldan 15 daqiqa oldin oching, shifokorlar jadvalini tekshiring.\n2. Bemorni kutib oling, FIO, tugʻilgan sana va telefonni solishtiring.\n3. Shifokor kechiksa — bemorlarni ogohlantiring va boshqa vaqt taklif qiling.\n4. Bemorlarning shaxsiy maʼlumotlarini ovoz chiqarib aytmang va peshtaxtada qoldirmang.\n5. Shikoyatlarni yozib, oʻsha kuni katta administratorga topshiring.'],
+  'Преподаватель': ['Работа преподавателя', 'Oʻqituvchi ishi',
+    '1. Приходите за 10 минут до занятия: проверьте кабинет, доску, технику.\n2. Отметьте посещаемость в первые 5 минут.\n3. Занятие — по плану методиста; изменения согласуйте заранее.\n4. Ученик пропустил два занятия подряд — сообщите администратору.\n5. После занятия проветрите кабинет и выключите технику.',
+    '1. Darsdan 10 daqiqa oldin keling: xona, doska, texnikani tekshiring.\n2. Dastlabki 5 daqiqada davomatni belgilang.\n3. Dars — metodist rejasi boʻyicha; oʻzgarishlarni oldindan kelishing.\n4. Oʻquvchi ketma-ket ikki darsni qoldirsa — administratorga xabar bering.\n5. Darsdan keyin xonani shamollating va texnikani oʻchiring.'],
+  'Менеджер по набору': ['Работа с новыми учениками', 'Yangi oʻquvchilar bilan ishlash',
+    '1. Отвечайте на заявку в течение часа в рабочее время.\n2. Запишите имя, возраст, уровень и удобное время.\n3. Предложите пробное занятие и предупредите преподавателя.\n4. После пробного занятия позвоните и узнайте решение.\n5. Все договорённости записывайте в журнал центра.',
+    '1. Ish vaqtida arizaga bir soat ichida javob bering.\n2. Ism, yosh, daraja va qulay vaqtni yozing.\n3. Sinov darsini taklif qiling va oʻqituvchini ogohlantiring.\n4. Sinov darsidan keyin qoʻngʻiroq qilib, qarorni bilib oling.\n5. Barcha kelishuvlarni markaz jurnaliga yozing.'],
+  'Сотрудник': ['Правила смены', 'Smena qoidalari',
+    '1. Отметьтесь «Пришёл» на месте до начала смены.\n2. Посмотрите задачи на сегодня и чек-лист открытия.\n3. Непонятно или не хватает инвентаря — сразу скажите старшему смены.\n4. Задачу с фото закрывайте только после фото результата.\n5. Уходя, передайте дела и отметьтесь «Ушёл».',
+    '1. Smena boshlanishidan oldin joyida «Keldim» deb belgilang.\n2. Bugungi vazifalar va ochilish chek-listini koʻring.\n3. Tushunarsiz boʻlsa yoki jihoz yetmasa — darhol smena boshligʻiga ayting.\n4. Suratli vazifani faqat natija surati bilan yoping.\n5. Ketayotganda ishlarni topshiring va «Ketdim» deb belgilang.'],
+  'Старший смены': ['Работа старшего смены', 'Smena boshligʻi ishi',
+    '1. Придите за 15 минут: проверьте, кто вышел на смену, и раздайте задачи.\n2. Пройдите чек-лист открытия до первых клиентов.\n3. Опоздание или неявку — сразу отметьте и найдите замену.\n4. В течение смены проверяйте задачи с фото и отвечайте на вопросы команды.\n5. В конце смены передайте смену: касса, незакрытые дела, заметки.',
+    '1. 15 daqiqa oldin keling: kim smenaga chiqqanini tekshiring va vazifalarni taqsimlang.\n2. Birinchi mijozlargacha ochilish chek-listidan oʻting.\n3. Kechikish yoki kelmaslikni darhol belgilang va oʻrinbosar toping.\n4. Smena davomida suratli vazifalarni tekshiring va jamoa savollariga javob bering.\n5. Smena oxirida smenani topshiring: kassa, yopilmagan ishlar, eslatmalar.']
+};
+(function () { if (typeof START_GUIDES === 'object') Object.keys(DTF_GUIDES).forEach(function (k) { if (!START_GUIDES[k]) START_GUIDES[k] = DTF_GUIDES[k]; }); })();
+function dtf_demoGuides() {
+  var DB = window.__DB; if (!DB || !dtf_new()) return; DB.guides = DB.guides || [];
+  var sid = 9700; DB.guides.forEach(function (g) { if (g && typeof g.id === 'number' && g.id > sid && g.id < 9800) sid = g.id; });
+  (DB.positions || []).forEach(function (p) { var g = p && DTF_GUIDES[p.name]; if (!g || DB.guides.some(function (x) { return x.position_id === p.id && x.title === g[0]; })) return;
+    DB.guides.push({ id: ++sid, position_id: p.id, title: g[0], title_uz: g[1], body: g[2], body_uz: g[3], sort: 5, kit: 1 }); });
+}
+
+/* ---------- общий шаг перед отрисовкой (учебная база и списки под тип) ---------- */
+var DTF_SIG = '';
+function dtf_sync() {
+  var sig = dtf_type() + '|' + ((S.me && S.me.id) || '') + '|' + ((dtf_svc() || []).join(','));
+  if (sig === DTF_SIG) return; DTF_SIG = sig; DTF_MAP = null;
+  try { dtf_bases(); } catch (e) {}
+  if (window.JAMOA_DEMO === false) return;
+  try { dtf_demoProblems(); } catch (e) {}
+  try { dtf_dirTasks(); } catch (e) {}
+  try { dtf_demoGuides(); } catch (e) {}
+}
+(function () {
+  var r0 = render; render = function () { try { if (S.me) dtf_sync(); } catch (e) {} return r0.apply(this, arguments); };
+  try { dtf_sync(); } catch (e) {}
+})();
+
+/* отладка: ?w4dbg — window.__dtf */
+if (/[?&]w4dbg/.test(location.search)) window.__dtf = { type: dtf_type, food: dtf_food, hall: dtf_hall, hoOk: dtf_hoOk, go: function (v) { go(v); }, S: function () { return S; }, gl: function () { return gl_list().map(function (g) { return g.k; }); }, secs: function () { return sections().map(function (s) { return s[0]; }); }, dec: function () { return d6Load(); }, db: function () { return window.__DB; }, kit: function (t, p) { return startKitFor(t, p); } };
 
 
 /* ===== ВОЛНА 4 · 92zy-sched31.js ===== */
