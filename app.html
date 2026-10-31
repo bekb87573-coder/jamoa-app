@@ -14139,7 +14139,7 @@ function sortable(box, sel, o) {
   document.addEventListener('pointerup', function () { if (!bx) return; var b = bx; bx = null; if (bdy > 110) { b.style.transition = 'transform .28s cubic-bezier(.32,.72,0,1)'; b.style.transform = 'translateY(110%)'; var sh = b.parentNode; if (sh) sh.style.transition = 'opacity .28s', sh.style.opacity = '0'; setTimeout(closeLayer, 260); } else { b.style.transition = 'transform .35s cubic-bezier(.34,1.4,.64,1)'; b.style.transform = ''; } });
 })();
 (function () { var st = document.createElement('style'); st.textContent =
- 'html{-webkit-tap-highlight-color:transparent}body{overscroll-behavior-y:none}' +
+ 'html{-webkit-tap-highlight-color:transparent}html,body{overscroll-behavior-y:none}' +
  '.seci,.secb,.ed-row,.wg{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}' +
  'main.nv-push{animation:nvPush .48s cubic-bezier(.32,.72,0,1) both}main.nv-pop{animation:nvPop .42s cubic-bezier(.32,.72,0,1) both}main.nv-tab{animation:nvTab .3s cubic-bezier(.32,.72,0,1) both}' +
  'main.nv-push>*,main.nv-pop>*{animation:none!important}' +
