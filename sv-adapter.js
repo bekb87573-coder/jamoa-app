@@ -106,7 +106,7 @@
           q('shift_presets', function (b) { return b.order('sort'); }), real.from('venues').select(VCOLS).eq('id', V()).maybeSingle(),
           real.rpc('colleagues'), real.rpc('my_profile')
         ]);
-        var mem = r[0], dep = r[1], pos = r[2], pr = r[3], ven = Object.assign({}, (r[4] && r[4].data) || SV.venue || {}), col = (r[5] && r[5].data) || [], prof = (r[6] && r[6].data) || null;
+        var mem = r[0], dep = (r[1] || []).filter(function (d) { return !d.archived_at; }), pos = (r[2] || []).filter(function (p) { return !p.archived_at; }), pr = r[3],   /* 0033: удалённые службы/должности (archived_at) не показываем */ ven = Object.assign({}, (r[4] && r[4].data) || SV.venue || {}), col = (r[5] && r[5].data) || [], prof = (r[6] && r[6].data) || null;
         /* 0012: координаты заведения отдаёт только my_profile (владельцу и руководителю), venues читается списком колонок */
         if (prof && prof.venue) { ['lat', 'lng', 'has_point', 'offline_max_min', 'adj_max', 'mgr_bonus_max'].forEach(function (k) { if (prof.venue[k] !== undefined) ven[k] = prof.venue[k]; }); }
         SV.profile = prof;
@@ -118,7 +118,7 @@
         SV.T.employees = emps;
         SV.me = mem.filter(function (m) { return m.user_id === SV.uid; })[0] || SV.me;
         var acc = {}; mem.concat(col).forEach(function (m) { if (m.position_id == null) return; var a = m.role === 'owner' ? 'director' : m.role === 'manager' ? 'manager' : 'staff'; if (!acc[m.position_id] || a === 'director' || (a === 'manager' && acc[m.position_id] === 'staff')) acc[m.position_id] = a; });
-        SV.T.positions = pos.map(function (p) { return { id: p.id, sid: p.id, dept_id: dl(p.dept_id), name: p.name, name_uz: p.name_uz, gender: p.gender, sort: p.sort, access: acc[p.id] || 'staff', has_pms: false }; });
+        SV.T.positions = pos.map(function (p) { return { id: p.id, sid: p.id, dept_id: dl(p.dept_id), name: p.name, name_uz: p.name_uz, gender: p.gender, sort: p.sort, access: acc[p.id] || (p.access === 'manager' ? 'manager' : 'staff'), has_pms: false }; });   /* 0033: уровень доступа должности хранит сервер */
         SV.T.departments = dep.map(function (d) { return { id: dl(d.id), sid: d.id, code: d.code, name: d.name, name_uz: d.name_uz, sort: d.sort, parent_id: dl(d.parent_id), head_id: d.head_id }; });
         SV.presets = {}; pr.forEach(function (p) { SV.presets[p.id] = p; });
         SV.T.shift_types = pr.map(function (p) { return { id: p.id, dept_id: dl(p.dept_id), code: 'p' + p.id, name: p.name, name_uz: p.name_uz, start_time: t8(p.t_start), end_time: t8(p.t_end), active: p.active !== false, sort: p.sort, is_night: p.is_night }; });
@@ -1790,7 +1790,8 @@
        имена rpc — только из белого списка; {"$step": k} — результат шага k; шаг после неудачного шага, от которого зависит, — пропускается. */
     var OWN_RPC = ['schedule_set_many', 'schedule_publish', 'task_create', 'task_cancel', 'repair_create', 'repair_assign', 'buy_create',
       'leave_decide', 'advance_decide', 'clock_request_decide', 'zone_decide', 'delay_decide', 'adj_decide', 'task_review', 'swap_decide',
-      'health_decide', 'buy_decide', 'adj_add', 'ann_create', 'notify_send', 'member_archive'];
+      'health_decide', 'buy_decide', 'adj_add', 'ann_create', 'notify_send', 'member_archive',
+      'dept_create', 'positions_add', 'dept_remove', 'position_remove'];   /* 31.10: службы и должности одной командой (0033) */
     R.owner_ai_state = async function () { return real.rpc('owner_ai_state', {}); };
     R.owner_ai_card_mark = async function (a) { a = a || {}; return real.rpc('owner_ai_card_mark', { p_id: a.p_id, p_status: a.p_status, p_result: a.p_result == null ? null : a.p_result }); };
     R.owner_ai_run = async function (a) {
@@ -1804,6 +1805,10 @@
         if (dep) { out.push({ rpc: n, ok: false, skipped: true }); failed[i] = 1; continue; }
         var r; try { r = await real.rpc(n, args); } catch (e) { r = { data: null, error: e }; }
         if (r && r.error) { out.push({ rpc: n, ok: false, error: r.error }); failed[i] = 1; } else out.push({ rpc: n, ok: true, data: r ? r.data : null });
+        /* 31.10: увольнение как в ручном пути (staffAdmin archive): после member_archive — закрыть/открыть вход (staff-auth) */
+        if (n === 'member_archive' && r && !r.error && r.data && r.data.auth_action) {
+          try { await real.functions.invoke('staff-auth', { body: { action: r.data.auth_action, member_id: args.p_id } }); } catch (e) {}
+        }
       }
       try { SV.stale('base', 'sched', 'att', 'tasks', 'ann', 'req', 'pay', 'notif'); } catch (e) {}
       return { data: { results: out }, error: null };

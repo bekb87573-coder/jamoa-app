@@ -169,4 +169,37 @@
     'Составь график на неделю {a} (с {w}){d}:': 'Haftaga jadval tuz {a} ({w} dan){d}:',
     ', служба «{d}»': ', xizmat «{d}»'
   });
+  /* 31.10 — службы и должности, удаление, увольнение, схема графика */
+  window.DAI_UZ = Object.assign(window.DAI_UZ || {}, {
+    'Служба': 'Xizmat', 'Должности': 'Lavozimlar', 'Удаление службы': 'Xizmatni oʻchirish', 'Удаление должности': 'Lavozimni oʻchirish', 'Удаление': 'Oʻchirish',
+    'руководитель': 'rahbar', 'сотрудник': 'xodim', 'Уже есть: ': 'Allaqachon bor: ',
+    'В службе «{d}» уже есть все эти должности.': '«{d}» xizmatida bu lavozimlarning hammasi bor.',
+    'Служба {d}: новые должности': '{d} xizmati: yangi lavozimlar', 'Новая служба: {d}': 'Yangi xizmat: {d}', ' · должностей: {n}': ' · lavozimlar: {n}',
+    'Должность «руководитель» даёт доступ к команде службы, когда на неё пригласят или переведут сотрудника.': '«Rahbar» lavozimi xodim taklif qilinganda yoki oʻtkazilganda xizmat jamoasini koʻrish huquqini beradi.',
+    'Служба **{d}** уже есть — добавлю в неё должности. Проверьте карточку и нажмите «Выполнить».': '**{d}** xizmati bor — unga lavozimlar qoʻshaman. Kartochkani tekshiring va «Bajarish»ni bosing.',
+    'Подготовил новую службу **{d}** и должности ({n}). Проверьте карточку и нажмите «Выполнить».': 'Yangi **{d}** xizmati va lavozimlar ({n}) tayyor. Kartochkani tekshiring va «Bajarish»ni bosing.',
+    'Службы «{d}» нет. Есть: {l}.': '«{d}» xizmati yoʻq. Bor: {l}.', 'Службу «Руководство» удалить нельзя.': '«Rahbariyat» xizmatini oʻchirib boʻlmaydi.',
+    'Удалить службу **{d}** пока нельзя — в ней работают: {l}. Сначала переведите их в другую службу (карточка сотрудника в «Команде») или уволите — скажите, что сделать.': '**{d}** xizmatini hozir oʻchirib boʻlmaydi — unda ishlaydi: {l}. Avval ularni boshqa xizmatga oʻtkazing («Jamoa»dagi xodim kartochkasi) yoki boʻshating — nima qilishni ayting.',
+    'Подготовил удаление службы **{d}** — проверьте карточку.': '**{d}** xizmatini oʻchirish tayyor — kartochkani tekshiring.',
+    'Удалить службу: ': 'Xizmatni oʻchirish: ', 'Служба: ': 'Xizmat: ', 'Вместе с ней — должности: ': 'U bilan — lavozimlar: ',
+    'Служба и её должности исчезнут из «Команды», графика и списков. История (табель, задачи) сохранится; «Открой службу …» с тем же названием вернёт её.': 'Xizmat va lavozimlari «Jamoa», jadval va roʻyxatlardan yoʻqoladi. Tarix (tabel, vazifalar) saqlanadi; xuddi shu nom bilan «Xizmat och …» uni qaytaradi.',
+    'Должности «{p}» нет.': '«{p}» lavozimi yoʻq.',
+    'На должности **{p}** работают: {l}. Сначала переведите их на другую должность или уволите.': '**{p}** lavozimida ishlaydi: {l}. Avval ularni boshqa lavozimga oʻtkazing yoki boʻshating.',
+    'Подготовил удаление должности **{p}** — проверьте карточку.': '**{p}** lavozimini oʻchirish tayyor — kartochkani tekshiring.',
+    'Удалить должность: ': 'Lavozimni oʻchirish: ', 'Должность исчезнет из списков и приглашения. Сотрудников на ней нет.': 'Lavozim roʻyxatlar va taklifdan yoʻqoladi. Unda xodim yoʻq.',
+    'Кого уволить? Назовите сотрудника по имени.': 'Kimni boʻshatish kerak? Xodimning ismini ayting.',
+    'Подготовил увольнение **{n}** — проверьте карточку внимательно.': '**{n}**ni boʻshatish tayyor — kartochkani diqqat bilan tekshiring.',
+    'Уволить (в архив)': 'Boʻshatish (arxivga)',
+    'Внимание: сотрудник больше не сможет войти, пропадёт из графика и списков. История и расчёты сохранятся; вернуть можно из архива.': 'Diqqat: xodim endi kira olmaydi, jadval va roʻyxatlardan yoʻqoladi. Tarix va hisoblar saqlanadi; arxivdan qaytarish mumkin.',
+    'схема ': 'sxema ', '(сутки)': '(sutka)', '(смен {w}, выходных {o})': '({w} smena, {o} dam olish)',
+    'Разложил схему **{p}** по дням:': '**{p}** sxemasini kunlarga taqsimladim:',
+    'Уже заполненные дни не трогаю. Проверьте карточку и нажмите «Выполнить».': 'Toʻldirilgan kunlarga tegmayman. Kartochkani tekshiring va «Bajarish»ni bosing.',
+    'Такой службы в заведении нет': 'Muassasada bunday xizmat yoʻq', 'В службе работают люди — сначала переведите их': 'Xizmatda odamlar ishlaydi — avval ularni oʻtkazing',
+    'На должности есть сотрудники': 'Lavozimda xodimlar bor',
+    'Готовлю карточку службы': 'Xizmat kartochkasini tayyorlayapman', 'Готовлю удаление службы': 'Xizmatni oʻchirishni tayyorlayapman',
+    'Готовлю удаление должности': 'Lavozimni oʻchirishni tayyorlayapman', 'Готовлю карточку сотрудника': 'Xodim kartochkasini tayyorlayapman',
+    'Должности: ': 'Lavozimlar: ', 'В службе пока никого — пригласите сотрудника на одну из должностей.': 'Xizmatda hozircha hech kim yoʻq — lavozimlardan biriga xodim taklif qiling.',
+    '+ Пригласить': '+ Taklif qilish', 'В службе пока никого': 'Xizmatda hozircha hech kim yoʻq',
+    'В службе «{d}» пока никого — пригласите сотрудника («Команда» → «+ Пригласить»), и она появится в графике.': '«{d}» xizmatida hozircha hech kim yoʻq — xodim taklif qiling («Jamoa» → «+ Taklif qilish»), shunda u jadvalda paydo boʻladi.'
+  });
 })();

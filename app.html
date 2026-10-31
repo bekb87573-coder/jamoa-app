@@ -72,6 +72,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-polish.js"></script>
 <script src="uz-w4-praise.js"></script>
 <script src="uz-w4-requests.js"></script>
+<script src="uz-w4-sched31.js"></script>
 <script src="uz-w4-server.js"></script>
 <script src="uz-w4-shift.js"></script>
 <script src="uz-w4-shift2.js"></script>
@@ -38599,10 +38600,15 @@ async function dai_fFill() {
    ===================================================================================== */
 var DAI_RPC = ['schedule_set_many', 'schedule_publish', 'task_create', 'task_cancel', 'repair_create', 'repair_assign', 'buy_create',
   'leave_decide', 'advance_decide', 'clock_request_decide', 'zone_decide', 'delay_decide', 'adj_decide', 'task_review', 'swap_decide',
-  'health_decide', 'buy_decide', 'adj_add', 'ann_create', 'notify_send', 'member_archive'];
+  'health_decide', 'buy_decide', 'adj_add', 'ann_create', 'notify_send', 'member_archive',
+  'dept_create', 'positions_add', 'dept_remove', 'position_remove'];   /* 31.10: службы и должности (0033) */
+var DAI_STRUCT = ['dept_create', 'positions_add', 'dept_remove', 'position_remove', 'member_archive'];   /* после них — перезагрузка справочника */
 var DAI_STEP_RPC = { schedule_set_many: 'График', schedule_publish: 'Публикация графика', task_create: 'Задача', task_cancel: 'Отмена задачи', repair_create: 'Заявка на ремонт',
-  repair_assign: 'Поручение по ремонту', buy_create: 'Заявка на закупку', adj_add: 'Премия или штраф', ann_create: 'Объявление', notify_send: 'Уведомление', member_archive: 'Сотрудник' };
-var DAI_KIND = { schedule: 'График', task: 'Задача', repair: 'Ремонт', buy: 'Закупка', decide: 'Решения', adjust: 'Деньги', announce: 'Объявление', notify: 'Уведомление', cancel: 'Отмена', archive: 'Сотрудник', open: 'Экран' };
+  repair_assign: 'Поручение по ремонту', buy_create: 'Заявка на закупку', adj_add: 'Премия или штраф', ann_create: 'Объявление', notify_send: 'Уведомление', member_archive: 'Сотрудник',
+  dept_create: 'Служба', positions_add: 'Должности', dept_remove: 'Удаление службы', position_remove: 'Удаление должности' };
+var DAI_KIND = { schedule: 'График', task: 'Задача', repair: 'Ремонт', buy: 'Закупка', decide: 'Решения', adjust: 'Деньги', announce: 'Объявление', notify: 'Уведомление', cancel: 'Отмена', archive: 'Сотрудник', open: 'Экран',
+  dept: 'Служба', dept_remove: 'Удаление', position_remove: 'Удаление' };
+var DAI_RED = ['archive', 'adjust', 'dept_remove', 'position_remove'];
 DAI_IC.mic = '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>';
 DAI_IC.orb = '<path d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9z" fill="#fff" stroke="none"/><circle cx="19" cy="18" r="1.6" fill="#fff" stroke="none"/><circle cx="5" cy="17" r="1.1" fill="#fff" stroke="none"/>';
 DAI_IC.warn = '<path d="M12 4l9 16H3z"/><path d="M12 10v4.5M12 17.4v.1"/>';
@@ -38695,7 +38701,7 @@ function dai_cardHtml(c, i, j) {
   var head = '<div class="dai-ck">' + dai_e(DAI_KIND[c.kind] || 'Действие') + '</div><div class="dai-ct">' + h(c.title || '') + '</div>';
   var lines = (c.lines || []).length ? '<ul class="dai-cl">' + c.lines.map(function (l) { return '<li>' + h(l && l.t != null ? l.t : l) + '</li>'; }).join('') + '</ul>' : '';
   if (st === 'proposed') {
-    out = (c.warn ? '<div class="dai-cw' + (c.kind === 'archive' || c.kind === 'adjust' ? ' bad' : '') + '">' + dai_ico('warn', 16, 2) + '<span>' + h(c.warn) + '</span></div>' : '') +
+    out = (c.warn ? '<div class="dai-cw' + (DAI_RED.indexOf(c.kind) >= 0 ? ' bad' : '') + '">' + dai_ico('warn', 16, 2) + '<span>' + h(c.warn) + '</span></div>' : '') +
       '<div class="dai-cbs">' + (c.kind === 'open'
         ? '<button type="button" class="dai-cb go" data-daio="' + k + '">' + dai_ico('go', 16, 2.2) + '<span>' + dai_e('Открыть') + '</span></button>'
         : '<button type="button" class="dai-cb go" data-daix="' + k + '"' + (busy ? ' disabled' : '') + '>' + (busy ? '<span>' + dai_e('Выполняю…') + '</span>' : dai_ico('ok', 16, 2.4) + '<span>' + dai_e('Выполнить') + '</span>') + '</button>' +
@@ -38795,7 +38801,9 @@ async function dai_exec(i, j, pub) {
   if (!steps.length || steps.some(function (s) { return !s || DAI_RPC.indexOf(s.rpc) < 0; })) return toast(dai_t('В карточке недопустимое действие — попросите помощника подготовить её заново'));
   c.busy = true; dai_paint(false);
   var res;
-  if (!dz_sv()) { await new Promise(function (r) { setTimeout(r, 500); }); res = { ok: steps.length, fail: 0, errors: [], demo: true }; }
+  var struct = steps.some(function (s) { return DAI_STRUCT.indexOf(s.rpc) >= 0; });
+  if (!dz_sv() && steps.some(function (s) { return /^(dept_|positions_add|position_remove)/.test(s.rpc); })) res = await dai_demoStruct(steps);   /* демо: службы и должности — через демо-слой (как «Отделы и должности») */
+  else if (!dz_sv()) { await new Promise(function (r) { setTimeout(r, 500); }); res = { ok: steps.length, fail: 0, errors: [], demo: true }; }
   else {
     var r = await dai_rpc('owner_ai_run', { p_steps: steps });
     var L = (r && r.data && r.data.results) || [];
@@ -38804,6 +38812,8 @@ async function dai_exec(i, j, pub) {
       errors: L.filter(function (y) { return !y.ok; }).map(function (y) { return dai_rpcLabel(y.rpc) + ': ' + (y.skipped ? dai_t('пропущено — предыдущий шаг не выполнен') : dz_err(y.error)); }).slice(0, 6) };
   }
   res.publish = !!pub;
+  /* служба/должность/увольнение — сразу видно в «Команде» и графике: перезагрузить справочник */
+  if (struct && res.ok > 0) { try { if (typeof loadBase === 'function') await loadBase(); } catch (e) {} }
   c.busy = false; c.res = res;
   c.status = res.fail === 0 ? 'done' : res.ok > 0 ? 'partial' : 'failed';
   if (c.id != null) await dai_rpc('owner_ai_card_mark', { p_id: c.id, p_status: c.status, p_result: res });
@@ -38858,11 +38868,193 @@ function dai_named(q) {
 }
 function dai_stepL(n) {
   var M = { team: 'Смотрю сотрудников', shifts: 'Смотрю смены', schedule: 'Смотрю график', now: 'Смотрю, кто на смене', pending: 'Смотрю, что ждёт решения', brief: 'Смотрю сводку дня',
-    propose_schedule: 'Готовлю карточку графика', propose_task: 'Готовлю карточку задачи', propose_decide: 'Готовлю карточку решений' };
+    propose_schedule: 'Готовлю карточку графика', propose_task: 'Готовлю карточку задачи', propose_decide: 'Готовлю карточку решений',
+    propose_department: 'Готовлю карточку службы', propose_dept_remove: 'Готовлю удаление службы', propose_position_remove: 'Готовлю удаление должности', propose_archive: 'Готовлю карточку сотрудника' };
   return { n: n, l: dai_t(M[n] || n) };
 }
+/* ---- 31.10: службы, должности, увольнение, схема графика, срок задачи (демо) ---- */
+var DAI_UZW = { 'кухня': 'Oshxona', 'повар': 'Oshpaz', 'су-шеф': 'Su-shef', 'шеф-повар': 'Bosh oshpaz', 'посудомойщица': 'Idish yuvuvchi', 'посудомойщик': 'Idish yuvuvchi',
+  'бар': 'Bar', 'бармен': 'Barmen', 'официант': 'Ofitsiant', 'уборщица': 'Farrosh', 'курьер': 'Kuryer', 'доставка': 'Yetkazib berish', 'склад': 'Ombor',
+  'кладовщик': 'Omborchi', 'охрана': 'Qoʻriqlash', 'охранник': 'Qoʻriqchi', 'кассир': 'Kassir', 'администратор': 'Administrator', 'пекарь': 'Novvoy', 'кондитер': 'Qandolatchi' };
+function dai_cap(x) { x = String(x || '').replace(/\s+/g, ' ').trim(); return x ? x.charAt(0).toUpperCase() + x.slice(1) : x; }
+function dai_low(x) { return String(x || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
+function dai_depts() { try { return (S.depts || []).filter(function (d) { return d && d.name; }); } catch (e) { return []; } }
+function dai_poss() { try { return (S.pos || []).filter(function (p) { return p && p.name; }); } catch (e) { return []; } }
+function dai_emps() { try { return (S.emps || []).filter(function (e) { return e && e.active !== false && !e.colleague; }); } catch (e) { return []; } }
+/* срок задачи из текста: «… до 12:00», «… к 15:00», «… до 12», «… soat 12:00 gacha» (только явное время, в конце) */
+function dai_splitDue(t) {
+  var s = String(t || '').trim(), R = [/[\s,;—–-]*(?:срок\s*[:—-]?\s*)?(?:до|к|не\s+позже|не\s+позднее)\s+(\d{1,2})(?:[:.](\d{2}))?\s*(?:ч(?:ас(?:ов|а)?)?\.?)?\s*[.!]?$/i,
+    /[\s,;—–-]*(?:soat\s+|соат\s+)?(\d{1,2})(?:[:.](\d{2}))?\s*(?:gacha|гача)\s*[.!]?$/i];
+  for (var i = 0; i < R.length; i++) { var m = R[i].exec(s); if (!m) continue; var hh = +m[1], mi = m[2] ? +m[2] : 0; if (hh > 23 || mi > 59) continue;
+    var rest = s.slice(0, m.index).replace(/[\s,;:—–-]+$/, '').trim(); if (!rest) continue; return { title: rest, due: ('0' + hh).slice(-2) + ':' + ('0' + mi).slice(-2) }; }
+  return { title: s, due: null };
+}
+/* «Открой службу Кухня: повар, су-шеф руководитель, посудомойщица» → {name, positions:[{name, access}]} */
+function dai_parseDept(q) {
+  var m = /(?:открой|откройте|создай|создайте|добавь|заведи|сделай)\s+(?:нов(?:ую|ый)\s+)?(?:службу|отдел)\s+«?([^:,—«»]+?)»?\s*(?:[:—–]|,|\s+(?:с\s+должностями|должности)\s*:?)\s*(.+)$/i.exec(q)
+    || /^\s*«?([^:,—«»]+?)»?\s+(?:xizmat|xizmatini|boʻlim|bo'lim|bo‘lim|хизмат|хизматини)\s+(?:och|oching|yarat|qoʻsh|qo'sh|оч|яра)\S*\s*[:—–,]?\s*(.+)$/i.exec(q)
+    || /(?:открой|создай|добавь)\s+(?:нов(?:ую|ый)\s+)?(?:службу|отдел)\s+«?([^:,—«»]+?)»?\s*$/i.exec(q);
+  if (!m) return null;
+  var name = dai_cap(m[1]), rest = m[2] || '', parts = /[,;]/.test(rest) ? rest.split(/\s*[,;]\s*|\s+и\s+/) : rest.split(/\s+/), P = [];
+  var MG = /^\(?\s*(?:руководитель|руководителем|rahbar|раҳбар|главный)\s*\)?$/i;
+  parts.forEach(function (x) {
+    x = String(x || '').trim(); if (!x) return;
+    if (MG.test(x)) { if (P.length) P[P.length - 1].access = 'manager'; return; }
+    var mg = /\(?\s*(?:—\s*)?(?:руководитель|rahbar|раҳбар)\s*\)?\s*$/i.exec(x);
+    if (mg) x = x.slice(0, mg.index).replace(/[\s—–-]+$/, '');
+    if (x) P.push({ name: dai_cap(x), name_uz: DAI_UZW[dai_low(x)] || null, access: mg ? 'manager' : 'staff' });
+  });
+  return { name: name, name_uz: DAI_UZW[dai_low(name)] || null, positions: P };
+}
+function dai_findDept(nm) { var k = dai_norm(dai_low(nm)); return dai_depts().filter(function (d) { return dai_norm(dai_low(d.name)) === k || (d.name_uz && dai_norm(dai_low(d.name_uz)) === k); })[0] || null; }
+function dai_demoStructAnswer(q, lg) {
+  var ru = lg === 'ru', R = function (a, b) { return ru ? a : dai_t(a); };
+  var pd = dai_parseDept(q);
+  if (pd) {
+    var ex = dai_findDept(pd.name), have = {}, P = [], already = [];
+    if (ex) dai_poss().forEach(function (p) { if (String(p.dept_id) === String(ex.id)) have[dai_low(p.name)] = 1; });
+    var seen = {}; pd.positions.forEach(function (p) { var k = dai_low(p.name); if (seen[k]) return; seen[k] = 1; if (have[k]) already.push(p.name); else P.push(p); });
+    if (ex && !P.length) return { steps: ['team'].map(dai_stepL), cards: [], answer: dai_t('В службе «{d}» уже есть все эти должности.', { d: ex.name }) };
+    var lines = P.map(function (p) { return { t: (!ru && p.name_uz ? p.name_uz : p.name) + ' — ' + dai_t(p.access === 'manager' ? 'руководитель' : 'сотрудник') }; });
+    if (already.length) lines.push({ t: dai_t('Уже есть: ') + already.join(', ') });
+    var posArg = P.map(function (p) { return { name: p.name, name_uz: p.name_uz, access: p.access }; });
+    var card = ex ? { id: null, status: 'proposed', kind: 'dept', title: dai_t('Служба {d}: новые должности', { d: ex.name }), lines: lines, warn: null,
+        plan: [{ rpc: 'positions_add', args: { p_dept: ex.id, p_positions: posArg } }], extra: { view: 'team' } }
+      : { id: null, status: 'proposed', kind: 'dept', title: dai_t('Новая служба: {d}', { d: !ru && pd.name_uz ? pd.name_uz : pd.name }) + (P.length ? dai_t(' · должностей: {n}', { n: P.length }) : ''), lines: lines,
+        warn: P.some(function (p) { return p.access === 'manager'; }) ? dai_t('Должность «руководитель» даёт доступ к команде службы, когда на неё пригласят или переведут сотрудника.') : null,
+        plan: [{ rpc: 'dept_create', args: { p_name: pd.name, p_name_uz: pd.name_uz, p_positions: posArg } }], extra: { view: 'team' } };
+    return { steps: ['team', 'propose_department'].map(dai_stepL), cards: [card],
+      answer: ex ? dai_t('Служба **{d}** уже есть — добавлю в неё должности. Проверьте карточку и нажмите «Выполнить».', { d: ex.name })
+        : dai_t('Подготовил новую службу **{d}** и должности ({n}). Проверьте карточку и нажмите «Выполнить».', { d: pd.name, n: P.length }) };
+  }
+  var md = /(?:удали|удалите|убери|закрой)\s+(?:службу|отдел)\s+«?([^«»]+?)»?\s*$/i.exec(q);
+  if (md) {
+    var d = dai_findDept(md[1]);
+    if (!d) return { steps: ['team'].map(dai_stepL), cards: [], answer: dai_t('Службы «{d}» нет. Есть: {l}.', { d: dai_cap(md[1]), l: dai_depts().map(function (x) { return x.name; }).join(', ') }) };
+    if (d.id === 'dir') return { steps: ['team'].map(dai_stepL), cards: [], answer: dai_t('Службу «Руководство» удалить нельзя.') };
+    var ppl = dai_emps().filter(function (e) { return String(e.dept_id) === String(d.id); });
+    if (ppl.length) return { steps: ['team', 'propose_dept_remove'].map(dai_stepL), cards: [],
+      answer: dai_t('Удалить службу **{d}** пока нельзя — в ней работают: {l}. Сначала переведите их в другую службу (карточка сотрудника в «Команде») или уволите — скажите, что сделать.', { d: d.name, l: ppl.map(dai_nm).join(', ') }) };
+    var pos = dai_poss().filter(function (p) { return String(p.dept_id) === String(d.id); }).map(function (p) { return p.name; });
+    return { steps: ['team', 'propose_dept_remove'].map(dai_stepL), answer: dai_t('Подготовил удаление службы **{d}** — проверьте карточку.', { d: d.name }),
+      cards: [{ id: null, status: 'proposed', kind: 'dept_remove', title: dai_t('Удалить службу: ') + d.name, lines: [{ t: dai_t('Служба: ') + d.name }].concat(pos.length ? [{ t: dai_t('Вместе с ней — должности: ') + pos.join(', ') }] : []),
+        warn: dai_t('Служба и её должности исчезнут из «Команды», графика и списков. История (табель, задачи) сохранится; «Открой службу …» с тем же названием вернёт её.'),
+        plan: [{ rpc: 'dept_remove', args: { p_dept: d.id } }], extra: { view: 'team' } }] };
+  }
+  var mp = /(?:удали|удалите|убери)\s+должност\S*\s+«?([^«»]+?)»?\s*$/i.exec(q);
+  if (mp) {
+    var k = dai_norm(dai_low(mp[1])), hit = dai_poss().filter(function (p) { return dai_norm(dai_low(p.name)) === k; });
+    if (!hit.length) return { steps: ['team'].map(dai_stepL), cards: [], answer: dai_t('Должности «{p}» нет.', { p: dai_cap(mp[1]) }) };
+    var p0 = hit[0], ppl2 = dai_emps().filter(function (e) { return String(e.position_id) === String(p0.id); });
+    if (ppl2.length) return { steps: ['team', 'propose_position_remove'].map(dai_stepL), cards: [], answer: dai_t('На должности **{p}** работают: {l}. Сначала переведите их на другую должность или уволите.', { p: p0.name, l: ppl2.map(dai_nm).join(', ') }) };
+    var dd = dai_depts().filter(function (x) { return String(x.id) === String(p0.dept_id); })[0];
+    return { steps: ['team', 'propose_position_remove'].map(dai_stepL), answer: dai_t('Подготовил удаление должности **{p}** — проверьте карточку.', { p: p0.name }),
+      cards: [{ id: null, status: 'proposed', kind: 'position_remove', title: dai_t('Удалить должность: ') + p0.name, lines: [{ t: dai_t('Служба: ') + (dd ? dd.name : '—') }],
+        warn: dai_t('Должность исчезнет из списков и приглашения. Сотрудников на ней нет.'), plan: [{ rpc: 'position_remove', args: { p_id: p0.id } }], extra: { view: 'team' } }] };
+  }
+  if (/(?:уволь|увольте|убери\s+в\s+архив|в\s+архив|boʻshat|bo'shat|бўшат|arxivga)/i.test(q)) {
+    var who = dai_named(q)[0];
+    if (!who) return { steps: ['team'].map(dai_stepL), cards: [], answer: dai_t('Кого уволить? Назовите сотрудника по имени.') };
+    return { steps: ['team', 'propose_archive'].map(dai_stepL), answer: dai_t('Подготовил увольнение **{n}** — проверьте карточку внимательно.', { n: dai_nm(who) }),
+      cards: [{ id: null, status: 'proposed', kind: 'archive', title: dai_t('Уволить (в архив)'), lines: [{ t: (who.first_name + ' ' + (who.last_name || '')).trim() }],
+        warn: dai_t('Внимание: сотрудник больше не сможет войти, пропадёт из графика и списков. История и расчёты сохранятся; вернуть можно из архива.'),
+        plan: [{ rpc: 'member_archive', args: { p_id: who.id, p_on: true } }], extra: { view: 'team' } }] };
+  }
+  var mpat = /(\d{1,2})\s*\/\s*(\d{1,2})|сутки\s+через\s+трое/i.exec(q);
+  if (mpat && dai_named(q)[0]) {
+    var A0 = dai_named(q)[0], a = mpat[1] ? +mpat[1] : 1, b = mpat[2] ? +mpat[2] : 3, t0 = new Date(); t0.setHours(12, 0, 0, 0);
+    var from = new Date(t0); from.setDate(from.getDate() + 1);
+    var MON = ['январ', 'феврал', 'март', 'апрел', 'ма[йя]', 'июн', 'июл', 'август', 'сентябр', 'октябр', 'ноябр', 'декабр'], mm = -1;
+    MON.forEach(function (x, i) { if (new RegExp(x, 'i').test(q)) mm = i; });
+    if (mm >= 0) { from = new Date(t0.getFullYear() + (mm < t0.getMonth() ? 1 : 0), mm, 1, 12); if (from < t0) { from = new Date(t0); from.setDate(from.getDate() + 1); } }
+    var md5 = /с\s+(\d{1,2})(?:-?го)?\b/i.exec(q); if (md5) { var dn = +md5[1]; var f2 = new Date(t0.getFullYear(), t0.getMonth(), dn, 12); if (f2 <= t0) f2 = new Date(t0.getFullYear(), t0.getMonth() + 1, dn, 12); from = f2; }
+    var to = new Date(from.getFullYear(), from.getMonth() + 1, 0, 12), rows = [], nW = 0, nO = 0, sutki = !mpat[1];
+    for (var d1 = new Date(from), i1 = 0; d1 <= to; d1.setDate(d1.getDate() + 1), i1++) {
+      var ds = dai_dstr(d1);
+      if (i1 % (a + b) < a) { rows.push({ member: A0.id, day: ds, kind: 'work', start: sutki ? '08:00' : '09:00', end: sutki ? '08:00' : '18:00' }); nW++; } else { rows.push({ member: A0.id, day: ds, kind: 'off' }); nO++; }
+    }
+    var f0 = dai_dstr(from), e0 = dai_dstr(to), lab = (sutki ? '08:00–08:00 ' + dai_t('(сутки)') : '09:00–18:00');
+    var ln = dai_nm(A0) + ' — ' + dai_t('схема ') + a + '/' + b + ' ' + dai_dm(f0) + '–' + dai_dm(e0) + ': ' + lab + ' ' + dai_t('(смен {w}, выходных {o})', { w: nW, o: nO });
+    return { steps: ['team', 'shifts', 'schedule', 'propose_schedule'].map(dai_stepL), answer: dai_t('Разложил схему **{p}** по дням:', { p: a + '/' + b }) + '\n— ' + ln + '\n' + dai_t('Уже заполненные дни не трогаю. Проверьте карточку и нажмите «Выполнить».'),
+      cards: [{ id: null, status: 'proposed', kind: 'schedule', title: dai_t('График') + ' ' + dai_dm(f0) + '–' + dai_dm(e0), lines: [{ t: ln }], warn: dai_t('Сотрудники увидят изменения после публикации.'),
+        plan: [{ rpc: 'schedule_set_many', args: { p_rows: rows } }], extra: { view: 'sched' } }] };
+  }
+  return null;
+}
+/* демо «Выполнить» для служб и должностей — тот же демо-слой, что «Отделы и должности» (sb.from(...).insert / delete + сохранение между перезагрузками) */
+async function dai_demoStruct(steps) {
+  var ok = 0, fail = 0, errors = [];
+  var keep = function (fn) { try { if (typeof sxRoles === 'function') sxRoles(function (R) { R.newDepts = R.newDepts || []; R.newPos = R.newPos || []; R.delPos = R.delPos || []; R.delDepts = R.delDepts || []; fn(R); }); } catch (e) {} };
+  for (var i = 0; i < steps.length; i++) {
+    var st = steps[i], a = st.args || {};
+    try {
+      if (st.rpc === 'dept_create' || st.rpc === 'positions_add') {
+        var d = st.rpc === 'positions_add' ? dai_depts().filter(function (x) { return String(x.id) === String(a.p_dept); })[0] : dai_findDept(a.p_name);
+        if (!d && st.rpc === 'positions_add') throw new Error(dai_t('Такой службы в заведении нет'));
+        if (!d) { d = { id: 'd' + Date.now().toString(36), name: a.p_name, name_uz: a.p_name_uz || null, sort: 900 + dai_depts().length }; await sb.from('departments').insert(d); var dc = d; keep(function (R) { R.newDepts.push(dc); }); }
+        var have = {}; dai_poss().forEach(function (p) { if (String(p.dept_id) === String(d.id)) have[dai_low(p.name)] = 1; });
+        var L = a.p_positions || [];
+        for (var j = 0; j < L.length; j++) {
+          var nm = dai_cap(L[j].name); if (!nm || have[dai_low(nm)]) continue; have[dai_low(nm)] = 1;
+          var np = { id: 9000 + Math.floor(Math.random() * 899999), name: nm, name_uz: L[j].name_uz || null, dept_id: d.id, access: L[j].access === 'manager' ? 'manager' : 'staff', sort: 900 + j };
+          await sb.from('positions').insert(np); keep(function (R) { R.newPos.push(np); });
+        }
+      } else if (st.rpc === 'dept_remove') {
+        var id = a.p_dept; if (id === 'dir') throw new Error(dai_t('Службу «Руководство» удалить нельзя'));
+        if (dai_emps().some(function (e) { return String(e.dept_id) === String(id); })) throw new Error(dai_t('В службе работают люди — сначала переведите их'));
+        var pids = dai_poss().filter(function (p) { return String(p.dept_id) === String(id); }).map(function (p) { return p.id; });
+        for (var k = 0; k < pids.length; k++) await sb.from('positions').delete().eq('id', pids[k]);
+        await sb.from('departments').delete().eq('id', id);
+        keep(function (R) { R.delDepts.push(id); R.newDepts = R.newDepts.filter(function (x) { return x.id !== id; }); pids.forEach(function (x) { R.delPos.push(x); }); R.newPos = R.newPos.filter(function (x) { return pids.indexOf(x.id) < 0; }); });
+      } else if (st.rpc === 'position_remove') {
+        var pid = a.p_id;
+        if (dai_emps().some(function (e) { return String(e.position_id) === String(pid); })) throw new Error(dai_t('На должности есть сотрудники'));
+        await sb.from('positions').delete().eq('id', pid);
+        keep(function (R) { R.delPos.push(pid); R.newPos = R.newPos.filter(function (x) { return x.id !== pid; }); });
+      }
+      ok++;
+    } catch (e) { fail++; errors.push(dai_rpcLabel(st.rpc) + ': ' + (e && e.message || e)); }
+  }
+  return { ok: ok, fail: fail, errors: errors };
+}
+/* новая (пока пустая) служба сразу видна: «Команда» — карточка службы «пока никого» + «Пригласить»; «График» — чип службы с подсказкой.
+   Экраны строят службы по людям (служба без людей не показывалась) — дополняем после всех обёрток (на load), только владельцу. */
+function dai_emptyDepts() {
+  try { if (!isDirector()) return []; } catch (e) { return []; }
+  var used = {}; (S.emps || []).forEach(function (e) { if (e && e.active !== false) used[e.dept_id] = 1; });
+  return dai_depts().filter(function (d) { return d.id !== 'dir' && !used[d.id]; });
+}
+function dai_edTeam() {
+  if (S.view !== 'team' || !$('main') || $('daiEdT')) return;
+  var L = dai_emptyDepts(); if (!L.length) return;
+  var box = document.createElement('div'); box.id = 'daiEdT';
+  box.innerHTML = L.map(function (d) {
+    var ps = dai_poss().filter(function (p) { return String(p.dept_id) === String(d.id); }).map(function (p) { return dai_cy(dz_uz() && p.name_uz ? p.name_uz : p.name); });
+    return '<div class="card"><h2>' + h(dai_cy(dz_uz() && d.name_uz ? d.name_uz : d.name)) + ' <small>0</small></h2>' + (ps.length ? '<div class="meta">' + h(dai_cy(dai_t('Должности: '))) + h(ps.join(', ')) + '</div>' : '') +
+      '<div class="muted" style="font-size:13px;margin:6px 0 10px">' + h(dai_cy(dai_t('В службе пока никого — пригласите сотрудника на одну из должностей.'))) + '</div>' +
+      '<button type="button" class="btn ghost sm" data-daiinv="1">' + h(dai_cy(dai_t('+ Пригласить'))) + '</button></div>';
+  }).join('');
+  $('main').appendChild(box);
+  box.querySelectorAll('[data-daiinv]').forEach(function (b) { b.onclick = function () { var x = $('nav_inv') || [].slice.call(document.querySelectorAll('#main button')).filter(function (y) { return /Пригласить|Taklif/.test(y.textContent) && !y.hasAttribute('data-daiinv'); })[0]; if (x) x.click(); }; });
+}
+function dai_edSched() {
+  if (S.view !== 'teamsched' || !$('main') || $('daiEdS')) return;
+  var L = dai_emptyDepts(); if (!L.length) return;
+  var row = $('main').querySelector('.chips [data-dept]'); row = row && row.parentNode; if (!row) return;
+  var sp = document.createElement('span'); sp.id = 'daiEdS'; sp.style.display = 'contents';
+  sp.innerHTML = L.map(function (d) { return '<button type="button" class="pick" data-daieds="' + h(String(d.id)) + '" title="' + h(dai_cy(dai_t('В службе пока никого'))) + '">' + h(dai_cy(dz_uz() && d.name_uz ? d.name_uz : d.name)) + ' · 0</button>'; }).join('');
+  row.appendChild(sp);
+  sp.querySelectorAll('[data-daieds]').forEach(function (b) { b.onclick = function () { toast(dai_cy(dai_t('В службе «{d}» пока никого — пригласите сотрудника («Команда» → «+ Пригласить»), и она появится в графике.', { d: b.textContent.replace(/ · 0$/, '') }))); }; });
+}
+window.addEventListener('load', function () {
+  try { if (typeof vTeam === 'function') { var t0 = vTeam; vTeam = async function () { var r = await t0.apply(this, arguments); [0, 200, 700, 1300].forEach(function (ms) { setTimeout(function () { try { dai_edTeam(); } catch (e) {} }, ms); }); return r; }; } } catch (e) {}
+  try { if (typeof vTeamSched === 'function') { var s0 = vTeamSched; vTeamSched = async function () { var r = await s0.apply(this, arguments); [0, 200, 700, 1300].forEach(function (ms) { setTimeout(function () { try { dai_edSched(); } catch (e) {} }, ms); }); return r; }; } } catch (e) {}
+});
+/* удалённые в демо службы — не возвращать после перезагрузки (saas-inject применяет newDepts/delPos, но не delDepts) */
+(function () { try { var DB = window.__DB, R = JSON.parse(localStorage.getItem(typeof SX_RK !== 'undefined' ? SX_RK : '') || 'null'); if (DB && R && R.delDepts && R.delDepts.length) DB.departments = DB.departments.filter(function (d) { return R.delDepts.indexOf(d.id) < 0; }); } catch (e) {} })();
 function dai_demoOwner(q, lg) {
   var T0 = dai_team(), nm = dai_named(q), ru = lg === 'ru', today = new Date(); today.setHours(12, 0, 0, 0);
+  var SA = dai_demoStructAnswer(q, lg); if (SA) return SA;
   var mon = new Date(today); mon.setDate(mon.getDate() + ((8 - mon.getDay()) % 7 || 7));
   var wkq = /(\d{4}-\d{2}-\d{2})/.exec(q); if (wkq) { var m2 = new Date(wkq[1] + 'T12:00:00'); if (!isNaN(+m2)) mon = m2; }   /* v30: неделя из «График голосом» */
   var D = function (n) { var x = new Date(mon); x.setDate(x.getDate() + n); return dai_dstr(x); };
@@ -38886,12 +39078,14 @@ function dai_demoOwner(q, lg) {
         dai_t('Прогулов нет. Если нужно — скажите, кому поставить штраф или задачу.') };
   }
   if (/задач|vazifa|вазифа/i.test(q) && A) {
-    var tt = (String(q).split(/[:—–]/)[1] || '').trim() || dai_t('Проверить чистоту и порядок на рабочем месте');
+    /* 31.10: текст — после ПЕРВОГО «:» (раньше «до 12:00» резалось по двоеточию времени); явное время — в срок, не в название */
+    var qi = String(q).search(/[:—–]/), tt = (qi >= 0 ? String(q).slice(qi + 1) : '').trim(), sd = dai_splitDue(tt);
+    tt = sd.title || dai_t('Проверить чистоту и порядок на рабочем месте');
     tt = tt.charAt(0).toUpperCase() + tt.slice(0, 200).slice(1);
-    var d0 = dai_dstr(today);
+    var d0 = dai_dstr(today), due = sd.due;
     return { steps: ['team', 'propose_task'].map(dai_stepL), answer: dai_t('Подготовил задачу для **{n}** — проверьте и нажмите «Выполнить».', { n: dai_nm(A) }),
-      cards: [{ id: null, status: 'proposed', kind: 'task', title: dai_t('Задача'), lines: [{ t: dai_nm(A) + ' — «' + tt + '» · ' + dai_dow(d0) + ' ' + dai_dm(d0) + ' ' + dai_t('до {t}', { t: '18:00' }) }], warn: null,
-        plan: [{ rpc: 'task_create', args: { p_title: tt, p_assignee: A.id, p_day: d0, p_due: '18:00' } }], extra: { view: 'tasks' } }] };
+      cards: [{ id: null, status: 'proposed', kind: 'task', title: dai_t('Задача'), lines: [{ t: dai_nm(A) + ' — «' + tt + '» · ' + dai_dow(d0) + ' ' + dai_dm(d0) + (due ? ' ' + dai_t('до {t}', { t: due }) : '') }], warn: null,
+        plan: [{ rpc: 'task_create', args: { p_title: tt, p_assignee: A.id, p_day: d0, p_due: due } }], extra: { view: 'tasks' } }] };
   }
   if (/реш|жд[её]т|одобр|qaror|kutay|қарор|кутай/i.test(q)) {
     var a2 = A ? dai_nm(A) : '—', b2 = B ? dai_nm(B) : '—';
@@ -51251,6 +51445,27 @@ async function dzt_fFill() {
 }
 (function () {
   try { if (typeof dz_fBox === 'function') { var b0 = dz_fBox; dz_fBox = function () { setTimeout(dzt_fFill, 0); return b0.apply(this, arguments) + '<div id="dztF"></div>'; }; } } catch (e) {}
+})();
+
+
+/* ===== ВОЛНА 4 · 92zy-sched31.js ===== */
+/* 92zy-sched31 — схема «3/1» (три дня работы, один выходной), решение владельца 31.10.
+   Добавляется в «Заполнить по схеме» (D3_SCH, считает по циклу сама) и в выбор графика при приглашении (CF_PAT + cf_patDays). */
+(function () {
+  try {
+    if (typeof D3_SCH !== 'undefined' && !D3_SCH.some(function (x) { return x[0] === '31'; })) {
+      var i = D3_SCH.findIndex(function (x) { return x[0] === '22'; });
+      D3_SCH.splice(i < 0 ? D3_SCH.length : i + 1, 0, ['31', '3/1', 3, 1]);
+    }
+    if (typeof CF_PAT !== 'undefined' && !CF_PAT.some(function (x) { return x[0] === '31'; })) {
+      CF_PAT.push(['31', '3/1', 'три дня работы, один выходной']);
+      var pd0 = cf_patDays;
+      cf_patDays = function (pat, from, n) {
+        if (pat !== '31') return pd0.apply(this, arguments);
+        var out = []; for (var k = 0; k < n; k++) out.push([addDays(from, k), k % 4 < 3]); return out;
+      };
+    }
+  } catch (e) { console.warn('92zy', e); }
 })();
 
 
