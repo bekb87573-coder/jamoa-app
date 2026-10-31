@@ -44,6 +44,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 </script>
 <script src="saas-uz.js"></script>
 <script src="uz-w4-ai.js"></script>
+<script src="uz-w4-backlog.js"></script>
 <script src="uz-w4-card.js"></script>
 <script src="uz-w4-clock.js"></script>
 <script src="uz-w4-close.js"></script>
@@ -14139,7 +14140,7 @@ function sortable(box, sel, o) {
   document.addEventListener('pointerup', function () { if (!bx) return; var b = bx; bx = null; if (bdy > 110) { b.style.transition = 'transform .28s cubic-bezier(.32,.72,0,1)'; b.style.transform = 'translateY(110%)'; var sh = b.parentNode; if (sh) sh.style.transition = 'opacity .28s', sh.style.opacity = '0'; setTimeout(closeLayer, 260); } else { b.style.transition = 'transform .35s cubic-bezier(.34,1.4,.64,1)'; b.style.transform = ''; } });
 })();
 (function () { var st = document.createElement('style'); st.textContent =
- 'html{-webkit-tap-highlight-color:transparent}html,body{overscroll-behavior-y:none}' +
+ 'html{-webkit-tap-highlight-color:transparent}body{overscroll-behavior-y:none}' +
  '.seci,.secb,.ed-row,.wg{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}' +
  'main.nv-push{animation:nvPush .48s cubic-bezier(.32,.72,0,1) both}main.nv-pop{animation:nvPop .42s cubic-bezier(.32,.72,0,1) both}main.nv-tab{animation:nvTab .3s cubic-bezier(.32,.72,0,1) both}' +
  'main.nv-push>*,main.nv-pop>*{animation:none!important}' +
@@ -51609,6 +51610,19 @@ async function dz_fOvFill() {
 })();
 
 
+/* ===== ВОЛНА 4 · 92zq-ptr.js ===== */
+/* ===== 92zq — без перезагрузки при «потянуть вниз» на Android (31.10).
+   Chrome на Android перезагружает страницу, если потянуть экран вниз в самом верху (pull-to-refresh).
+   Раньше запрет стоял только на body; Chrome берёт его с корневого элемента html — ставим на оба. */
+(function () {
+  try {
+    var st = document.createElement('style');
+    st.textContent = 'html,body{overscroll-behavior-y:none}';
+    document.head.appendChild(st);
+  } catch (e) {}
+})();
+
+
 /* ===== ВОЛНА 4 · 92zr-onboard.js ===== */
 /* ===== 92zr · «Штат и первый вход владельца», часть А (префикс dzr_). Журнал — w4/log/dzr.md =====
    Требования — w4/SHTAT_BRIEF.md, аудит — w4/AUDIT_onboarding.md (п. 1, 2, 4 порядка работ; находки 1–6, 9, 10).
@@ -53619,6 +53633,234 @@ function dzu_settings() {
 })();
 
 if (dzu_dbg()) window.__dzu = { mount: dzu_mount, list: dzu_list, cat: dzu_cat, save: dzu_save, settings: function () { return dzu_settings(); }, idx: function () { return DZU.idx; }, role: dzu_role, go: function (v) { return go(v); }, S: function () { return S; }, plOpen: function (id) { return plOpen(id); } };
+
+
+/* ===== ВОЛНА 4 · 92zv-backlog.js ===== */
+/* ===== 92zv — пачка отложенных задач BACKLOG 31.10 (префикс dbl_). Журнал w4/log/dbl.md, сервер — 0036_member_prefs.sql,
+   переходник — блок «92zv» в конце sv-adapter.js.
+   1. «Отпроситься» на главной (сотрудник и руководитель, не владелец): строка над стопкой виджетов 92zu — ведёт в существующую форму
+      «Разрешения → Запросить» (выйти / опоздаю / уйти раньше, vPerm/permForm); справа — «Выходной» → существующая форма отгула в
+      «Моём графике» (как «Быстрые действия → Выходной», 92f cf_reqTop). Новой логики нет.
+   2. «Штат» (92zs): (а) «Назад» из карточки сотрудника, открытой из «Штата», — в «Штат»; (в) на компьютере (окно ≥ 1024 px) экран «Штат»
+      широкий (#app.wide, как «Пульт»), поэтому видны две панели (список + карточка) — их рисует 92zs, когда #main ≥ 820 px.
+      (б) «Отделы и должности» — в режиме сервера добавление/удаление служб и должностей идут через rpc 0033 (блок 92zv в sv-adapter).
+   3. Карта сотрудников (92x): на узком экране чип «Вне зоны» → «Вне» и плотнее чипы — 4 чипа влезают в 320–390 px;
+      золотой шар ИИ-помощника (92ai) на экране карты стоит над шторкой (слева от кнопок + / −), а когда шторка открыта больше
+      половины — прячется.
+   4. Стопка виджетов (92zu) — общая для всех устройств участника: в режиме сервера при открытии главной настройки берутся с сервера
+      (rpc my_prefs_get, ключ 'dzu_stack'), изменения сохраняются на сервер с задержкой 1,2 с (my_prefs_set). localStorage
+      'dzu-stack-<id>' остаётся копией и единственным хранилищем в демо. Сервер недоступен / нет rpc — работает как раньше. */
+var DBL = { pullAt: 0, pulling: false, push: null, pushT: 0, off: false, sent: null, mapMo: null };
+function dbl_t(s) { try { return trUi(s); } catch (e) { return s; } }
+function dbl_e(s) { return h(dbl_t(s)); }
+function dbl_sv() { return typeof sv_on === 'function' && sv_on(); }
+function dbl_core() { return typeof cf_on === 'function' ? cf_on() : window.JAMOA_CORE === true; }
+function dbl_dir() { try { return !!isDirector(); } catch (e) { return false; } }
+function dbl_dbg() { return /[?&]w4dbg/.test(location.search); }
+
+/* =====================================================================
+   1. «Отпроситься» над стопкой
+   ===================================================================== */
+function dbl_leaveOk() {
+  try { return !!S.me && S.view === 'home' && dbl_core() && !dbl_dir() && (typeof canView !== 'function' || canView('perm')); } catch (e) { return false; }
+}
+function dbl_leaveMount() {
+  var m = $('main'), el = $('dblLeave');
+  if (!dbl_leaveOk() || !m) { if (el) el.remove(); return; }
+  var lang = (function () { try { return (window.MLX_I18N && (MLX_I18N.mode || MLX_I18N.lang)) || 'ru'; } catch (e) { return 'ru'; } })();
+  if (el && el._lang !== lang) { el.remove(); el = null; }
+  if (!el) {
+    el = document.createElement('div'); el.id = 'dblLeave'; el.className = 'card ob-pc dbl-lv'; el.setAttribute('data-cp', '0.9'); el._lang = lang;
+    el.innerHTML = '<button type="button" class="ob-pr" id="dblLeaveGo"><span class="ob-pi">' + icon('walk', 20) + '</span><span class="ob-sx"><b>' + dbl_e('Отпроситься') + '</b><span>' +
+      dbl_e('Уйти раньше, выйти или опоздать') + '</span></span></button>' +
+      '<button type="button" class="dbl-dy" id="dblDayOff">' + icon('palm', 16) + '<span>' + dbl_e('Выходной') + '</span></button>';
+    el.querySelector('#dblLeaveGo').onclick = function () { S.sub = S.sub || {}; S.sub.lpT = 'new'; go('perm'); };
+    el.querySelector('#dblDayOff').onclick = function () { S.sub = S.sub || {}; S.sub.cfReq = 1; go('sched'); };
+  }
+  /* место: прямо над стопкой (или над карточкой смены, если стопки нет); сортировка 92f (data-cp 0.9 < 1) держит её наверху */
+  var st = $('dzuStack'), cb = $('cbClock'), anchor = st && st.parentNode === m ? st : cb && cb.parentNode === m ? cb : m.firstElementChild;
+  if (el.parentNode !== m || el.nextElementSibling !== anchor) m.insertBefore(el, anchor || null);
+}
+(function () {
+  if (typeof dzu_mount === 'function') {
+    var dm0 = dzu_mount;
+    dzu_mount = function () { var r = dm0.apply(this, arguments); try { dbl_leaveMount(); } catch (e) { console.warn('dbl', e); } return r; };
+  }
+  try { W3.home.push(function () { [0, 350, 1300].forEach(function (ms) { setTimeout(function () { try { dbl_leaveMount(); } catch (e) {} }, ms); }); }); } catch (e) {}
+})();
+
+/* =====================================================================
+   2. «Штат»: «Назад» из карточки сотрудника и две панели на компьютере
+   ===================================================================== */
+function dbl_wideShtat() { return S.view === 'shtat' && innerWidth >= 1024; }
+function dbl_after() {
+  var app = $('app'); if (!app || !S.me) return;
+  if (S.view === 'shtat') app.classList.toggle('wide', dbl_wideShtat());
+  /* карточка сотрудника открыта из «Штата» — «Назад» в «Штат» (по умолчанию vEmp возвращает в «Команду») */
+  if (S.view === 'emp' && S.backFrom === 'shtat') {
+    var bk = document.querySelector('.top > button.iconbtn:first-child');
+    if (bk && bk.getAttribute('data-go') === 'team') { bk.setAttribute('data-go', 'shtat'); bk.onclick = function (ev) { if (ev) { ev.preventDefault(); ev.stopPropagation(); } go('shtat'); }; }
+  }
+}
+(function () {
+  var r0 = render;
+  render = function () { var r = r0.apply(this, arguments); try { dbl_after(); } catch (e) { console.warn('dbl', e); } return r; };
+  var was = null;
+  addEventListener('resize', function () {
+    if (S.view !== 'shtat') return;
+    var w = dbl_wideShtat(); if (w === was) return; was = w;
+    var app = $('app'); if (app) app.classList.toggle('wide', w);
+    try { if (typeof dsh_paint === 'function' && typeof DSH === 'object' && DSH.data) dsh_paint(); } catch (e) {}
+  });
+})();
+
+/* =====================================================================
+   3. Карта: короткие чипы и шар помощника над шторкой
+   ===================================================================== */
+function dbl_uz() { try { return uiLang() === 'uz'; } catch (e) { return false; } }
+/* узкий экран: «Вне зоны» → «Вне», «Ушли» (uz «Ketganlar») → короче; полная подпись — в aria-label */
+var DBL_CH = { out: ['Вне зоны', 'Вне', 'Вне'], gone: ['Ушли', 'Ушли', 'Ушли (кратко)'] };
+function dbl_mapChips(stg) {
+  Object.keys(DBL_CH).forEach(function (k) {
+    var b = stg && stg.querySelector('[data-dx1f="' + k + '"]'); if (!b || b.getAttribute('data-dbl')) return;
+    var sp = b.querySelectorAll(':scope > span:not(.dx1-d)')[0]; if (!sp) return;
+    var c = DBL_CH[k], full = dbl_t(c[0]), sh = dbl_uz() ? dbl_t(c[2]) : c[1];
+    b.setAttribute('data-dbl', '1'); if (sh === full) return;
+    b.setAttribute('aria-label', full + ' ' + ((b.querySelector('b') || {}).textContent || ''));
+    sp.innerHTML = '<span class="dbl-lg">' + h(full) + '</span><span class="dbl-sh" aria-hidden="true">' + h(sh) + '</span>';
+  });
+}
+function dbl_mapStage() { var s = document.querySelector('#main .dx1'); return s && s.getClientRects().length ? s : null; }
+/* шар: на карте (телефон) — над шторкой, слева от + / −; шторка выше половины сцены — шар прячется */
+function dbl_fabMap(b) {
+  if (!b) return;
+  var stg = dbl_mapStage(), hide = false, onMap = false;
+  if (stg && !stg.classList.contains('wide')) {
+    var sh = stg.querySelector('.dx1-sh'), ctl = stg.querySelector('.dx1-ctl');
+    if (sh) {
+      var sr = stg.getBoundingClientRect(), r = sh.getBoundingClientRect();
+      if (r.top < innerHeight && sr.bottom > 0) {
+        onMap = true;
+        if (r.height > sr.height * 0.5) hide = true;
+        else {
+          var bottom = Math.round(innerHeight - r.top + 14), cr = ctl ? ctl.getBoundingClientRect() : null;
+          var right = cr && cr.width ? Math.round(innerWidth - cr.left + 10) : 16;
+          if (innerHeight - bottom - 58 < Math.max(0, sr.top) + 64) hide = true;   /* не налезать на чипы сверху */
+          else { b.style.bottom = bottom + 'px'; b.style.right = right + 'px'; }
+        }
+      }
+    }
+  }
+  if (!onMap) b.style.right = '';
+  b.classList.toggle('dbl-mh', hide);
+  b.classList.toggle('dbl-mp', onMap && !hide);
+}
+function dbl_mapWatch(stg) {
+  if (!stg || stg._dbl) return; stg._dbl = 1;
+  var raf = 0, kick = function () { if (raf) return; raf = requestAnimationFrame(function () { raf = 0; try { dbl_fabMap($('daiFab')); } catch (e) {} }); };
+  try { new MutationObserver(kick).observe(stg, { attributes: true, attributeFilter: ['style', 'data-sh', 'class'] }); } catch (e) {}
+  var sh = stg.querySelector('.dx1-sh'); if (sh) sh.addEventListener('transitionend', kick);
+  kick();
+}
+(function () {
+  if (typeof dx1_sheet === 'function') {
+    var s0 = dx1_sheet;
+    dx1_sheet = function (stg) { var r = s0.apply(this, arguments); try { dbl_mapChips(stg); dbl_mapWatch(stg); } catch (e) { console.warn('dbl map', e); } return r; };
+  }
+  if (typeof dai_fabPlace === 'function') {
+    var p0 = dai_fabPlace;
+    dai_fabPlace = function (b) { var r = p0.apply(this, arguments); try { dbl_fabMap(b); } catch (e) {} return r; };
+  }
+  /* ушли с карты — шар на обычное место */
+  try { W3.home.push(function () { var b = $('daiFab'); if (b) { b.classList.remove('dbl-mh', 'dbl-mp'); b.style.right = ''; } }); } catch (e) {}
+  if (typeof render === 'function') {
+    var r1 = render;
+    render = function () { var r = r1.apply(this, arguments); try { if (!dbl_mapStage()) { var b = $('daiFab'); if (b && (b.classList.contains('dbl-mh') || b.classList.contains('dbl-mp'))) { b.classList.remove('dbl-mh', 'dbl-mp'); b.style.right = ''; } } } catch (e) {} return r; };
+  }
+})();
+
+/* =====================================================================
+   4. Стопка виджетов — общая для всех устройств (режим сервера)
+   ===================================================================== */
+var DBL_KEY = 'dzu_stack';
+function dbl_lsGet() { try { return JSON.parse(localStorage.getItem(dzu_key()) || 'null'); } catch (e) { return null; } }
+function dbl_same(a, b) { return JSON.stringify(a && a.on || null) === JSON.stringify(b && b.on || null); }
+function dbl_errOff(e) {
+  /* rpc ещё нет на сервере (миграция 0036 не применена) — больше не спрашиваем в этом сеансе */
+  var s = String((e && (e.code || '')) + ' ' + (e && e.message || '') + ' ' + (e && (e.details || e.detail) || ''));
+  if (/PGRST202|42883|not find the function|does not exist|нет на сервере/i.test(s)) DBL.off = true;
+}
+async function dbl_pull(force) {
+  if (!dbl_sv() || DBL.off || !S.me || DBL.pulling || typeof dzu_key !== 'function') return;
+  if (!force && Date.now() - DBL.pullAt < 30000) return;
+  if (DBL.push) return;                             /* своё изменение ещё не отправлено — оно главнее */
+  DBL.pulling = true; DBL.pullAt = Date.now();
+  try {
+    var r = await sb.rpc('my_prefs_get', {});
+    if (!r || r.error) { if (r && r.error) dbl_errOff(r.error); return; }
+    if (DBL.push) return;
+    var srv = r.data && typeof r.data === 'object' ? r.data[DBL_KEY] : null, loc = dbl_lsGet();
+    if (srv && Array.isArray(srv.on)) {
+      DBL.sent = srv;
+      if (!dbl_same(srv, loc)) {
+        try { localStorage.setItem(dzu_key(), JSON.stringify({ v: 1, on: srv.on })); } catch (e) {}
+        if (S.view === 'home') { try { dzu_mount(); } catch (e) {} }
+      }
+    } else if (loc && Array.isArray(loc.on)) dbl_queue({ v: 1, on: loc.on }, 0);   /* на сервере пусто — этот телефон первый: отдать свои */
+  } catch (e) { console.warn('[dbl] prefs get', e); } finally { DBL.pulling = false; }
+}
+function dbl_queue(val, ms) {
+  if (!dbl_sv() || DBL.off || !S.me) return;
+  DBL.push = { v: val };
+  clearTimeout(DBL.pushT);
+  DBL.pushT = setTimeout(dbl_flush, ms == null ? 1200 : ms);
+}
+async function dbl_flush() {
+  var p = DBL.push; if (!p) return;
+  if (p.v && DBL.sent && dbl_same(p.v, DBL.sent)) { DBL.push = null; return; }
+  try {
+    var r = await sb.rpc('my_prefs_set', { p_key: DBL_KEY, p_val: p.v });
+    if (r && r.error) { dbl_errOff(r.error); console.warn('[dbl] prefs set', r.error); }
+    else DBL.sent = p.v;
+  } catch (e) { console.warn('[dbl] prefs set', e); }
+  if (DBL.push === p) DBL.push = null;
+}
+(function () {
+  if (typeof dzu_save === 'function') {
+    var sv0 = dzu_save;
+    dzu_save = function (L) { var r = sv0.apply(this, arguments); try { dbl_queue({ v: 1, on: (L || []).slice() }); } catch (e) {} return r; };
+  }
+  /* «Как было» в листе настроек стирает копию на телефоне — на сервере ключ тоже удаляется (null) */
+  document.addEventListener('click', function (ev) { var b = ev.target && ev.target.closest && ev.target.closest('#dzuRst'); if (b) dbl_queue(null); }, true);
+  /* открыли главную — взять с сервера (не чаще раза в 30 с; при входе — сразу) */
+  try { W3.home.push(function () { setTimeout(function () { dbl_pull(false); }, 50); }); } catch (e) {}
+  /* уходим со страницы — отправить, что не успели */
+  addEventListener('pagehide', function () { if (DBL.push) { clearTimeout(DBL.pushT); dbl_flush(); } });
+  document.addEventListener('visibilitychange', function () { if (document.hidden && DBL.push) { clearTimeout(DBL.pushT); dbl_flush(); } else if (!document.hidden && S.view === 'home') dbl_pull(false); });
+})();
+
+/* ---------- стили ---------- */
+(function () {
+  var st = document.createElement('style'); st.id = 'dblCss';
+  st.textContent =
+    '.dbl-lv{display:flex;align-items:center;gap:10px;padding-top:6px!important;padding-bottom:6px!important;margin-bottom:12px}' +
+    '.dbl-lv .ob-pr{flex:1;min-width:0;border-top:0;min-height:54px;padding:4px 0;cursor:pointer}' +
+    '.dbl-lv .ob-sx>span{white-space:normal}' +
+    '.dbl-dy{flex:none;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:none;color:var(--ink);font:600 13px/1.1 var(--sans,Manrope),sans-serif;cursor:pointer;-webkit-tap-highlight-color:transparent}' +
+    '.dbl-dy svg{color:var(--gold);flex:none}.dbl-dy:active{transform:scale(.97)}' +
+    '.dbl-dy:focus-visible{outline:2px solid var(--gold);outline-offset:2px}' +
+    '@media (max-width:360px){.dbl-lv{gap:8px}.dbl-dy{padding:0 10px;font-size:12.5px}.dbl-lv .ob-pi{width:34px;height:34px}.dbl-lv .ob-sx>span{display:none}.dbl-lv .ob-pr{min-height:48px}}' +
+    /* карта: короткая подпись «Вне» и плотные чипы на узком экране */
+    '.dbl-sh{display:none}' +
+    '@media (max-width:420px){.dx1 .dx1-top{padding-left:12px;padding-right:12px}.dx1 .dx1-chips{gap:5px}.dx1 .dx1-f{padding:0 9px;gap:5px}.dbl-lg{display:none}.dbl-sh{display:inline}}' +
+    '@media (max-width:360px){.dx1 .dx1-top{padding-left:10px;padding-right:10px}.dx1 .dx1-chips{gap:3px}.dx1 .dx1-f{padding:0 6px;gap:3px;font-size:11.5px;min-height:34px}.dx1 .dx1-f .dx1-d{display:none}}' +
+    /* шар помощника на экране карты */
+    '.dai-fab.dbl-mh{transform:scale(.6)!important;opacity:0!important;pointer-events:none!important;visibility:hidden;transition:transform .25s ease,opacity .2s ease,visibility 0s linear .25s}' +
+    '@media (prefers-reduced-motion:reduce){.dai-fab.dbl-mh{transition:none}}';
+  document.head.appendChild(st);
+})();
+
+if (dbl_dbg()) window.__dbl = { DBL: DBL, pull: function (f) { return dbl_pull(f); }, flush: function () { return dbl_flush(); }, leave: function () { return dbl_leaveMount(); }, save: function (L) { return dzu_save(L); }, fab: function () { return dbl_fabMap($('daiFab')); } };
 
 
 /* ===== ВОЛНА 4 · 92zw-close.js ===== */

@@ -1965,3 +1965,86 @@
   }
 })(typeof window !== 'undefined' ? window : globalThis);
 /* === end 92zw === */
+/* === 92zv === */
+/* Часть dbl (92zv-backlog, 0036_member_prefs.sql): пачка отложенных задач 31.10. Блок не трогает код выше: как 92z — оборачивает
+   SVAdapter.make / supabase.createClient, дополняет SV.rpcMap и SV.exec.
+   - my_prefs_get / my_prefs_set (0036) — напрямую: личные настройки участника (стопка виджетов главной, ключ dzu_stack).
+     Нет rpc на сервере (миграция не применена) — ответ с ошибкой как есть: фрагмент 92zv перестаёт спрашивать, работает localStorage.
+   - «Отделы и должности» (Пульт) и все прямые записи в учебные таблицы departments / positions:
+       insert departments → rpc dept_create (только владелец, журнал; служба с тем же именем возвращается, а не дублируется);
+       insert positions   → rpc positions_add (имя занято — «Новая должность 2», «… 3»; удалённая с тем же именем — возвращается);
+       delete departments → rpc dept_remove, delete positions → rpc position_remove (мягко, archived_at; люди на должности — отказ с именами);
+       update positions с access — уровень доступа тоже пишется на сервер (раньше терялся: переходник писал только name/name_uz/sort).
+     Переименование (update name) — как раньше, прямой update таблицы (RLS: только владелец): rpc переименования на сервере пока нет. */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dbl) return; A.__dbl = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dbl) return cl; SV.__dbl = true;
+    var real = SV.real, R = SV.rpcMap; if (!R) return cl;
+    R.my_prefs_get = function () { return real.rpc('my_prefs_get', {}); };
+    R.my_prefs_set = function (a) { a = a || {}; return real.rpc('my_prefs_set', { p_key: a.p_key, p_val: a.p_val === undefined ? null : a.p_val }); };
+    function ds(loc) { if (loc == null || loc === '') return null; var M = (SV.dep && SV.dep.toSrv) || {}; if (M[loc] != null) return M[loc]; return /^d?\d+$/.test(String(loc)) ? +String(loc).replace(/^d/, '') : null; }
+    function err(m) { return { message: m }; }
+    function pick(qq, t) { var id = qq.val('id'); var L = SV.T[t] || []; return L.filter(function (r) { return id !== undefined ? String(r.id) === String(id) : qq.match1(r); }); }
+    async function ok(r) { if (r && r.error) throw r.error; return r ? r.data : null; }
+    async function struct(qq) {
+      await SV.load('base');
+      var t = qq.t, P = Array.isArray(qq.payload) ? qq.payload : qq.payload ? [qq.payload] : [], out = [], i, j;
+      if (t === 'departments' && qq.op === 'insert') {
+        for (i = 0; i < P.length; i++) { var d = await ok(await real.rpc('dept_create', { p_name: P[i].name, p_name_uz: P[i].name_uz || null, p_positions: [] })); if (d && d.dept_id != null) out.push(d.dept_id); }
+        SV.stale('base'); await SV.load('base', true);
+        return { data: (SV.T.departments || []).filter(function (x) { return out.indexOf(x.sid) >= 0; }), error: null };
+      }
+      if (t === 'positions' && qq.op === 'insert') {
+        for (i = 0; i < P.length; i++) {
+          var p = P[i], dp = ds(p.dept_id); if (dp == null) throw err('Служба не найдена — обновите экран');
+          var base = String(p.name || '').trim() || 'Новая должность', made = null;
+          for (j = 1; j <= 9 && !made; j++) {
+            var nm = j === 1 ? base : base + ' ' + j;
+            var r = await ok(await real.rpc('positions_add', { p_dept: dp, p_positions: [{ name: nm, name_uz: p.name_uz || null, access: p.access === 'manager' ? 'manager' : 'staff' }] }));
+            var c = r && (r.created_positions || r.created); if (Array.isArray(c) && c.length) made = c[0].id;
+          }
+          if (made == null) throw err('Такая должность в службе уже есть');
+          out.push(made);
+        }
+        SV.stale('base'); await SV.load('base', true);
+        return { data: (SV.T.positions || []).filter(function (x) { return out.indexOf(x.sid != null ? x.sid : x.id) >= 0; }), error: null };
+      }
+      if (qq.op === 'delete') {
+        var L = pick(qq, t);
+        for (i = 0; i < L.length; i++) {
+          if (t === 'departments') await ok(await real.rpc('dept_remove', { p_dept: L[i].sid != null ? L[i].sid : ds(L[i].id) }));
+          else await ok(await real.rpc('position_remove', { p_id: L[i].sid != null ? L[i].sid : L[i].id }));
+        }
+        SV.stale('base'); await SV.load('base', true);
+        return { data: null, error: null };
+      }
+      return null;
+    }
+    var ex0 = SV.exec;
+    SV.exec = async function (qq) {
+      if (qq && SV.venueId && (qq.t === 'departments' || qq.t === 'positions') && (qq.op === 'insert' || qq.op === 'delete')) {
+        try { var res = await struct(qq); if (res) return qq.one && Array.isArray(res.data) ? { data: res.data[0] || null, error: null } : res; }
+        catch (e) { try { SV.stale('base'); } catch (x) {} return { data: null, error: e && e.message ? e : err(String(e)) }; }
+      }
+      var r = await ex0.apply(this, arguments);
+      if (qq && SV.venueId && qq.t === 'positions' && qq.op === 'update' && !(r && r.error) && qq.payload && (qq.payload.access === 'staff' || qq.payload.access === 'manager')) {
+        try {
+          var L = pick(qq, 'positions');
+          for (var k = 0; k < L.length; k++) { var u = await real.from('positions').update({ access: qq.payload.access }).eq('id', L[k].sid != null ? L[k].sid : L[k].id); if (u && u.error) return { data: null, error: u.error }; }
+          if (L.length) { SV.stale('base'); await SV.load('base', true); }
+        } catch (e) { return { data: null, error: e && e.message ? e : err(String(e)) }; }
+      }
+      return r;
+    };
+    return cl;
+  }
+  A.dblExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92zv === */
