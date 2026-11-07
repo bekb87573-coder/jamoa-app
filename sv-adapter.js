@@ -2048,3 +2048,26 @@
   }
 })(typeof window !== 'undefined' ? window : globalThis);
 /* === end 92zv === */
+/* === 92zl === журнал согласий (часть dlg, 01.11; миграция 0037_consents.sql)
+   - consent_accept(p_doc, p_version) / my_consents() / venue_consents() — напрямую на сервер.
+   Нет rpc на сервере (миграция не применена) — ответ с ошибкой как есть: фрагмент 92zl-legal помнит согласие в localStorage телефона
+   и не блокирует работу. Блок не трогает код выше: как 92zv — оборачивает SVAdapter.make / supabase.createClient и дополняет SV.rpcMap. */
+(function (root) {
+  'use strict';
+  var A = root.SVAdapter; if (!A || A.__dlg) return; A.__dlg = true;
+  function ext(cl) {
+    var SV = cl && cl.__sv; if (!SV || SV.__dlg) return cl; SV.__dlg = true;
+    var real = SV.real, R = SV.rpcMap; if (!R) return cl;
+    R.my_consents = function () { return real.rpc('my_consents', {}); };
+    R.venue_consents = function () { return real.rpc('venue_consents', {}); };
+    R.consent_accept = function (a) { a = a || {}; return real.rpc('consent_accept', { p_doc: a.p_doc, p_version: a.p_version }); };
+    return cl;
+  }
+  A.dlgExt = ext;
+  var mk0 = A.make; A.make = function () { return ext(mk0.apply(this, arguments)); };
+  if (root.supabase && root.supabase.__sv && root.supabase.createClient) {
+    var cc0 = root.supabase.createClient;
+    root.supabase.createClient = function () { return ext(cc0.apply(this, arguments)); };
+  }
+})(typeof window !== 'undefined' ? window : globalThis);
+/* === end 92zl === */

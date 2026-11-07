@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Пользовательское соглашение · Jamoa</title>
+<meta name="description" content="Публичная оферта Jamoa для заведений: условия использования платформы">
+<meta name="theme-color" content="#12171C">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+@font-face{font-family:'Manrope';font-weight:400;font-display:swap;src:url(fonts/manrope-cyrillic-400-normal.woff2) format('woff2');unicode-range:U+0400-04FF}
+@font-face{font-family:'Manrope';font-weight:400;font-display:swap;src:url(fonts/manrope-latin-400-normal.woff2) format('woff2');unicode-range:U+0000-00FF,U+2000-206F}
+@font-face{font-family:'Manrope';font-weight:400;font-display:swap;src:url(fonts/manrope-latin-ext-400-normal.woff2) format('woff2');unicode-range:U+0100-02FF}
+@font-face{font-family:'Manrope';font-weight:700;font-display:swap;src:url(fonts/manrope-cyrillic-700-normal.woff2) format('woff2');unicode-range:U+0400-04FF}
+@font-face{font-family:'Manrope';font-weight:700;font-display:swap;src:url(fonts/manrope-latin-700-normal.woff2) format('woff2');unicode-range:U+0000-00FF,U+2000-206F}
+@font-face{font-family:'Manrope';font-weight:700;font-display:swap;src:url(fonts/manrope-latin-ext-700-normal.woff2) format('woff2');unicode-range:U+0100-02FF}
+@font-face{font-family:'Cormorant Garamond';font-weight:600;font-display:swap;src:url(fonts/cormorant-garamond-cyrillic-600-normal.woff2) format('woff2');unicode-range:U+0400-04FF}
+@font-face{font-family:'Cormorant Garamond';font-weight:600;font-display:swap;src:url(fonts/cormorant-garamond-latin-600-normal.woff2) format('woff2');unicode-range:U+0000-00FF,U+2000-206F}
+@font-face{font-family:'Cormorant Garamond';font-weight:600;font-display:swap;src:url(fonts/cormorant-garamond-latin-ext-600-normal.woff2) format('woff2');unicode-range:U+0100-02FF}
+:root{--bg:#12171C;--panel:#1B2229;--ink:#E8ECEF;--muted:#9AA5AF;--line:#2C353E;--gold:#D2AE66;--goldbg:#2E2718;--sans:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--serif:'Cormorant Garamond',Georgia,serif}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.6 var(--sans);overflow-wrap:anywhere}
+.bar{position:sticky;top:0;z-index:3;background:rgba(18,23,28,.94);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.bar-in{max-width:820px;margin:0 auto;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.logo{font:700 13px/1 var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--gold);text-decoration:none}
+.sw{display:flex;border:1px solid var(--line);border-radius:999px;padding:3px;gap:2px;flex:none}
+.sw button{min-width:44px;min-height:36px;border:0;border-radius:999px;background:transparent;color:var(--muted);font:700 13px/1 var(--sans);cursor:pointer;padding:0 10px}
+.sw button.on{background:var(--gold);color:#12171C}
+.sw button:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+main{max-width:820px;margin:0 auto;padding:20px 16px calc(48px + env(safe-area-inset-bottom))}
+.doc{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:22px 18px}
+@media(min-width:700px){.doc{padding:40px 48px}}
+h1{font:600 32px/1.12 var(--serif);margin:0 0 10px;color:var(--ink)}
+@media(min-width:700px){h1{font-size:42px}}
+h1.h1b{margin-top:8px}
+h2{font:700 18px/1.35 var(--sans);margin:30px 0 8px;color:var(--gold)}
+p,li{color:var(--ink)}
+p{margin:0 0 12px}
+ul,ol{margin:0 0 14px;padding-left:22px}
+li{margin:0 0 6px}
+b{color:#fff;font-weight:700}
+a{color:var(--gold)}
+.ver{color:var(--muted);font-size:14px}
+.draft{background:var(--goldbg);border:1px solid #5A4A26;color:var(--gold);border-radius:12px;padding:10px 12px;font-size:14px;margin:0 0 16px}
+mark.ph{background:#4A3A12;color:#FFD98A;border-radius:4px;padding:0 3px;font-weight:700}
+.toc{display:flex;flex-direction:column;gap:2px;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:14px 0 4px;font-size:14.5px}
+.toc b{color:var(--muted);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px}
+.toc a{color:var(--ink);text-decoration:none;padding:5px 0;border-bottom:1px solid var(--line)}
+.toc a:last-child{border-bottom:0}
+.emp{margin-top:36px;padding-top:24px;border-top:1px solid var(--gold)}
+.foot{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:32px;padding-top:16px;border-top:1px solid var(--line);font-size:14.5px}
+.foot a{min-height:44px;display:inline-flex;align-items:center}
+@media print{.bar,.toc,.foot,.draft{display:none}body,.doc{background:#fff;color:#000;border:0}b,p,li,h1{color:#000}h2{color:#000}}
+</style></head>
+<body id="top">
+<header class="bar"><div class="bar-in"><a class="logo" href="./">Jamoa</a>
+<div class="sw" role="group" aria-label="Язык / Til"><button type="button" data-l="ru" class="on" aria-pressed="true">RU</button><button type="button" data-l="uz" aria-pressed="false">UZ</button><button type="button" data-l="uzc" aria-pressed="false">ЎЗ</button></div></div></header>
+<main>
+<article class="doc" data-l="ru" lang="ru"><p class="draft">Проект документа: данные оператора будут заполнены перед публикацией.</p><h1>Пользовательское соглашение Jamoa (публичная оферта для заведений)</h1>
+<p class="ver">Версия 1.0 · редакция от 01.11.2026 · действует с <mark class="ph">[ДАТА]</mark></p><nav class="toc" aria-label="Содержание"><b>Содержание</b><a href="#tru-1">1. Определения</a><a href="#tru-2">2. Акцепт и электронная форма</a><a href="#tru-3">3. Предмет</a><a href="#tru-4">4. Стоимость</a><a href="#tru-5">5. Обязанности и заверения Заведения</a><a href="#tru-6">6. Обработка персональных данных по поручению</a><a href="#tru-7">7. Права Оператора</a><a href="#tru-8">8. Интеллектуальная собственность и данные</a><a href="#tru-9">9. Ограничение гарантий и ответственности</a><a href="#tru-10">10. Возмещение (индемнити)</a><a href="#tru-11">11. Срок, прекращение, удаление данных</a><a href="#tru-12">12. Изменение Соглашения</a><a href="#tru-13">13. Обстоятельства непреодолимой силы</a><a href="#tru-14">14. Право и споры</a><a href="#tru-15">15. Прочее</a><a href="#tru-16">16. Реквизиты Оператора</a></nav>
+<p><mark class="ph">[ОПЕРАТОР: полное наименование]</mark>, ИНН <mark class="ph">[ИНН]</mark>, адрес: <mark class="ph">[АДРЕС]</mark> (далее — «Оператор»), предлагает любому индивидуальному предпринимателю или организации (далее — «Заведение») заключить договор об использовании платформы Jamoa на условиях ниже. Это публичная оферта (ст. 369 Гражданского кодекса Республики Узбекистан); договор заключается путём присоединения к ней в целом (ст. 360 ГК РУз) в момент акцепта (ст. 370 ГК РУз).</p>
+<h2 id="tru-1">1. Определения</h2>
+<ul>
+<li><b>Jamoa, Сервис</b> — приложение (веб-приложение и его версии для телефонов) и сайт <a href="https://jamoaapp.uz">https://jamoaapp.uz</a> для учёта работы персонала: отметки, смены, табель, задачи, тесты, заработок, штрафы и премии, заявки, уведомления, отчёты, ИИ-помощники.</li>
+<li><b>Заведение</b> — ИП или организация, принявшие Соглашение; работодатель своих Сотрудников.</li>
+<li><b>Владелец</b> — физическое лицо, которое регистрирует Заведение и действует от его имени. Регистрируя Заведение, Владелец подтверждает, что вправе действовать от имени Заведения; если такого права нет, Владелец отвечает лично как сторона Соглашения.</li>
+<li><b>Сотрудник</b> — лицо, которому Заведение выдало вход в Jamoa.</li>
+<li><b>Аккаунт</b> — учётная запись Заведения в Jamoa со всеми его данными.</li>
+<li><b>Данные Заведения</b> — сведения, которые Заведение и его Сотрудники вносят в Jamoa.</li>
+<li><b>Политика</b> — Политика конфиденциальности Jamoa (<a href="privacy.html">https://jamoaapp.uz/privacy.html</a>).</li>
+<li><b>Акцепт</b> — отметка галочки «Я принимаю…» и нажатие кнопки создания Заведения либо начало использования Сервиса.</li>
+</ul>
+<h2 id="tru-2">2. Акцепт и электронная форма</h2>
+<p>2.1. Акцепт означает полное и безоговорочное согласие Заведения с Соглашением и Политикой. Соглашение считается заключённым в простой письменной форме.</p>
+<p>2.2. Стороны признают, что отметка галочки и нажатие кнопки в Сервисе равнозначны собственноручной подписи, а записи журнала согласий Сервиса (кто, когда, какую версию документа принял, с какого устройства) — допустимое доказательство акцепта и согласий.</p>
+<p>2.3. Действия, совершённые в Сервисе под учётными данными Владельца или Сотрудника, считаются совершёнными этим лицом, пока Заведение не сообщило Оператору о несанкционированном доступе.</p>
+<h2 id="tru-3">3. Предмет</h2>
+<p>3.1. Оператор предоставляет Заведению право пользоваться Сервисом через интернет в объёме доступных функций, а Заведение пользуется им в соответствии с Соглашением.</p>
+<p>3.2. Сервис — инструмент учёта. Сервис <b>не является</b> бухгалтерской, кадровой или юридической программой, не заменяет трудовые договоры, приказы, табели по установленным формам и консультации специалистов. Расчёты в Сервисе выполняются по правилам и данным, которые задаёт Заведение.</p>
+<h2 id="tru-4">4. Стоимость</h2>
+<p>4.1. На дату этой редакции Сервис предоставляется бесплатно.</p>
+<p>4.2. Оператор вправе ввести плату за Сервис или отдельные функции, уведомив Заведение не менее чем за 30 дней в приложении или по электронной почте. Если Заведение не согласно, оно вправе прекратить использование до начала платного периода; продолжение использования после него означает согласие с платой.</p>
+<h2 id="tru-5">5. Обязанности и заверения Заведения</h2>
+<p>Заведение обязуется и заверяет, что:</p>
+<p>5.1. Является собственником и оператором базы персональных данных своих Сотрудников и иных лиц, чьи данные вносит в Сервис, и отвечает за законность их обработки: имеет законное основание, <b>получает согласия Сотрудников</b> (для лиц младше 18 лет — согласие законного представителя), уведомляет их о целях обработки, их правах и передаче данных Оператору и его поставщикам, знакомит с Политикой.</p>
+<p>5.2. Вносит достоверные данные и отвечает за их полноту и правильность.</p>
+<p>5.3. Самостоятельно отвечает за все решения, принятые с использованием Сервиса: график, учёт рабочего времени, начисление и выплату заработной платы, штрафы, премии, удержания, аванс, дисциплинарные меры, допуск к работе, увольнение, — и за соблюдение трудового, налогового и иного законодательства.</p>
+<p>5.4. Не загружает в Сервис: биометрические и генетические данные; паспортные данные, данные о здоровье, судимости и иные специальные данные — без законного основания и необходимости; данные детей — без законного основания; чужие данные без права на это; незаконные, оскорбительные материалы, вредоносный код.</p>
+<p>5.5. Не пытается обойти ограничения доступа, не нагружает Сервис автоматическими запросами, не копирует и не перепродаёт Сервис, не использует его для слежки за людьми вне рабочих действий.</p>
+<p>5.6. Хранит в тайне пароли, выдаёт входы только своим Сотрудникам и своевременно отключает уволенных.</p>
+<p>5.7. Рассматривает обращения Сотрудников о доступе, исправлении и удалении их данных; Оператор помогает в пределах технических возможностей Сервиса.</p>
+<h2 id="tru-6">6. Обработка персональных данных по поручению</h2>
+<p>6.1. Заведение поручает Оператору обрабатывать персональные данные Сотрудников и других лиц, которые Заведение вносит в Сервис, а Оператор обрабатывает их только для предоставления Сервиса, по поручению и в интересах Заведения, в соответствии с Политикой.</p>
+<p>6.2. Оператор: соблюдает конфиденциальность; принимает разумные правовые, организационные и технические меры защиты; допускает к данным только тех, кому это нужно для работы Сервиса; привлекает поставщиков (хостинг, ИИ, уведомления — перечень в Политике) и вправе менять их, сохраняя уровень защиты; сообщает Заведению об инцидентах, затрагивающих данные, без неоправданной задержки; после прекращения Соглашения удаляет или обезличивает данные по разделу 11.</p>
+<p>6.3. Заведение даёт согласие на хранение и обработку Данных Заведения на серверах за пределами Узбекистана в пределах, допускаемых ст. 15 и 27¹ Закона № ЗРУ-547, и обязуется получить на это согласие Сотрудников (экран согласия Сервиса предназначен для этого и записывает согласие в журнал, но не освобождает Заведение от обязанностей по п. 5.1).</p>
+<p>6.4. Место в момент действия, фото, выбор номера «Из контактов», ИИ-помощник Владельца работают так, как описано в Политике. Включая функции Сервиса для своих Сотрудников, Заведение отвечает за то, что их использование законно и соразмерно.</p>
+<h2 id="tru-7">7. Права Оператора</h2>
+<p>7.1. Изменять, добавлять и убирать функции Сервиса.</p>
+<p>7.2. Проводить технические работы, в том числе с перерывами в доступе.</p>
+<p>7.3. Приостановить доступ или удалить Аккаунт (полностью или для отдельного Пользователя) при нарушении Соглашения или закона, при требовании государственного органа, при угрозе безопасности Сервиса или других пользователей, — по возможности предварительно уведомив Заведение; при грубом нарушении или угрозе — без уведомления.</p>
+<p>7.4. Использовать обезличенные и агрегированные данные (которые не позволяют установить конкретное Заведение или человека) для статистики, улучшения и развития Сервиса.</p>
+<p>7.5. Направлять Владельцу служебные сообщения о Сервисе.</p>
+<h2 id="tru-8">8. Интеллектуальная собственность и данные</h2>
+<p>8.1. Исключительные права на Сервис (программный код, дизайн, тексты, учебные материалы, товарный знак Jamoa) принадлежат Оператору. Заведение получает только право пользования по Соглашению (простая неисключительная лицензия на срок Соглашения, без права передачи).</p>
+<p>8.2. Данные Заведения принадлежат Заведению. Оператор не продаёт их и не использует в своих целях, кроме указанных в Соглашении и Политике. Заведение предоставляет Оператору право обрабатывать Данные Заведения в объёме, нужном для работы Сервиса.</p>
+<p>8.3. Предложения и отзывы о Сервисе Оператор вправе использовать свободно и без вознаграждения.</p>
+<h2 id="tru-9">9. Ограничение гарантий и ответственности</h2>
+<p>9.1. Сервис предоставляется «как есть» и «как доступно». Оператор не гарантирует, что Сервис будет работать бесперебойно, без ошибок, подходить для конкретных целей Заведения или что данные, полученные с устройств (время, место, фото), всегда будут точными: они зависят от телефона, сети, браузера и действий людей.</p>
+<p>9.2. Оператор не отвечает за:</p>
+<ul>
+<li>решения Заведения, принятые по данным Сервиса (штрафы, премии, удержания, расчёты, увольнения и т. п.), и их последствия;</li>
+<li>достоверность данных, внесённых Заведением и Сотрудниками;</li>
+<li>нарушение Заведением трудового законодательства и законодательства о персональных данных, отсутствие согласий Сотрудников;</li>
+<li>сбои сетей связи, устройств, сторонних сервисов (хостинг, push-уведомления, поставщик ИИ) вне разумного контроля Оператора;</li>
+<li>ответы ИИ-помощников: они носят справочный характер; изменения выполняются только после подтверждения Владельцем, который отвечает за проверку карточки «что будет сделано»;</li>
+<li>последствия разглашения паролей по вине Заведения или Сотрудников.</li>
+</ul>
+<p>9.3. Оператор не возмещает косвенные убытки и упущенную выгоду (неполученный доход, потерю клиентов, деловой репутации, штрафы, наложенные на Заведение третьими лицами), в той мере, в какой закон допускает такое ограничение.</p>
+<p>9.4. Совокупная ответственность Оператора по Соглашению ограничена суммой, уплаченной Заведением Оператору за 12 месяцев до события, ставшего основанием требования; если Сервис использовался бесплатно — суммой, равной одной базовой расчётной величине, установленной в Республике Узбекистан на дату предъявления требования.</p>
+<p>9.5. Ограничения раздела 9 не применяются к ответственности за умышленное нарушение и к другим случаям, когда закон не допускает заранее устранять или ограничивать ответственность (в том числе к правам потребителей, если закон о защите прав потребителей применяется к отношениям сторон).</p>
+<p>9.6. Требования к Оператору рассматриваются, если Заведение направило письменную претензию в течение 6 месяцев с момента, когда узнало о нарушении, кроме случаев, когда закон устанавливает иной обязательный срок.</p>
+<h2 id="tru-10">10. Возмещение (индемнити)</h2>
+<p>Заведение возмещает Оператору документально подтверждённые убытки, расходы (включая разумные расходы на юристов), штрафы и суммы, взысканные с Оператора, если к Оператору предъявлены требования Сотрудников, иных лиц или государственных органов в связи с: нарушением Заведением Соглашения, трудового законодательства или законодательства о персональных данных; отсутствием согласий Сотрудников; недостоверностью или незаконностью Данных Заведения; решениями Заведения, принятыми с помощью Сервиса. Оператор уведомляет Заведение о таком требовании и даёт возможность участвовать в его урегулировании.</p>
+<h2 id="tru-11">11. Срок, прекращение, удаление данных</h2>
+<p>11.1. Соглашение действует бессрочно с момента акцепта.</p>
+<p>11.2. Заведение может в любой момент прекратить Соглашение, закрыв Заведение в настройках или написав Оператору.</p>
+<p>11.3. Оператор может прекратить Соглашение, уведомив Заведение за 30 дней, а при нарушении по п. 7.3 — с момента уведомления; при прекращении Сервиса в целом — за 30 дней.</p>
+<p>11.4. После закрытия Заведения 30 дней его можно восстановить; затем Данные Заведения удаляются или обезличиваются в течение разумного срока (до 30 дней), кроме данных, которые Оператор обязан хранить по закону, журнала согласий (хранится 3 года) и резервных копий (перезаписываются по циклу хостинга). Заведение само отвечает за выгрузку и хранение нужных ему данных (отчёты, табели) до удаления.</p>
+<h2 id="tru-12">12. Изменение Соглашения</h2>
+<p>12.1. Оператор вправе изменять Соглашение и Политику. Новая редакция публикуется на сайте с датой и номером версии; о существенных изменениях Оператор уведомляет в приложении или по почте не позднее чем за 10 дней до вступления в силу (кроме изменений, которых требует закон, — с даты, указанной в редакции).</p>
+<p>12.2. Продолжение использования Сервиса после вступления изменений в силу означает согласие с ними. Если Заведение не согласно — оно вправе прекратить Соглашение по п. 11.2. Сервис может попросить заново принять документ — без этого часть функций может быть недоступна.</p>
+<h2 id="tru-13">13. Обстоятельства непреодолимой силы</h2>
+<p>Стороны освобождаются от ответственности за неисполнение, вызванное обстоятельствами непреодолимой силы: стихийные бедствия, пожары, военные действия, массовые беспорядки, эпидемии, акты государственных органов, отключения электроэнергии и связи, сбои и атаки на инфраструктуру дата-центров и поставщиков, не зависящие от стороны. Сторона сообщает о таких обстоятельствах в разумный срок.</p>
+<h2 id="tru-14">14. Право и споры</h2>
+<p>14.1. К Соглашению применяется право Республики Узбекистан.</p>
+<p>14.2. Стороны решают споры переговорами; обязательна письменная претензия, срок ответа — 30 дней.</p>
+<p>14.3. Если спор не урегулирован, он рассматривается в суде по месту нахождения Оператора, если иное не предусмотрено обязательными нормами закона (в том числе о подсудности исков потребителей).</p>
+<h2 id="tru-15">15. Прочее</h2>
+<p>15.1. Если какое-либо условие признано недействительным, остальные условия действуют; недействительное условие заменяется допустимым, максимально близким по смыслу.</p>
+<p>15.2. Уведомления направляются в приложении, по электронной почте Владельца или Оператора (<mark class="ph">[EMAIL]</mark>); сообщение в приложении считается полученным в момент его показа.</p>
+<p>15.3. Заведение не вправе передавать права по Соглашению без согласия Оператора. Оператор вправе передать права и обязанности правопреемнику, уведомив Заведение.</p>
+<p>15.4. Основной текст — на русском языке; при расхождении с переводом на узбекский язык применяется русский текст, если закон не требует иного.</p>
+<h2 id="tru-16">16. Реквизиты Оператора</h2>
+<p><mark class="ph">[ОПЕРАТОР: полное наименование]</mark><br>ИНН: <mark class="ph">[ИНН]</mark><br>Адрес: <mark class="ph">[АДРЕС]</mark><br>Банковские реквизиты: <mark class="ph">[БАНК: р/с, МФО]</mark><br>Руководитель: <mark class="ph">[ДИРЕКТОР: ФИО]</mark><br>Электронная почта: <mark class="ph">[EMAIL]</mark> · Телефон: <mark class="ph">[ТЕЛЕФОН]</mark></p><footer class="foot"><a href="privacy.html">Политика конфиденциальности</a><a href="app.html">Открыть Jamoa</a><a href="#top">Наверх</a></footer></article>
+<article class="doc" data-l="uz" lang="uz" hidden><p class="draft">Hujjat loyihasi: operator maʼlumotlari eʼlon qilişdan oldin töldiriladi.</p><h1>Jamoa foydalanuvçi kelişuvi (muassasalar uçun ommaviy oferta)</h1>
+<p class="ver">Versiya 1.0 · 01.11.2026 tahriri · <mark class="ph">[ДАТА]</mark> dan amal qiladi</p><nav class="toc" aria-label="Mundarija"><b>Mundarija</b><a href="#tuz-1">1. Atamalar</a><a href="#tuz-2">2. Aksept va elektron şakl</a><a href="#tuz-3">3. Predmet</a><a href="#tuz-4">4. Narx</a><a href="#tuz-5">5. Muassasaning majburiyatlari va kafolatlari</a><a href="#tuz-6">6. Şaxsga doir maʼlumotlarni topşiriq böyiça qayta işlaş</a><a href="#tuz-7">7. Operatorning huquqlari</a><a href="#tuz-8">8. Intellektual mulk va maʼlumotlar</a><a href="#tuz-9">9. Kafolatlar va javobgarlikni çeklaş</a><a href="#tuz-10">10. Zararni qoplaş (indemniti)</a><a href="#tuz-11">11. Muddat, tugatiş, maʼlumotlarni öçiriş</a><a href="#tuz-12">12. Kelişuvni özgartiriş</a><a href="#tuz-13">13. Fors-major holatlar</a><a href="#tuz-14">14. Huquq va nizolar</a><a href="#tuz-15">15. Boşqa şartlar</a><a href="#tuz-16">16. Operator rekvizitlari</a></nav>
+<p><mark class="ph">[ОПЕРАТОР: полное наименование]</mark>, STIR <mark class="ph">[ИНН]</mark>, manzil: <mark class="ph">[АДРЕС]</mark> (keyingi örinlarda — «Operator»), har qanday yakka tartibdagi tadbirkor yoki taşkilotga (keyingi örinlarda — «Muassasa») Jamoa platformasidan foydalaniş töğrisidagi şartnomani quyidagi şartlarda tuzişni taklif qiladi. Bu ommaviy oferta (Özbekiston Respublikasi Fuqarolik kodeksining 369-moddasi); şartnoma unga töliq qöşiliş yöli bilan (FK 360-moddasi) aksept qilingan paytda (FK 370-moddasi) tuziladi.</p>
+<h2 id="tuz-1">1. Atamalar</h2>
+<ul>
+<li><b>Jamoa, Xizmat</b> — xodimlar işini hisobga oliş uçun ilova (veb-ilova va uning telefon versiyalari) va <a href="https://jamoaapp.uz">https://jamoaapp.uz</a> sayti: belgilar, smenalar, tabel, vazifalar, testlar, iş haqi, jarima va mukofotlar, arizalar, bildirişnomalar, hisobotlar, SI yordamçilari.</li>
+<li><b>Muassasa</b> — Kelişuvni qabul qilgan YaTT yoki taşkilot; öz Xodimlarining iş beruvçisi.</li>
+<li><b>Egasi</b> — Muassasani röyxatdan ötkazadigan va uning nomidan harakat qiladigan jismoniy şaxs. Muassasani röyxatdan ötkazib, Egasi Muassasa nomidan harakat qilişga haqli ekanini tasdiqlaydi; bunday huquq bölmasa, Egasi Kelişuv tarafi sifatida şaxsan javob beradi.</li>
+<li><b>Xodim</b> — Muassasa Jamoa’ga kiriş bergan şaxs.</li>
+<li><b>Akkaunt</b> — Muassasaning Jamoa’dagi barça maʼlumotlari bilan hisob yozuvi.</li>
+<li><b>Muassasa maʼlumotlari</b> — Muassasa va uning Xodimlari Jamoa’ga kiritadigan maʼlumotlar.</li>
+<li><b>Siyosat</b> — Jamoa maxfiylik siyosati (<a href="privacy.html">https://jamoaapp.uz/privacy.html</a>).</li>
+<li><b>Aksept</b> — «Qabul qilaman…» belgisini qöyiş va Muassasa yaratiş tugmasini bosiş yoki Xizmatdan foydalanişni boşlaş.</li>
+</ul>
+<h2 id="tuz-2">2. Aksept va elektron şakl</h2>
+<p>2.1. Aksept Muassasaning Kelişuv va Siyosatga töliq va sözsiz roziligini bildiradi. Kelişuv oddiy yozma şaklda tuzilgan hisoblanadi.</p>
+<p>2.2. Taraflar Xizmatda belgi qöyiş va tugmani bosiş şaxsiy imzoga teng ekanini, Xizmat roziliklar jurnali yozuvlari (kim, qaçon, hujjatning qaysi versiyasini, qaysi qurilmadan qabul qilgan) esa aksept va roziliklarning maqbul dalili ekanini tan oladi.</p>
+<p>2.3. Xizmatda Egasi yoki Xodimning hisob maʼlumotlari ostida bajarilgan harakatlar, Muassasa Operatorga ruxsatsiz kiriş haqida xabar bermagunça, şu şaxs tomonidan bajarilgan hisoblanadi.</p>
+<h2 id="tuz-3">3. Predmet</h2>
+<p>3.1. Operator Muassasaga Xizmatdan internet orqali mavjud funksiyalar hajmida foydalaniş huquqini beradi, Muassasa esa undan Kelişuvga muvofiq foydalanadi.</p>
+<p>3.2. Xizmat — hisob vositasi. Xizmat buxgalteriya, kadrlar yoki yuridik dasturi <b>emas</b>, mehnat şartnomalari, buyruqlar, belgilangan şakldagi tabellar va mutaxassislar maslahatini almaştirmaydi. Xizmatdagi hisob-kitoblar Muassasa belgilagan qoidalar va maʼlumotlar böyiça bajariladi.</p>
+<h2 id="tuz-4">4. Narx</h2>
+<p>4.1. Uşbu tahrir sanasida Xizmat bepul taqdim etiladi.</p>
+<p>4.2. Operator Xizmat yoki alohida funksiyalar uçun tölov joriy etişga haqli, bu haqda Muassasaga ilovada yoki elektron poçta orqali kamida 30 kun oldin xabar beradi. Agar Muassasa rozi bölmasa, pullik davr boşlangunça foydalanişni töxtatişga haqli; undan keyin foydalanişni davom ettiriş tölovga rozilikni bildiradi.</p>
+<h2 id="tuz-5">5. Muassasaning majburiyatlari va kafolatlari</h2>
+<p>Muassasa quyidagilarni öz zimmasiga oladi va kafolatlaydi:</p>
+<p>5.1. Öz Xodimlari va maʼlumotlarini Xizmatga kiritadigan boşqa şaxslarning şaxsga doir maʼlumotlari bazasining mulkdori va operatori hisoblanadi hamda ularni qonuniy qayta işlaş uçun javob beradi: qonuniy asosga ega, <b>Xodimlarning roziligini oladi</b> (18 yoşga tölmaganlar uçun — qonuniy vakilining roziligi), ularni qayta işlaş maqsadlari, huquqlari va maʼlumotlar Operator va uning provayderlariga uzatilişi haqida xabardor qiladi, Siyosat bilan taniştiradi.</p>
+<p>5.2. Töğri maʼlumotlarni kiritadi va ularning töliqligi va töğriligi uçun javob beradi.</p>
+<p>5.3. Xizmatdan foydalanib qabul qilingan barça qarorlar uçun mustaqil javob beradi: jadval, iş vaqti hisobi, iş haqini hisoblaş va tölaş, jarimalar, mukofotlar, uşlab qolişlar, avans, intizomiy çoralar, işga ruxsat, işdan böşatiş, — şuningdek mehnat, soliq va boşqa qonunçilikka rioya qiliş uçun.</p>
+<p>5.4. Xizmatga quyidagilarni yuklamaydi: biometrik va genetik maʼlumotlar; pasport maʼlumotlari, soğliq, sudlanganlik haqidagi maʼlumotlar va boşqa maxsus maʼlumotlar — qonuniy asos va zaruratsiz; bolalar maʼlumotlari — qonuniy asossiz; huquqi bölmagan begona maʼlumotlar; noqonuniy, haqoratli materiallar, zararli kod.</p>
+<p>5.5. Kiriş çeklovlarini çetlab ötişga urinmaydi, Xizmatni avtomatik sörovlar bilan yuklamaydi, Xizmatni nusxalamaydi va qayta sotmaydi, undan odamlarni iş harakatlaridan taşqari kuzatiş uçun foydalanmaydi.</p>
+<p>5.6. Parollarni sir saqlaydi, kirişni faqat öz Xodimlariga beradi va işdan böşaganlarni öz vaqtida öçiradi.</p>
+<p>5.7. Xodimlarning maʼlumotlariga kiriş, ularni tuzatiş va öçiriş haqidagi murojaatlarini körib çiqadi; Operator Xizmatning texnik imkoniyatlari doirasida yordam beradi.</p>
+<h2 id="tuz-6">6. Şaxsga doir maʼlumotlarni topşiriq böyiça qayta işlaş</h2>
+<p>6.1. Muassasa Operatorga Xodimlar va Muassasa Xizmatga kiritadigan boşqa şaxslarning şaxsga doir maʼlumotlarini qayta işlaşni topşiradi, Operator esa ularni faqat Xizmatni taqdim etiş uçun, Muassasa topşiriği böyiça va uning manfaatlarida, Siyosatga muvofiq qayta işlaydi.</p>
+<p>6.2. Operator: maxfiylikka rioya qiladi; oqilona huquqiy, taşkiliy va texnik himoya çoralarini köradi; maʼlumotlarga faqat Xizmat işlaşi uçun kerak bölganlarni qöyadi; provayderlarni (xosting, SI, bildirişnomalar — röyxat Siyosatda) jalb qiladi va himoya darajasini saqlagan holda ularni almaştirişga haqli; maʼlumotlarga taalluqli hodisalar haqida Muassasaga asossiz keçiktirmasdan xabar beradi; Kelişuv tugaganidan keyin maʼlumotlarni 11-bölim böyiça öçiradi yoki şaxssizlaştiradi.</p>
+<p>6.3. Muassasa Muassasa maʼlumotlarini ÖRQ-547-son Qonunning 15 va 27¹-moddalarida ruxsat etilgan doirada Özbekistondan taşqaridagi serverlarda saqlaş va qayta işlaşga rozilik beradi va bunga Xodimlarning roziligini oliş majburiyatini oladi (Xizmatning rozilik ekrani şu uçun möljallangan va rozilikni jurnalga yozadi, lekin Muassasani 5.1-band böyiça majburiyatlardan ozod qilmaydi).</p>
+<p>6.4. Harakat vaqtidagi joylaşuv, suratlar, «Kontaktlardan» raqam tanlaş, Egasining SI yordamçisi Siyosatda tavsiflanganidek işlaydi. Öz Xodimlari uçun Xizmat funksiyalarini yoqib, Muassasa ulardan foydalaniş qonuniy va mutanosib ekani uçun javob beradi.</p>
+<h2 id="tuz-7">7. Operatorning huquqlari</h2>
+<p>7.1. Xizmat funksiyalarini özgartiriş, qöşiş va olib taşlaş.</p>
+<p>7.2. Texnik işlarni, şu jumladan kirişda tanaffuslar bilan ötkaziş.</p>
+<p>7.3. Kelişuv yoki qonun buzilganda, davlat organi talabi böyiça, Xizmat yoki boşqa foydalanuvçilar xavfsizligiga tahdid bölganda kirişni töxtatib turiş yoki Akkauntni (töliq yoki alohida Foydalanuvçi uçun) öçiriş, — imkon qadar Muassasaga oldindan xabar berib; qöpol buziliş yoki tahdid bölganda — xabarsiz.</p>
+<p>7.4. Xizmat statistikasi, yaxşilaş va rivojlantiriş uçun şaxssizlaştirilgan va umumlaştirilgan maʼlumotlardan (muayyan Muassasa yoki şaxsni aniqlaşga imkon bermaydigan) foydalaniş.</p>
+<p>7.5. Egasiga Xizmat haqida xizmat xabarlarini yuboriş.</p>
+<h2 id="tuz-8">8. Intellektual mulk va maʼlumotlar</h2>
+<p>8.1. Xizmatga mutlaq huquqlar (dastur kodi, dizayn, matnlar, öquv materiallari, Jamoa tovar belgisi) Operatorga tegişli. Muassasa faqat Kelişuv böyiça foydalaniş huquqini oladi (Kelişuv muddatiga oddiy nomutlaq litsenziya, topşiriş huquqisiz).</p>
+<p>8.2. Muassasa maʼlumotlari Muassasaga tegişli. Operator ularni sotmaydi va Kelişuv va Siyosatda körsatilganlardan taşqari öz maqsadlarida foydalanmaydi. Muassasa Operatorga Muassasa maʼlumotlarini Xizmat işlaşi uçun kerakli hajmda qayta işlaş huquqini beradi.</p>
+<p>8.3. Xizmat haqidagi takliflar va fikrlardan Operator erkin va haq tölamasdan foydalanişga haqli.</p>
+<h2 id="tuz-9">9. Kafolatlar va javobgarlikni çeklaş</h2>
+<p>9.1. Xizmat «boriça» va «mavjudiça» taqdim etiladi. Operator Xizmat uzluksiz, xatosiz işlaşini, Muassasaning muayyan maqsadlariga mos kelişini yoki qurilmalardan olingan maʼlumotlar (vaqt, joylaşuv, surat) har doim aniq bölişini kafolatlamaydi: ular telefon, tarmoq, brauzer va odamlarning harakatlariga boğliq.</p>
+<p>9.2. Operator quyidagilar uçun javob bermaydi:</p>
+<ul>
+<li>Muassasaning Xizmat maʼlumotlari böyiça qabul qilgan qarorlari (jarimalar, mukofotlar, uşlab qolişlar, hisob-kitoblar, işdan böşatiş va h.k.) va ularning oqibatlari;</li>
+<li>Muassasa va Xodimlar kiritgan maʼlumotlarning töğriligi;</li>
+<li>Muassasaning mehnat qonunçiligi va şaxsga doir maʼlumotlar töğrisidagi qonunçilikni buzişi, Xodimlar roziligi yöqligi;</li>
+<li>aloqa tarmoqlari, qurilmalar, uçinçi tomon xizmatlari (xosting, push-bildirişnomalar, SI provayderi) Operatorning oqilona nazoratidan taşqaridagi nosozliklari;</li>
+<li>SI yordamçilarining javoblari: ular maʼlumot xarakteriga ega; özgarişlar faqat Egasi tasdiqlaganidan keyin bajariladi, u «nima qilinadi» kartoçkasini tekşiriş uçun javob beradi;</li>
+<li>Muassasa yoki Xodimlar aybi bilan parollar oşkor bölişi oqibatlari.</li>
+</ul>
+<p>9.3. Operator bilvosita zararlar va boy berilgan foydani (olinmagan daromad, mijozlar, işbilarmonlik obrösini yöqotiş, uçinçi şaxslar Muassasaga solgan jarimalar) qonun bunday çeklaşga yöl qöyadigan darajada qoplamaydi.</p>
+<p>9.4. Operatorning Kelişuv böyiça umumiy javobgarligi Muassasa talabga asos bölgan voqeadan oldingi 12 oy uçun Operatorga tölagan summa bilan çeklanadi; agar Xizmatdan bepul foydalanilgan bölsa — talab qöyilgan sanada Özbekiston Respublikasida belgilangan bitta bazaviy hisoblaş miqdoriga teng summa bilan.</p>
+<p>9.5. 9-bölim çeklovlari qasddan buziş uçun javobgarlikka va qonun javobgarlikni oldindan bartaraf etiş yoki çeklaşga yöl qöymaydigan boşqa hollarga (şu jumladan isteʼmolçilar huquqlarini himoya qiliş töğrisidagi qonun taraflar munosabatlariga qöllanilsa, isteʼmolçi huquqlariga) qöllanilmaydi.</p>
+<p>9.6. Operatorga talablar, agar Muassasa buziliş haqida bilgan paytdan boşlab 6 oy içida yozma daʼvo yuborgan bölsa, körib çiqiladi, qonun boşqa majburiy muddatni belgilagan hollar bundan mustasno.</p>
+<h2 id="tuz-10">10. Zararni qoplaş (indemniti)</h2>
+<p>Agar Operatorga Xodimlar, boşqa şaxslar yoki davlat organlari tomonidan quyidagilar munosabati bilan talablar qöyilsa, Muassasa Operatorga hujjat bilan tasdiqlangan zararlar, xarajatlar (yuristlarga oqilona xarajatlar ham), jarimalar va Operatordan undirilgan summalarni qoplaydi: Muassasa Kelişuvni, mehnat qonunçiligini yoki şaxsga doir maʼlumotlar töğrisidagi qonunçilikni buzişi; Xodimlar roziligi yöqligi; Muassasa maʼlumotlarining notöğriligi yoki noqonuniyligi; Muassasaning Xizmat yordamida qabul qilgan qarorlari. Operator bunday talab haqida Muassasaga xabar beradi va uni hal qilişda iştirok etiş imkonini beradi.</p>
+<h2 id="tuz-11">11. Muddat, tugatiş, maʼlumotlarni öçiriş</h2>
+<p>11.1. Kelişuv aksept paytidan boşlab muddatsiz amal qiladi.</p>
+<p>11.2. Muassasa istalgan vaqtda sozlamalarda Muassasani yopib yoki Operatorga yozib Kelişuvni tugatişi mumkin.</p>
+<p>11.3. Operator Muassasaga 30 kun oldin xabar berib, 7.3-band böyiça buzilişda — xabar berilgan paytdan, Xizmat butunlay töxtatilganda — 30 kun oldin Kelişuvni tugatişi mumkin.</p>
+<p>11.4. Muassasa yopilgandan keyin 30 kun içida uni tiklaş mumkin; keyin Muassasa maʼlumotlari oqilona muddatda (30 kungaça) öçiriladi yoki şaxssizlaştiriladi, Operator qonun böyiça saqlaşi şart bölgan maʼlumotlar, roziliklar jurnali (3 yil saqlanadi) va zaxira nusxalar (xosting sikli böyiça qayta yoziladi) bundan mustasno. Öziga kerakli maʼlumotlarni (hisobotlar, tabellar) öçirilgunga qadar yuklab oliş va saqlaş uçun Muassasaning özi javob beradi.</p>
+<h2 id="tuz-12">12. Kelişuvni özgartiriş</h2>
+<p>12.1. Operator Kelişuv va Siyosatni özgartirişga haqli. Yangi tahrir saytda sana va versiya raqami bilan eʼlon qilinadi; muhim özgarişlar haqida Operator kuçga kirişidan kamida 10 kun oldin ilovada yoki poçta orqali xabar beradi (qonun talab qilgan özgarişlar bundan mustasno — tahrirda körsatilgan sanadan).</p>
+<p>12.2. Özgarişlar kuçga kirgandan keyin Xizmatdan foydalanişni davom ettiriş ularga rozilikni bildiradi. Agar Muassasa rozi bölmasa — 11.2-band böyiça Kelişuvni tugatişga haqli. Xizmat hujjatni qaytadan qabul qilişni söraşi mumkin — busiz funksiyalarning bir qismi mavjud bölmasligi mumkin.</p>
+<h2 id="tuz-13">13. Fors-major holatlar</h2>
+<p>Taraflar fors-major holatlar natijasida bajarilmaganlik uçun javobgarlikdan ozod qilinadi: tabiiy ofatlar, yonğinlar, harbiy harakatlar, ommaviy tartibsizliklar, epidemiyalar, davlat organlari hujjatlari, elektr va aloqaning uzilişi, taraf ixtiyoriga boğliq bölmagan maʼlumotlar markazlari va provayderlar infratuzilmasidagi nosozliklar va hujumlar. Taraf bunday holatlar haqida oqilona muddatda xabar beradi.</p>
+<h2 id="tuz-14">14. Huquq va nizolar</h2>
+<p>14.1. Kelişuvga Özbekiston Respublikasi huquqi qöllaniladi.</p>
+<p>14.2. Taraflar nizolarni muzokaralar yöli bilan hal qiladi; yozma daʼvo majburiy, javob muddati — 30 kun.</p>
+<p>14.3. Agar nizo hal qilinmasa, u Operator joylaşgan joydagi sudda körib çiqiladi, agar qonunning majburiy normalarida (şu jumladan isteʼmolçilar daʼvolarining sudlovliligi töğrisida) boşqaça nazarda tutilmagan bölsa.</p>
+<h2 id="tuz-15">15. Boşqa şartlar</h2>
+<p>15.1. Agar biror şart haqiqiy emas deb topilsa, qolgan şartlar amal qiladi; haqiqiy bölmagan şart maʼnosiga eng yaqin bölgan joiz şart bilan almaştiriladi.</p>
+<p>15.2. Bildirişnomalar ilovada, Egasi yoki Operatorning elektron poçtasi (<mark class="ph">[EMAIL]</mark>) orqali yuboriladi; ilovadagi xabar körsatilgan paytda olingan hisoblanadi.</p>
+<p>15.3. Muassasa Kelişuv böyiça huquqlarni Operator roziligisiz topşirişga haqli emas. Operator Muassasaga xabar berib, huquq va majburiyatlarni huquqiy vorisga topşirişga haqli.</p>
+<p>15.4. Asosiy matn — rus tilida; özbek tilidagi tarjima bilan tafovut bölsa, qonun boşqaça talab qilmasa, rus tilidagi matn qöllaniladi.</p>
+<h2 id="tuz-16">16. Operator rekvizitlari</h2>
+<p><mark class="ph">[ОПЕРАТОР: полное наименование]</mark><br>STIR: <mark class="ph">[ИНН]</mark><br>Manzil: <mark class="ph">[АДРЕС]</mark><br>Bank rekvizitlari: <mark class="ph">[БАНК: р/с, МФО]</mark><br>Rahbar: <mark class="ph">[ДИРЕКТОР: ФИО]</mark><br>Elektron poçta: <mark class="ph">[EMAIL]</mark> · Telefon: <mark class="ph">[ТЕЛЕФОН]</mark></p><footer class="foot"><a href="privacy.html">Maxfiylik siyosati</a><a href="app.html">Jamoa’ni oçiş</a><a href="#top">Yuqoriga</a></footer></article>
+<article class="doc" data-l="uzc" lang="uz-Cyrl" hidden><p class="draft">Ҳужжат лойиҳаси: оператор маълумотлари эълон қилишдан олдин тўлдирилади.</p><h1>Jamoa фойдаланувчи келишуви (муассасалар учун оммавий оферта)</h1>
+<p class="ver">Версия 1.0 · 01.11.2026 таҳрири · <mark class="ph">[ДАТА]</mark> дан амал қилади</p><nav class="toc" aria-label="Мундарижа"><b>Мундарижа</b><a href="#tuzc-1">1. Атамалар</a><a href="#tuzc-2">2. Аксепт ва электрон шакл</a><a href="#tuzc-3">3. Предмет</a><a href="#tuzc-4">4. Нарх</a><a href="#tuzc-5">5. Муассасанинг мажбуриятлари ва кафолатлари</a><a href="#tuzc-6">6. Шахсга доир маълумотларни топшириқ бўйича қайта ишлаш</a><a href="#tuzc-7">7. Операторнинг ҳуқуқлари</a><a href="#tuzc-8">8. Интеллектуал мулк ва маълумотлар</a><a href="#tuzc-9">9. Кафолатлар ва жавобгарликни чеклаш</a><a href="#tuzc-10">10. Зарарни қоплаш (индемнити)</a><a href="#tuzc-11">11. Муддат, тугатиш, маълумотларни ўчириш</a><a href="#tuzc-12">12. Келишувни ўзгартириш</a><a href="#tuzc-13">13. Форс-мажор ҳолатлар</a><a href="#tuzc-14">14. Ҳуқуқ ва низолар</a><a href="#tuzc-15">15. Бошқа шартлар</a><a href="#tuzc-16">16. Оператор реквизитлари</a></nav>
+<p><mark class="ph">[ОПЕРАТОР: полное наименование]</mark>, СТИР <mark class="ph">[ИНН]</mark>, манзил: <mark class="ph">[АДРЕС]</mark> (кейинги ўринларда — «Оператор»), ҳар қандай якка тартибдаги тадбиркор ёки ташкилотга (кейинги ўринларда — «Муассаса») Jamoa платформасидан фойдаланиш тўғрисидаги шартномани қуйидаги шартларда тузишни таклиф қилади. Бу оммавий оферта (Ўзбекистон Республикаси Фуқаролик кодексининг 369-моддаси); шартнома унга тўлиқ қўшилиш йўли билан (ФК 360-моддаси) аксепт қилинган пайтда (ФК 370-моддаси) тузилади.</p>
+<h2 id="tuzc-1">1. Атамалар</h2>
+<ul>
+<li><b>Jamoa, Хизмат</b> — ходимлар ишини ҳисобга олиш учун илова (веб-илова ва унинг телефон версиялари) ва <a href="https://jamoaapp.uz">https://jamoaapp.uz</a> сайти: белгилар, сменалар, табель, вазифалар, тестлар, иш ҳақи, жарима ва мукофотлар, аризалар, билдиришномалар, ҳисоботлар, СИ ёрдамчилари.</li>
+<li><b>Муассаса</b> — Келишувни қабул қилган ЯТТ ёки ташкилот; ўз Ходимларининг иш берувчиси.</li>
+<li><b>Эгаси</b> — Муассасани рўйхатдан ўтказадиган ва унинг номидан ҳаракат қиладиган жисмоний шахс. Муассасани рўйхатдан ўтказиб, Эгаси Муассаса номидан ҳаракат қилишга ҳақли эканини тасдиқлайди; бундай ҳуқуқ бўлмаса, Эгаси Келишув тарафи сифатида шахсан жавоб беради.</li>
+<li><b>Ходим</b> — Муассаса Jamoa’га кириш берган шахс.</li>
+<li><b>Аккаунт</b> — Муассасанинг Jamoa’даги барча маълумотлари билан ҳисоб ёзуви.</li>
+<li><b>Муассаса маълумотлари</b> — Муассаса ва унинг Ходимлари Jamoa’га киритадиган маълумотлар.</li>
+<li><b>Сиёсат</b> — Jamoa махфийлик сиёсати (<a href="privacy.html">https://jamoaapp.uz/privacy.html</a>).</li>
+<li><b>Аксепт</b> — «Қабул қиламан…» белгисини қўйиш ва Муассаса яратиш тугмасини босиш ёки Хизматдан фойдаланишни бошлаш.</li>
+</ul>
+<h2 id="tuzc-2">2. Аксепт ва электрон шакл</h2>
+<p>2.1. Аксепт Муассасанинг Келишув ва Сиёсатга тўлиқ ва сўзсиз розилигини билдиради. Келишув оддий ёзма шаклда тузилган ҳисобланади.</p>
+<p>2.2. Тарафлар Хизматда белги қўйиш ва тугмани босиш шахсий имзога тенг эканини, Хизмат розиликлар журнали ёзувлари (ким, қачон, ҳужжатнинг қайси версиясини, қайси қурилмадан қабул қилган) эса аксепт ва розиликларнинг мақбул далили эканини тан олади.</p>
+<p>2.3. Хизматда Эгаси ёки Ходимнинг ҳисоб маълумотлари остида бажарилган ҳаракатлар, Муассаса Операторга рухсатсиз кириш ҳақида хабар бермагунча, шу шахс томонидан бажарилган ҳисобланади.</p>
+<h2 id="tuzc-3">3. Предмет</h2>
+<p>3.1. Оператор Муассасага Хизматдан интернет орқали мавжуд функциялар ҳажмида фойдаланиш ҳуқуқини беради, Муассаса эса ундан Келишувга мувофиқ фойдаланади.</p>
+<p>3.2. Хизмат — ҳисоб воситаси. Хизмат бухгалтерия, кадрлар ёки юридик дастури <b>эмас</b>, меҳнат шартномалари, буйруқлар, белгиланган шаклдаги табеллар ва мутахассислар маслаҳатини алмаштирмайди. Хизматдаги ҳисоб-китоблар Муассаса белгилаган қоидалар ва маълумотлар бўйича бажарилади.</p>
+<h2 id="tuzc-4">4. Нарх</h2>
+<p>4.1. Ушбу таҳрир санасида Хизмат бепул тақдим этилади.</p>
+<p>4.2. Оператор Хизмат ёки алоҳида функциялар учун тўлов жорий этишга ҳақли, бу ҳақда Муассасага иловада ёки электрон почта орқали камида 30 кун олдин хабар беради. Агар Муассаса рози бўлмаса, пуллик давр бошлангунча фойдаланишни тўхтатишга ҳақли; ундан кейин фойдаланишни давом эттириш тўловга розиликни билдиради.</p>
+<h2 id="tuzc-5">5. Муассасанинг мажбуриятлари ва кафолатлари</h2>
+<p>Муассаса қуйидагиларни ўз зиммасига олади ва кафолатлайди:</p>
+<p>5.1. Ўз Ходимлари ва маълумотларини Хизматга киритадиган бошқа шахсларнинг шахсга доир маълумотлари базасининг мулкдори ва оператори ҳисобланади ҳамда уларни қонуний қайта ишлаш учун жавоб беради: қонуний асосга эга, <b>Ходимларнинг розилигини олади</b> (18 ёшга тўлмаганлар учун — қонуний вакилининг розилиги), уларни қайта ишлаш мақсадлари, ҳуқуқлари ва маълумотлар Оператор ва унинг провайдерларига узатилиши ҳақида хабардор қилади, Сиёсат билан таништиради.</p>
+<p>5.2. Тўғри маълумотларни киритади ва уларнинг тўлиқлиги ва тўғрилиги учун жавоб беради.</p>
+<p>5.3. Хизматдан фойдаланиб қабул қилинган барча қарорлар учун мустақил жавоб беради: жадвал, иш вақти ҳисоби, иш ҳақини ҳисоблаш ва тўлаш, жарималар, мукофотлар, ушлаб қолишлар, аванс, интизомий чоралар, ишга рухсат, ишдан бўшатиш, — шунингдек меҳнат, солиқ ва бошқа қонунчиликка риоя қилиш учун.</p>
+<p>5.4. Хизматга қуйидагиларни юкламайди: биометрик ва генетик маълумотлар; паспорт маълумотлари, соғлиқ, судланганлик ҳақидаги маълумотлар ва бошқа махсус маълумотлар — қонуний асос ва заруратсиз; болалар маълумотлари — қонуний асоссиз; ҳуқуқи бўлмаган бегона маълумотлар; ноқонуний, ҳақоратли материаллар, зарарли код.</p>
+<p>5.5. Кириш чекловларини четлаб ўтишга уринмайди, Хизматни автоматик сўровлар билан юкламайди, Хизматни нусхаламайди ва қайта сотмайди, ундан одамларни иш ҳаракатларидан ташқари кузатиш учун фойдаланмайди.</p>
+<p>5.6. Паролларни сир сақлайди, киришни фақат ўз Ходимларига беради ва ишдан бўшаганларни ўз вақтида ўчиради.</p>
+<p>5.7. Ходимларнинг маълумотларига кириш, уларни тузатиш ва ўчириш ҳақидаги мурожаатларини кўриб чиқади; Оператор Хизматнинг техник имкониятлари доирасида ёрдам беради.</p>
+<h2 id="tuzc-6">6. Шахсга доир маълумотларни топшириқ бўйича қайта ишлаш</h2>
+<p>6.1. Муассаса Операторга Ходимлар ва Муассаса Хизматга киритадиган бошқа шахсларнинг шахсга доир маълумотларини қайта ишлашни топширади, Оператор эса уларни фақат Хизматни тақдим этиш учун, Муассаса топшириғи бўйича ва унинг манфаатларида, Сиёсатга мувофиқ қайта ишлайди.</p>
+<p>6.2. Оператор: махфийликка риоя қилади; оқилона ҳуқуқий, ташкилий ва техник ҳимоя чораларини кўради; маълумотларга фақат Хизмат ишлаши учун керак бўлганларни қўяди; провайдерларни (хостинг, СИ, билдиришномалар — рўйхат Сиёсатда) жалб қилади ва ҳимоя даражасини сақлаган ҳолда уларни алмаштиришга ҳақли; маълумотларга тааллуқли ҳодисалар ҳақида Муассасага асоссиз кечиктирмасдан хабар беради; Келишув тугаганидан кейин маълумотларни 11-бўлим бўйича ўчиради ёки шахссизлаштиради.</p>
+<p>6.3. Муассаса Муассаса маълумотларини ЎРҚ-547-сон Қонуннинг 15 ва 27¹-моддаларида рухсат этилган доирада Ўзбекистондан ташқаридаги серверларда сақлаш ва қайта ишлашга розилик беради ва бунга Ходимларнинг розилигини олиш мажбуриятини олади (Хизматнинг розилик экрани шу учун мўлжалланган ва розиликни журналга ёзади, лекин Муассасани 5.1-банд бўйича мажбуриятлардан озод қилмайди).</p>
+<p>6.4. Ҳаракат вақтидаги жойлашув, суратлар, «Контактлардан» рақам танлаш, Эгасининг СИ ёрдамчиси Сиёсатда тавсифланганидек ишлайди. Ўз Ходимлари учун Хизмат функцияларини ёқиб, Муассаса улардан фойдаланиш қонуний ва мутаносиб экани учун жавоб беради.</p>
+<h2 id="tuzc-7">7. Операторнинг ҳуқуқлари</h2>
+<p>7.1. Хизмат функцияларини ўзгартириш, қўшиш ва олиб ташлаш.</p>
+<p>7.2. Техник ишларни, шу жумладан киришда танаффуслар билан ўтказиш.</p>
+<p>7.3. Келишув ёки қонун бузилганда, давлат органи талаби бўйича, Хизмат ёки бошқа фойдаланувчилар хавфсизлигига таҳдид бўлганда киришни тўхтатиб туриш ёки Аккаунтни (тўлиқ ёки алоҳида Фойдаланувчи учун) ўчириш, — имкон қадар Муассасага олдиндан хабар бериб; қўпол бузилиш ёки таҳдид бўлганда — хабарсиз.</p>
+<p>7.4. Хизмат статистикаси, яхшилаш ва ривожлантириш учун шахссизлаштирилган ва умумлаштирилган маълумотлардан (муайян Муассаса ёки шахсни аниқлашга имкон бермайдиган) фойдаланиш.</p>
+<p>7.5. Эгасига Хизмат ҳақида хизмат хабарларини юбориш.</p>
+<h2 id="tuzc-8">8. Интеллектуал мулк ва маълумотлар</h2>
+<p>8.1. Хизматга мутлақ ҳуқуқлар (дастур коди, дизайн, матнлар, ўқув материаллари, Jamoa товар белгиси) Операторга тегишли. Муассаса фақат Келишув бўйича фойдаланиш ҳуқуқини олади (Келишув муддатига оддий номутлақ лицензия, топшириш ҳуқуқисиз).</p>
+<p>8.2. Муассаса маълумотлари Муассасага тегишли. Оператор уларни сотмайди ва Келишув ва Сиёсатда кўрсатилганлардан ташқари ўз мақсадларида фойдаланмайди. Муассаса Операторга Муассаса маълумотларини Хизмат ишлаши учун керакли ҳажмда қайта ишлаш ҳуқуқини беради.</p>
+<p>8.3. Хизмат ҳақидаги таклифлар ва фикрлардан Оператор эркин ва ҳақ тўламасдан фойдаланишга ҳақли.</p>
+<h2 id="tuzc-9">9. Кафолатлар ва жавобгарликни чеклаш</h2>
+<p>9.1. Хизмат «борича» ва «мавжудича» тақдим этилади. Оператор Хизмат узлуксиз, хатосиз ишлашини, Муассасанинг муайян мақсадларига мос келишини ёки қурилмалардан олинган маълумотлар (вақт, жойлашув, сурат) ҳар доим аниқ бўлишини кафолатламайди: улар телефон, тармоқ, браузер ва одамларнинг ҳаракатларига боғлиқ.</p>
+<p>9.2. Оператор қуйидагилар учун жавоб бермайди:</p>
+<ul>
+<li>Муассасанинг Хизмат маълумотлари бўйича қабул қилган қарорлари (жарималар, мукофотлар, ушлаб қолишлар, ҳисоб-китоблар, ишдан бўшатиш ва h.k.) ва уларнинг оқибатлари;</li>
+<li>Муассаса ва Ходимлар киритган маълумотларнинг тўғрилиги;</li>
+<li>Муассасанинг меҳнат қонунчилиги ва шахсга доир маълумотлар тўғрисидаги қонунчиликни бузиши, Ходимлар розилиги йўқлиги;</li>
+<li>алоқа тармоқлари, қурилмалар, учинчи томон хизматлари (хостинг, push-билдиришномалар, СИ провайдери) Операторнинг оқилона назоратидан ташқаридаги носозликлари;</li>
+<li>СИ ёрдамчиларининг жавоблари: улар маълумот характерига эга; ўзгаришлар фақат Эгаси тасдиқлаганидан кейин бажарилади, у «нима қилинади» карточкасини текшириш учун жавоб беради;</li>
+<li>Муассаса ёки Ходимлар айби билан пароллар ошкор бўлиши оқибатлари.</li>
+</ul>
+<p>9.3. Оператор билвосита зарарлар ва бой берилган фойдани (олинмаган даромад, мижозлар, ишбилармонлик обрўсини йўқотиш, учинчи шахслар Муассасага солган жарималар) қонун бундай чеклашга йўл қўядиган даражада қопламайди.</p>
+<p>9.4. Операторнинг Келишув бўйича умумий жавобгарлиги Муассаса талабга асос бўлган воқеадан олдинги 12 ой учун Операторга тўлаган сумма билан чекланади; агар Хизматдан бепул фойдаланилган бўлса — талаб қўйилган санада Ўзбекистон Республикасида белгиланган битта базавий ҳисоблаш миқдорига тенг сумма билан.</p>
+<p>9.5. 9-бўлим чекловлари қасддан бузиш учун жавобгарликка ва қонун жавобгарликни олдиндан бартараф этиш ёки чеклашга йўл қўймайдиган бошқа ҳолларга (шу жумладан истеъмолчилар ҳуқуқларини ҳимоя қилиш тўғрисидаги қонун тарафлар муносабатларига қўлланилса, истеъмолчи ҳуқуқларига) қўлланилмайди.</p>
+<p>9.6. Операторга талаблар, агар Муассаса бузилиш ҳақида билган пайтдан бошлаб 6 ой ичида ёзма даъво юборган бўлса, кўриб чиқилади, қонун бошқа мажбурий муддатни белгилаган ҳоллар бундан мустасно.</p>
+<h2 id="tuzc-10">10. Зарарни қоплаш (индемнити)</h2>
+<p>Агар Операторга Ходимлар, бошқа шахслар ёки давлат органлари томонидан қуйидагилар муносабати билан талаблар қўйилса, Муассаса Операторга ҳужжат билан тасдиқланган зарарлар, харажатлар (юристларга оқилона харажатлар ҳам), жарималар ва Оператордан ундирилган суммаларни қоплайди: Муассаса Келишувни, меҳнат қонунчилигини ёки шахсга доир маълумотлар тўғрисидаги қонунчиликни бузиши; Ходимлар розилиги йўқлиги; Муассаса маълумотларининг нотўғрилиги ёки ноқонунийлиги; Муассасанинг Хизмат ёрдамида қабул қилган қарорлари. Оператор бундай талаб ҳақида Муассасага хабар беради ва уни ҳал қилишда иштирок этиш имконини беради.</p>
+<h2 id="tuzc-11">11. Муддат, тугатиш, маълумотларни ўчириш</h2>
+<p>11.1. Келишув аксепт пайтидан бошлаб муддатсиз амал қилади.</p>
+<p>11.2. Муассаса исталган вақтда созламаларда Муассасани ёпиб ёки Операторга ёзиб Келишувни тугатиши мумкин.</p>
+<p>11.3. Оператор Муассасага 30 кун олдин хабар бериб, 7.3-банд бўйича бузилишда — хабар берилган пайтдан, Хизмат бутунлай тўхтатилганда — 30 кун олдин Келишувни тугатиши мумкин.</p>
+<p>11.4. Муассаса ёпилгандан кейин 30 кун ичида уни тиклаш мумкин; кейин Муассаса маълумотлари оқилона муддатда (30 кунгача) ўчирилади ёки шахссизлаштирилади, Оператор қонун бўйича сақлаши шарт бўлган маълумотлар, розиликлар журнали (3 йил сақланади) ва захира нусхалар (хостинг сикли бўйича қайта ёзилади) бундан мустасно. Ўзига керакли маълумотларни (ҳисоботлар, табеллар) ўчирилгунга қадар юклаб олиш ва сақлаш учун Муассасанинг ўзи жавоб беради.</p>
+<h2 id="tuzc-12">12. Келишувни ўзгартириш</h2>
+<p>12.1. Оператор Келишув ва Сиёсатни ўзгартиришга ҳақли. Янги таҳрир сайтда сана ва версия рақами билан эълон қилинади; муҳим ўзгаришлар ҳақида Оператор кучга киришидан камида 10 кун олдин иловада ёки почта орқали хабар беради (қонун талаб қилган ўзгаришлар бундан мустасно — таҳрирда кўрсатилган санадан).</p>
+<p>12.2. Ўзгаришлар кучга киргандан кейин Хизматдан фойдаланишни давом эттириш уларга розиликни билдиради. Агар Муассаса рози бўлмаса — 11.2-банд бўйича Келишувни тугатишга ҳақли. Хизмат ҳужжатни қайтадан қабул қилишни сўраши мумкин — бусиз функцияларнинг бир қисми мавжуд бўлмаслиги мумкин.</p>
+<h2 id="tuzc-13">13. Форс-мажор ҳолатлар</h2>
+<p>Тарафлар форс-мажор ҳолатлар натижасида бажарилмаганлик учун жавобгарликдан озод қилинади: табиий офатлар, ёнғинлар, ҳарбий ҳаракатлар, оммавий тартибсизликлар, эпидемиялар, давлат органлари ҳужжатлари, электр ва алоқанинг узилиши, тараф ихтиёрига боғлиқ бўлмаган маълумотлар марказлари ва провайдерлар инфратузилмасидаги носозликлар ва ҳужумлар. Тараф бундай ҳолатлар ҳақида оқилона муддатда хабар беради.</p>
+<h2 id="tuzc-14">14. Ҳуқуқ ва низолар</h2>
+<p>14.1. Келишувга Ўзбекистон Республикаси ҳуқуқи қўлланилади.</p>
+<p>14.2. Тарафлар низоларни музокаралар йўли билан ҳал қилади; ёзма даъво мажбурий, жавоб муддати — 30 кун.</p>
+<p>14.3. Агар низо ҳал қилинмаса, у Оператор жойлашган жойдаги судда кўриб чиқилади, агар қонуннинг мажбурий нормаларида (шу жумладан истеъмолчилар даъволарининг судловлилиги тўғрисида) бошқача назарда тутилмаган бўлса.</p>
+<h2 id="tuzc-15">15. Бошқа шартлар</h2>
+<p>15.1. Агар бирор шарт ҳақиқий эмас деб топилса, қолган шартлар амал қилади; ҳақиқий бўлмаган шарт маъносига энг яқин бўлган жоиз шарт билан алмаштирилади.</p>
+<p>15.2. Билдиришномалар иловада, Эгаси ёки Операторнинг электрон почтаси (<mark class="ph">[EMAIL]</mark>) орқали юборилади; иловадаги хабар кўрсатилган пайтда олинган ҳисобланади.</p>
+<p>15.3. Муассаса Келишув бўйича ҳуқуқларни Оператор розилигисиз топширишга ҳақли эмас. Оператор Муассасага хабар бериб, ҳуқуқ ва мажбуриятларни ҳуқуқий ворисга топширишга ҳақли.</p>
+<p>15.4. Асосий матн — рус тилида; ўзбек тилидаги таржима билан тафовут бўлса, қонун бошқача талаб қилмаса, рус тилидаги матн қўлланилади.</p>
+<h2 id="tuzc-16">16. Оператор реквизитлари</h2>
+<p><mark class="ph">[ОПЕРАТОР: полное наименование]</mark><br>СТИР: <mark class="ph">[ИНН]</mark><br>Манзил: <mark class="ph">[АДРЕС]</mark><br>Банк реквизитлари: <mark class="ph">[БАНК: р/с, МФО]</mark><br>Раҳбар: <mark class="ph">[ДИРЕКТОР: ФИО]</mark><br>Электрон почта: <mark class="ph">[EMAIL]</mark> · Телефон: <mark class="ph">[ТЕЛЕФОН]</mark></p><footer class="foot"><a href="privacy.html">Махфийлик сиёсати</a><a href="app.html">Jamoa’ни очиш</a><a href="#top">Юқорига</a></footer></article>
+</main>
+<script>
+(function(){
+  var T={ru:"Пользовательское соглашение · Jamoa",uz:"Foydalanuvçi kelişuvi · Jamoa",uzc:"Фойдаланувчи келишуви · Jamoa"};
+  function set(l,save){
+    if(!T[l])l='ru';
+    [].forEach.call(document.querySelectorAll('article.doc'),function(a){a.hidden=a.getAttribute('data-l')!==l;});
+    [].forEach.call(document.querySelectorAll('.sw button'),function(b){var on=b.getAttribute('data-l')===l;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on?'true':'false');});
+    document.documentElement.lang=l==='uzc'?'uz-Cyrl':l;document.title=T[l];
+    if(save){try{localStorage.setItem('mlx-lang',l==='ru'?'ru':'uz');localStorage.setItem('mlx-script',l==='uzc'?'cyr':'lat');}catch(e){}}
+  }
+  var l='ru',m=/[?&]lang=(ru|uzc|uz)(?![a-z])/.exec(location.search);
+  if(m)l=m[1];else{try{var s=localStorage.getItem('mlx-lang');if(s==='uz')l=localStorage.getItem('mlx-script')==='cyr'?'uzc':'uz';}catch(e){}}
+  set(l,false);
+  [].forEach.call(document.querySelectorAll('.sw button'),function(b){b.onclick=function(){set(b.getAttribute('data-l'),true);};});
+  /* #employee → якорь на языке страницы */
+  if(/^#employee/.test(location.hash)){var e=document.getElementById('employee-'+l);if(e)setTimeout(function(){e.scrollIntoView({behavior:'instant',block:'start'});},0);}
+})();
+</script>
+</body></html>

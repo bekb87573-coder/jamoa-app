@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Политика конфиденциальности · Jamoa</title>
+<meta name="description" content="Как Jamoa обрабатывает персональные данные владельцев и сотрудников заведений">
+<meta name="theme-color" content="#12171C">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+@font-face{font-family:'Manrope';font-weight:400;font-display:swap;src:url(fonts/manrope-cyrillic-400-normal.woff2) format('woff2');unicode-range:U+0400-04FF}
+@font-face{font-family:'Manrope';font-weight:400;font-display:swap;src:url(fonts/manrope-latin-400-normal.woff2) format('woff2');unicode-range:U+0000-00FF,U+2000-206F}
+@font-face{font-family:'Manrope';font-weight:400;font-display:swap;src:url(fonts/manrope-latin-ext-400-normal.woff2) format('woff2');unicode-range:U+0100-02FF}
+@font-face{font-family:'Manrope';font-weight:700;font-display:swap;src:url(fonts/manrope-cyrillic-700-normal.woff2) format('woff2');unicode-range:U+0400-04FF}
+@font-face{font-family:'Manrope';font-weight:700;font-display:swap;src:url(fonts/manrope-latin-700-normal.woff2) format('woff2');unicode-range:U+0000-00FF,U+2000-206F}
+@font-face{font-family:'Manrope';font-weight:700;font-display:swap;src:url(fonts/manrope-latin-ext-700-normal.woff2) format('woff2');unicode-range:U+0100-02FF}
+@font-face{font-family:'Cormorant Garamond';font-weight:600;font-display:swap;src:url(fonts/cormorant-garamond-cyrillic-600-normal.woff2) format('woff2');unicode-range:U+0400-04FF}
+@font-face{font-family:'Cormorant Garamond';font-weight:600;font-display:swap;src:url(fonts/cormorant-garamond-latin-600-normal.woff2) format('woff2');unicode-range:U+0000-00FF,U+2000-206F}
+@font-face{font-family:'Cormorant Garamond';font-weight:600;font-display:swap;src:url(fonts/cormorant-garamond-latin-ext-600-normal.woff2) format('woff2');unicode-range:U+0100-02FF}
+:root{--bg:#12171C;--panel:#1B2229;--ink:#E8ECEF;--muted:#9AA5AF;--line:#2C353E;--gold:#D2AE66;--goldbg:#2E2718;--sans:'Manrope',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;--serif:'Cormorant Garamond',Georgia,serif}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.6 var(--sans);overflow-wrap:anywhere}
+.bar{position:sticky;top:0;z-index:3;background:rgba(18,23,28,.94);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.bar-in{max-width:820px;margin:0 auto;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.logo{font:700 13px/1 var(--sans);letter-spacing:.22em;text-transform:uppercase;color:var(--gold);text-decoration:none}
+.sw{display:flex;border:1px solid var(--line);border-radius:999px;padding:3px;gap:2px;flex:none}
+.sw button{min-width:44px;min-height:36px;border:0;border-radius:999px;background:transparent;color:var(--muted);font:700 13px/1 var(--sans);cursor:pointer;padding:0 10px}
+.sw button.on{background:var(--gold);color:#12171C}
+.sw button:focus-visible,a:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+main{max-width:820px;margin:0 auto;padding:20px 16px calc(48px + env(safe-area-inset-bottom))}
+.doc{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:22px 18px}
+@media(min-width:700px){.doc{padding:40px 48px}}
+h1{font:600 32px/1.12 var(--serif);margin:0 0 10px;color:var(--ink)}
+@media(min-width:700px){h1{font-size:42px}}
+h1.h1b{margin-top:8px}
+h2{font:700 18px/1.35 var(--sans);margin:30px 0 8px;color:var(--gold)}
+p,li{color:var(--ink)}
+p{margin:0 0 12px}
+ul,ol{margin:0 0 14px;padding-left:22px}
+li{margin:0 0 6px}
+b{color:#fff;font-weight:700}
+a{color:var(--gold)}
+.ver{color:var(--muted);font-size:14px}
+.draft{background:var(--goldbg);border:1px solid #5A4A26;color:var(--gold);border-radius:12px;padding:10px 12px;font-size:14px;margin:0 0 16px}
+mark.ph{background:#4A3A12;color:#FFD98A;border-radius:4px;padding:0 3px;font-weight:700}
+.toc{display:flex;flex-direction:column;gap:2px;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:14px 0 4px;font-size:14.5px}
+.toc b{color:var(--muted);font-size:12px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px}
+.toc a{color:var(--ink);text-decoration:none;padding:5px 0;border-bottom:1px solid var(--line)}
+.toc a:last-child{border-bottom:0}
+.emp{margin-top:36px;padding-top:24px;border-top:1px solid var(--gold)}
+.foot{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:32px;padding-top:16px;border-top:1px solid var(--line);font-size:14.5px}
+.foot a{min-height:44px;display:inline-flex;align-items:center}
+@media print{.bar,.toc,.foot,.draft{display:none}body,.doc{background:#fff;color:#000;border:0}b,p,li,h1{color:#000}h2{color:#000}}
+</style></head>
+<body id="top">
+<header class="bar"><div class="bar-in"><a class="logo" href="./">Jamoa</a>
+<div class="sw" role="group" aria-label="Язык / Til"><button type="button" data-l="ru" class="on" aria-pressed="true">RU</button><button type="button" data-l="uz" aria-pressed="false">UZ</button><button type="button" data-l="uzc" aria-pressed="false">ЎЗ</button></div></div></header>
+<main>
+<article class="doc" data-l="ru" lang="ru"><p class="draft">Проект документа: данные оператора будут заполнены перед публикацией.</p><h1>Политика конфиденциальности Jamoa</h1>
+<p class="ver">Версия 1.0 · редакция от 01.11.2026 · действует с <mark class="ph">[ДАТА]</mark></p><nav class="toc" aria-label="Содержание"><b>Содержание</b><a href="#pru-1">1. Кто мы</a><a href="#pru-2">2. Определения</a><a href="#pru-3">3. Кто отвечает за данные: распределение ролей</a><a href="#pru-4">4. Какие данные мы обрабатываем</a><a href="#pru-5">5. Зачем мы обрабатываем данные (цели)</a><a href="#pru-6">6. Основания обработки</a><a href="#pru-7">7. Кому передаются данные</a><a href="#pru-8">8. Передача и хранение за пределами Узбекистана</a><a href="#pru-9">9. Сколько хранятся данные</a><a href="#pru-10">10. Ваши права</a><a href="#pru-11">11. Защита данных</a><a href="#pru-12">12. Дети</a><a href="#pru-13">13. Файлы на устройстве (localStorage) и cookies</a><a href="#pru-14">14. Изменения Политики</a><a href="#pru-15">15. Контакты</a><a href="#employee-ru">Согласие сотрудника</a></nav>
+<p>Эта Политика объясняет, какие персональные данные обрабатываются в приложении и на сайте Jamoa (<a href="https://jamoaapp.uz">https://jamoaapp.uz</a>), кто за них отвечает, зачем они нужны, где хранятся и какие у вас права. Политика составлена в соответствии с Законом Республики Узбекистан «О персональных данных» от 02.07.2019 № ЗРУ-547 (с изменениями, включая Закон от 26.03.2026 № ЗРУ-1125) и другими актами Республики Узбекистан.</p>
+<h2 id="pru-1">1. Кто мы</h2>
+<p>Оператор платформы Jamoa: <mark class="ph">[ОПЕРАТОР: полное наименование]</mark>, ИНН <mark class="ph">[ИНН]</mark>, адрес: <mark class="ph">[АДРЕС]</mark>, электронная почта: <mark class="ph">[EMAIL]</mark>, телефон: <mark class="ph">[ТЕЛЕФОН]</mark> (далее — «Оператор», «мы»).</p>
+<p>Вопросы о персональных данных: <mark class="ph">[EMAIL ДЛЯ ЗАПРОСОВ ПО ДАННЫМ]</mark>.</p>
+<h2 id="pru-2">2. Определения</h2>
+<ul>
+<li><b>Jamoa, Сервис</b> — приложение (веб-приложение и его версии для телефонов) и сайт для учёта работы персонала заведений: отметка прихода и ухода, смены, табель, задачи, тесты, заработок, штрафы и премии, заявки, уведомления, отчёты.</li>
+<li><b>Заведение</b> — индивидуальный предприниматель или организация (работодатель), которые зарегистрировали своё заведение в Jamoa и приняли Пользовательское соглашение.</li>
+<li><b>Владелец</b> — человек, который зарегистрировал Заведение и управляет им в Jamoa (владелец, директор или уполномоченное им лицо).</li>
+<li><b>Сотрудник</b> — работник Заведения или другое лицо, которому Заведение выдало вход в Jamoa (включая руководителей служб и бухгалтера).</li>
+<li><b>Пользователь</b> — любой человек, который пользуется Jamoa: Владелец или Сотрудник.</li>
+<li><b>Персональные данные</b> — сведения, относящиеся к определённому или определяемому человеку.</li>
+<li><b>Обработка</b> — любые действия с персональными данными: сбор, запись, хранение, изменение, использование, передача, обезличивание, удаление.</li>
+<li><b>Собственник и оператор базы персональных данных</b> — понятия Закона № ЗРУ-547: собственник владеет базой и определяет цели обработки, оператор обрабатывает данные.</li>
+<li><b>Обезличенные данные</b> — данные, по которым нельзя установить, к какому человеку они относятся.</li>
+<li><b>Биометрические данные</b> — отпечатки пальцев, изображение лица для распознавания, рисунок радужки, голос для распознавания и другие данные о физиологических особенностях человека, по которым устанавливают его личность.</li>
+</ul>
+<h2 id="pru-3">3. Кто отвечает за данные: распределение ролей</h2>
+<p><b>3.1. Данные Сотрудников.</b> Заведение (работодатель) — собственник и оператор базы персональных данных своих Сотрудников. Именно Заведение решает, кого пригласить в Jamoa, какие данные о Сотруднике ввести, как составлять график, начислять заработок, штрафы и премии, и отвечает за:</p>
+<ul>
+<li>наличие законного основания обработки и получение согласий Сотрудников (в том числе согласия законного представителя для Сотрудников младше 18 лет);</li>
+<li>уведомление Сотрудников о целях обработки и их правах, ознакомление с этой Политикой;</li>
+<li>достоверность введённых данных;</li>
+<li>решения, принятые с помощью Jamoa (расчёт заработной платы, штрафы, премии, дисциплинарные меры, увольнения), и соблюдение трудового законодательства.</li>
+</ul>
+<p>Оператор обрабатывает данные Сотрудников <b>по поручению и в интересах Заведения</b> на основании Пользовательского соглашения, только для работы Сервиса и в объёме, который определяет Заведение. Оператор не решает, какие данные о Сотруднике вводятся, и не использует их в своих целях, кроме случаев, прямо названных в этой Политике (безопасность, исполнение закона, обезличенная статистика).</p>
+<p><b>3.2. Данные Владельцев.</b> Для данных, которые Владелец сообщает при регистрации и пользовании своим аккаунтом (имя, почта, телефон, сведения о Заведении, обращения в поддержку), оператором является Оператор Jamoa.</p>
+<p><b>3.3. Данные третьих лиц.</b> Если Заведение вносит в Jamoa сведения о других людях (например, клиентах, гостях, кандидатах), Заведение — их собственник и оператор и отвечает за законность их обработки.</p>
+<h2 id="pru-4">4. Какие данные мы обрабатываем</h2>
+<p><b>4.1. Владелец:</b> имя, фамилия, электронная почта, пароль (хранится только в зашифрованном виде — мы его не видим), телефон (если указан), название, тип и структура Заведения, язык, история принятия документов.</p>
+<p><b>4.2. Сотрудник (вводит Заведение или сам Сотрудник):</b> имя, фамилия, пол, должность и служба, логин, номер телефона (если указан), дата рождения (если указана — для поздравлений), дата приёма, фото профиля (если загружено), язык интерфейса.</p>
+<p><b>4.3. Данные о работе:</b> график и смены, отметки прихода и ухода, опоздания, табель, задачи и их выполнение, чек-листы, результаты тестов и допусков, ставки, начисления, штрафы, премии, аванс, заявки (отпуск, отгул, аванс, передача смены и другие), оценки и рейтинг, сообщения и уведомления внутри Заведения.</p>
+<p><b>4.4. Место в момент действия.</b> Когда Пользователь сам нажимает «Пришёл», «Ушёл», отмечает задачу, передаёт смену или отправляет заявку, приложение с разрешения браузера или телефона один раз определяет его координаты и точность и сохраняет их вместе с этим действием. Цель — подтвердить, что действие сделано на месте работы. <b>Jamoa не отслеживает место постоянно и в фоне:</b> между действиями координаты не определяются и не передаются. Можно запретить доступ к месту в настройках телефона; тогда отметка может быть невозможна или будет помечена как сделанная без места — по правилам Заведения.</p>
+<p><b>4.5. Фото.</b> Фото делаются или выбираются только самим Пользователем и только как подтверждение к задаче, отчёту или заявке (например, «убрано», «поломка»). Мы не делаем фото без действия Пользователя и не анализируем изображения для распознавания лиц.</p>
+<p><b>4.6. Контакты телефона.</b> Только если Владелец или руководитель нажмёт «Из контактов» при приглашении сотрудника: системное окно телефона показывает контакты, и в Jamoa передаются <b>только выбранные</b> имя и номер. Остальная адресная книга не читается и не передаётся.</p>
+<p><b>4.7. ИИ-помощники.</b> Тексты вопросов помощнику поддержки и команды личного ИИ-помощника Владельца (текстом или голосом, преобразованным в текст), а также сведения из Jamoa, нужные для ответа (например, список смен Заведения), передаются для обработки поставщику ИИ (см. раздел 7).</p>
+<p><b>4.8. Обращения в поддержку:</b> текст обращения, вложения, контакт для ответа.</p>
+<p><b>4.9. Технические данные:</b> время входа, тип устройства и браузера, язык, IP-адрес в журналах сервера, сведения об ошибках, подписка на уведомления (технический адрес для push-уведомлений), данные, сохранённые на устройстве (localStorage) для работы приложения.</p>
+<p><b>4.10. Чего мы НЕ собираем:</b> биометрические данные (отпечатки пальцев, распознавание лица и голоса, Face ID), генетические данные, паспортные данные и сведения о здоровье как обязательные поля, постоянную геолокацию в фоне, адресную книгу целиком, данные платёжных карт. Заведению запрещено загружать такие данные в Jamoa (см. Пользовательское соглашение).</p>
+<h2 id="pru-5">5. Зачем мы обрабатываем данные (цели)</h2>
+<ol>
+<li>Предоставить Сервис: вход, учёт времени, график, задачи, табель, расчёт заработка по правилам, заданным Заведением, заявки, уведомления, отчёты.</li>
+<li>Подтвердить, что отметка сделана на месте работы (место в момент действия).</li>
+<li>Поддержка Пользователей, ответы ИИ-помощника, исправление ошибок.</li>
+<li>Безопасность: защита аккаунтов, предотвращение злоупотреблений, расследование инцидентов.</li>
+<li>Исполнение требований закона и законных запросов государственных органов.</li>
+<li>Улучшение Сервиса по обезличенной статистике (например, сколько заведений пользуются функцией).</li>
+<li>Сообщения Владельцу о Сервисе (изменения документов, плата, важные изменения).</li>
+</ol>
+<p>Мы <b>не продаём</b> персональные данные, не передаём их для рекламы и не используем данные Сотрудников для рекламы.</p>
+<h2 id="pru-6">6. Основания обработки</h2>
+<ul>
+<li>Согласие субъекта (Сотрудник даёт его на экране согласия в приложении; Владелец — при регистрации). Согласие даётся в электронной форме: нажатие «Принимаю» или отметка галочки записывается в журнал согласий с датой, временем и версией документа и подтверждает факт получения согласия (ст. 21 Закона № ЗРУ-547).</li>
+<li>Договор: Пользовательское соглашение между Оператором и Заведением.</li>
+<li>Исполнение обязанностей, установленных законом (в том числе трудовым — для Заведения).</li>
+</ul>
+<h2 id="pru-7">7. Кому передаются данные</h2>
+<ul>
+<li><b>Заведению</b> и людям в нём — по ролям: Владелец видит данные всех Сотрудников своего Заведения, руководитель — своей службы, Сотрудник — свои данные и то, что Заведение открыло для команды (график, рейтинг и т. п.).</li>
+<li><b>Поставщикам услуг, которые обрабатывают данные по поручению Оператора</b> и только для работы Сервиса:</li>
+<li>хостинг базы данных, файлов и серверных функций — Supabase Inc. (облачные серверы за пределами Узбекистана, регион: <mark class="ph">[РЕГИОН ХОСТИНГА]</mark>); Оператор вправе перенести хранение к другому поставщику или в дата-центр в Узбекистане;</li>
+<li>поставщик ИИ — Anthropic PBC (США): получает тексты вопросов и команд ИИ-помощников и сведения, нужные для ответа; по условиям коммерческого использования Anthropic данные запросов через API не используются для обучения моделей по умолчанию;</li>
+<li>службы push-уведомлений браузера или телефона (Google, Apple, Mozilla) — только технический адрес и текст уведомления;</li>
+<li>хостинг сайта — GitHub Pages (GitHub Inc., США) — только технические журналы посещений.</li>
+<li><b>Государственным органам</b> — только в случаях и порядке, установленных законом.</li>
+<li><b>Правопреемнику</b> при реорганизации Оператора или передаче Сервиса — с сохранением условий этой Политики.</li>
+</ul>
+<p>С поставщиками услуг Оператор работает на условиях, обязывающих их обеспечивать конфиденциальность и защиту данных.</p>
+<h2 id="pru-8">8. Передача и хранение за пределами Узбекистана</h2>
+<p>Данные хранятся и обрабатываются на серверах поставщиков, указанных в разделе 7, в том числе за пределами Республики Узбекистан. Это допускается статьёй 27¹ Закона № ЗРУ-547 (в редакции от 26.03.2026) для данных, не относящихся к биометрическим, генетическим и данным абонентов операторов связи, при соблюдении установленных условий (страна с равноценной защитой персональных данных, типовые договорные условия или международные стандарты). Jamoa не собирает данные, которые закон требует хранить только в Узбекистане. Давая согласие, субъект соглашается и на трансграничную передачу, описанную в этом разделе (ст. 15 Закона № ЗРУ-547).</p>
+<h2 id="pru-9">9. Сколько хранятся данные</h2>
+<ul>
+<li>Пока действует аккаунт Заведения и Сотрудник состоит в нём — для целей раздела 5.</li>
+<li>Увольнение Сотрудника: запись переводится в архив и остаётся у Заведения для табеля и расчётов (это решение и обязанность Заведения как работодателя).</li>
+<li>Закрытие Заведения Владельцем: 30 дней можно восстановить Заведение; после этого данные Заведения удаляются или обезличиваются в течение разумного срока (до 30 дней), кроме данных, которые Оператор обязан хранить по закону.</li>
+<li>Журнал согласий хранится весь срок действия аккаунта и 3 года после его закрытия — как доказательство получения согласия.</li>
+<li>Резервные копии перезаписываются по циклу поставщика хостинга (обычно до 30 дней).</li>
+<li>Обезличенная статистика может храниться бессрочно.</li>
+</ul>
+<h2 id="pru-10">10. Ваши права</h2>
+<p>Вы вправе (ст. 22, 30 Закона № ЗРУ-547):</p>
+<ul>
+<li>знать, обрабатываются ли ваши данные, кем, с какой целью, какие и откуда получены, сколько хранятся, передаются ли за рубеж;</li>
+<li>получить доступ к своим данным;</li>
+<li>потребовать исправить неточные данные;</li>
+<li>отозвать согласие;</li>
+<li>потребовать удалить данные, если цель обработки достигнута, согласие отозвано или обработка незаконна;</li>
+<li>обжаловать действия в уполномоченный орган (Государственный центр персонализации) или в суд.</li>
+</ul>
+<p><b>Как воспользоваться.</b> Сотрудникам: многие данные видны в разделе «Профиль»; изменения и удаление данных Сотрудника выполняет Заведение (работодатель) как собственник базы — обратитесь к нему. Если Заведение не отвечает, напишите нам на <mark class="ph">[EMAIL ДЛЯ ЗАПРОСОВ ПО ДАННЫМ]</mark> — мы передадим запрос Заведению и поможем в пределах своей роли. Владельцам: напишите на <mark class="ph">[EMAIL ДЛЯ ЗАПРОСОВ ПО ДАННЫМ]</mark> или закройте Заведение в настройках.</p>
+<p>Ответ — в сроки, установленные законом (исправление — не позднее 3 дней, отказ в доступе — письменно в течение 10 дней).</p>
+<p><b>Отзыв согласия.</b> Отзыв не влияет на законность обработки до него. Без обработки основных данных (имя, должность, отметки, график) работа в Jamoa невозможна, поэтому после отзыва вход Сотрудника отключается; как дальше вести учёт работы — решает работодатель. Данные, которые нужно хранить по закону, хранятся положенный срок.</p>
+<h2 id="pru-11">11. Защита данных</h2>
+<p>Передача шифруется (HTTPS/TLS); доступ к данным в базе ограничен правилами по ролям (каждый видит только то, что ему положено); пароли хранятся только в виде хэша; фото — в закрытом хранилище; доступ сотрудников Оператора — только при необходимости для поддержки и безопасности. Никакая система не защищена абсолютно; мы принимаем разумные меры, соответствующие характеру данных.</p>
+<p><b>Утечка.</b> Если произойдёт инцидент, затрагивающий персональные данные, Оператор без неоправданной задержки сообщает Заведению и, если этого требует закон, уполномоченному органу (при трансграничной передаче — в течение 24 часов с момента обнаружения, о причинах и мерах — в течение 72 часов) и принимает меры по устранению.</p>
+<h2 id="pru-12">12. Дети</h2>
+<p>Jamoa предназначен для работы. Регистрировать Заведение могут лица старше 18 лет. Сотрудников младше 18 лет Заведение может приглашать только при соблюдении трудового законодательства и с согласия законного представителя на обработку данных — его получает Заведение.</p>
+<h2 id="pru-13">13. Файлы на устройстве (localStorage) и cookies</h2>
+<p>Приложение хранит на устройстве настройки, язык, черновики и копии данных для работы без сети. Рекламных и сторонних отслеживающих cookies нет.</p>
+<h2 id="pru-14">14. Изменения Политики</h2>
+<p>Мы можем обновлять Политику. Новая версия публикуется на этой странице с новой датой; о существенных изменениях сообщаем в приложении. Если изменения касаются согласия, приложение попросит принять новую версию.</p>
+<h2 id="pru-15">15. Контакты</h2>
+<p><mark class="ph">[ОПЕРАТОР: полное наименование]</mark>, ИНН <mark class="ph">[ИНН]</mark>, <mark class="ph">[АДРЕС]</mark>, <mark class="ph">[EMAIL]</mark>, <mark class="ph">[ТЕЛЕФОН]</mark>.</p><section class="emp" id="employee-ru"><h1 class="h1b">Согласие сотрудника на обработку персональных данных в Jamoa</h1>
+<p class="ver">Версия 1.0 · редакция от 01.11.2026 · действует с <mark class="ph">[ДАТА]</mark></p>
+<h2 id="eru-1">Определения</h2>
+<ul>
+<li><b>Работодатель</b> — заведение, в котором вы работаете и которое выдало вам вход в Jamoa. Работодатель — собственник и оператор ваших персональных данных и отвечает за их обработку.</li>
+<li><b>Jamoa</b> — приложение для учёта работы. Оператор платформы — <mark class="ph">[ОПЕРАТОР: полное наименование]</mark>, ИНН <mark class="ph">[ИНН]</mark>, <mark class="ph">[АДРЕС]</mark>, <mark class="ph">[EMAIL]</mark>. Он обрабатывает ваши данные по поручению работодателя.</li>
+<li><b>Политика</b> — Политика конфиденциальности Jamoa: <a href="privacy.html">https://jamoaapp.uz/privacy.html</a></li>
+</ul>
+<h2 id="eru-2">Я согласен(на), что</h2>
+<ol>
+<li><b>Данные.</b> Работодатель и Jamoa обрабатывают мои: имя, фамилию, пол, должность, службу, логин, телефон и дату рождения (если указаны), фото профиля (если загружу), график, отметки прихода и ухода, задачи, результаты тестов, начисления, штрафы, премии, заявки и сообщения в приложении.</li>
+<li><b>Цели.</b> Учёт рабочего времени и смен, задачи, табель, расчёт заработка по правилам работодателя, заявки, уведомления, отчёты, поддержка и безопасность.</li>
+<li><b>Место — только в момент действия.</b> Когда я сам нажимаю «Пришёл», «Ушёл», отмечаю задачу, передаю смену или отправляю заявку, приложение один раз определяет моё место и сохраняет его с этим действием. Постоянного слежения и слежения в фоне нет.</li>
+<li><b>Фото — только к задачам и отчётам.</b> Фото делаю или выбираю я сам как подтверждение работы. Распознавания лица и биометрии нет.</li>
+<li><b>Передача.</b> Данные видят работодатель и руководители по своим правам. Данные хранятся у поставщиков Jamoa, в том числе за пределами Узбекистана (хостинг Supabase, push-уведомления); тексты вопросов помощнику поддержки обрабатывает поставщик ИИ (Anthropic, США). Данные не продаются и не используются для рекламы.</li>
+<li><b>Срок.</b> Пока я работаю и пользуюсь Jamoa, а после увольнения — сколько нужно работодателю по закону; затем данные удаляются или обезличиваются (подробно — в Политике).</li>
+<li><b>Права.</b> Я могу узнать, какие данные обрабатываются, потребовать исправить или удалить их и отозвать согласие — обратившись к работодателю или в Jamoa (<mark class="ph">[EMAIL ДЛЯ ЗАПРОСОВ ПО ДАННЫМ]</mark>). Без согласия работать в приложении нельзя: вход отключается, как вести учёт дальше — решает работодатель. Отзыв не отменяет законность прежней обработки.</li>
+</ol>
+<p>Нажимая «Принимаю», я подтверждаю, что прочитал(а) это согласие и Политику. Отметка записывается в журнал согласий с датой, временем и версией документа и равнозначна моей подписи.</p></section><footer class="foot"><a href="terms.html">Пользовательское соглашение</a><a href="app.html">Открыть Jamoa</a><a href="#top">Наверх</a></footer></article>
+<article class="doc" data-l="uz" lang="uz" hidden><p class="draft">Hujjat loyihasi: operator maʼlumotlari eʼlon qilişdan oldin töldiriladi.</p><h1>Jamoa maxfiylik siyosati</h1>
+<p class="ver">Versiya 1.0 · 01.11.2026 tahriri · <mark class="ph">[ДАТА]</mark> dan amal qiladi</p><nav class="toc" aria-label="Mundarija"><b>Mundarija</b><a href="#puz-1">1. Biz kimmiz</a><a href="#puz-2">2. Atamalar</a><a href="#puz-3">3. Maʼlumotlar uçun kim javob beradi: rollar taqsimoti</a><a href="#puz-4">4. Qanday maʼlumotlarni qayta işlaymiz</a><a href="#puz-5">5. Maʼlumotlarni nima uçun qayta işlaymiz (maqsadlar)</a><a href="#puz-6">6. Qayta işlaş asoslari</a><a href="#puz-7">7. Maʼlumotlar kimga uzatiladi</a><a href="#puz-8">8. Özbekistondan taşqarida uzatiş va saqlaş</a><a href="#puz-9">9. Maʼlumotlar qança saqlanadi</a><a href="#puz-10">10. Sizning huquqlaringiz</a><a href="#puz-11">11. Maʼlumotlarni himoya qiliş</a><a href="#puz-12">12. Bolalar</a><a href="#puz-13">13. Qurilmadagi fayllar (localStorage) va cookies</a><a href="#puz-14">14. Siyosatdagi özgarişlar</a><a href="#puz-15">15. Aloqa</a><a href="#employee-uz">Xodim roziligi</a></nav>
+<p>Uşbu Siyosat Jamoa ilovasi va saytida (<a href="https://jamoaapp.uz">https://jamoaapp.uz</a>) qanday şaxsga doir maʼlumotlar qayta işlanişi, ular uçun kim javob berişi, nima uçun kerakligi, qayerda saqlanişi va sizning huquqlaringizni tuşuntiradi. Siyosat Özbekiston Respublikasining 02.07.2019 yildagi ÖRQ-547-son «Şaxsga doir maʼlumotlar töğrisida»gi Qonuni (26.03.2026 yildagi ÖRQ-1125-son Qonun bilan kiritilgan özgarişlar bilan) va boşqa hujjatlarga muvofiq tuzilgan.</p>
+<h2 id="puz-1">1. Biz kimmiz</h2>
+<p>Jamoa platformasi operatori: <mark class="ph">[ОПЕРАТОР: полное наименование]</mark>, STIR <mark class="ph">[ИНН]</mark>, manzil: <mark class="ph">[АДРЕС]</mark>, elektron poçta: <mark class="ph">[EMAIL]</mark>, telefon: <mark class="ph">[ТЕЛЕФОН]</mark> (keyingi örinlarda — «Operator», «biz»).</p>
+<p>Şaxsga doir maʼlumotlar böyiça savollar: <mark class="ph">[EMAIL ДЛЯ ЗАПРОСОВ ПО ДАННЫМ]</mark>.</p>
+<h2 id="puz-2">2. Atamalar</h2>
+<ul>
+<li><b>Jamoa, Xizmat</b> — muassasa xodimlari işini hisobga oliş uçun ilova (veb-ilova va uning telefon versiyalari) va sayt: keliş va ketişni belgilaş, smenalar, tabel, vazifalar, testlar, iş haqi, jarima va mukofotlar, arizalar, bildirişnomalar, hisobotlar.</li>
+<li><b>Muassasa</b> — öz muassasasini Jamoa’da röyxatdan ötkazgan va Foydalanuvçi kelişuvini qabul qilgan yakka tartibdagi tadbirkor yoki taşkilot (iş beruvçi).</li>
+<li><b>Egasi</b> — Muassasani röyxatdan ötkazgan va uni Jamoa’da boşqaradigan şaxs (egasi, direktor yoki u vakolat bergan şaxs).</li>
+<li><b>Xodim</b> — Muassasa xodimi yoki Muassasa Jamoa’ga kiriş bergan boşqa şaxs (xizmat rahbarlari va buxgalter ham).</li>
+<li><b>Foydalanuvçi</b> — Jamoa’dan foydalanuvçi har qanday şaxs: Egasi yoki Xodim.</li>
+<li><b>Şaxsga doir maʼlumotlar</b> — muayyan yoki aniqlanişi mumkin bölgan şaxsga taalluqli maʼlumotlar.</li>
+<li><b>Qayta işlaş</b> — şaxsga doir maʼlumotlar bilan har qanday harakat: yiğiş, yoziş, saqlaş, özgartiriş, foydalaniş, uzatiş, şaxssizlaştiriş, öçiriş.</li>
+<li><b>Şaxsga doir maʼlumotlar bazasining mulkdori va operatori</b> — ÖRQ-547-son Qonun tuşunçalari: mulkdor bazaga egalik qiladi va qayta işlaş maqsadlarini belgilaydi, operator maʼlumotlarni qayta işlaydi.</li>
+<li><b>Şaxssizlaştirilgan maʼlumotlar</b> — qaysi şaxsga tegişli ekanini aniqlab bölmaydigan maʼlumotlar.</li>
+<li><b>Biometrik maʼlumotlar</b> — barmoq izlari, tanib oliş uçun yuz tasviri, köz qoraçiği naqşi, tanib oliş uçun ovoz va şaxsni aniqlaşga imkon beruvçi boşqa fiziologik xususiyatlar haqidagi maʼlumotlar.</li>
+</ul>
+<h2 id="puz-3">3. Maʼlumotlar uçun kim javob beradi: rollar taqsimoti</h2>
+<p><b>3.1. Xodimlar maʼlumotlari.</b> Muassasa (iş beruvçi) öz Xodimlari şaxsga doir maʼlumotlari bazasining mulkdori va operatoridir. Aynan Muassasa kimni Jamoa’ga taklif qilişni, Xodim haqida qanday maʼlumot kiritişni, jadvalni qanday tuzişni, iş haqi, jarima va mukofotlarni hisoblaşni hal qiladi va quyidagilar uçun javob beradi:</p>
+<ul>
+<li>qayta işlaşning qonuniy asosi va Xodimlarning roziligini oliş (18 yoşga tölmagan Xodimlar uçun — qonuniy vakilining roziligi);</li>
+<li>Xodimlarni qayta işlaş maqsadlari va ularning huquqlari haqida xabardor qiliş, uşbu Siyosat bilan taniştiriş;</li>
+<li>kiritilgan maʼlumotlarning töğriligi;</li>
+<li>Jamoa yordamida qabul qilingan qarorlar (iş haqi hisobi, jarimalar, mukofotlar, intizomiy çoralar, işdan böşatiş) va mehnat qonunçiligiga rioya qiliş.</li>
+</ul>
+<p>Operator Xodimlar maʼlumotlarini <b>Muassasa topşiriği böyiça va uning manfaatlarida</b>, Foydalanuvçi kelişuvi asosida, faqat Xizmat işlaşi uçun va Muassasa belgilagan hajmda qayta işlaydi. Operator Xodim haqida qanday maʼlumot kiritilişini hal qilmaydi va ulardan öz maqsadlarida foydalanmaydi, uşbu Siyosatda töğridan-töğri körsatilgan hollar bundan mustasno (xavfsizlik, qonunni ijro etiş, şaxssizlaştirilgan statistika).</p>
+<p><b>3.2. Egalar maʼlumotlari.</b> Egasi röyxatdan ötişda va akkauntidan foydalanişda bergan maʼlumotlar (ism, poçta, telefon, Muassasa haqidagi maʼlumotlar, qöllab-quvvatlaşga murojaatlar) uçun operator — Jamoa Operatori.</p>
+<p><b>3.3. Uçinçi şaxslar maʼlumotlari.</b> Agar Muassasa Jamoa’ga boşqa şaxslar (masalan, mijozlar, mehmonlar, nomzodlar) haqida maʼlumot kiritsa, ularning mulkdori va operatori Muassasa bölib, ularni qonuniy qayta işlaş uçun javob beradi.</p>
+<h2 id="puz-4">4. Qanday maʼlumotlarni qayta işlaymiz</h2>
+<p><b>4.1. Egasi:</b> ism, familiya, elektron poçta, parol (faqat şifrlangan holda saqlanadi — biz uni körmaymiz), telefon (körsatilgan bölsa), Muassasa nomi, turi va tuzilmasi, til, hujjatlarni qabul qiliş tarixi.</p>
+<p><b>4.2. Xodim (Muassasa yoki Xodimning özi kiritadi):</b> ism, familiya, jins, lavozim va xizmat, login, telefon raqami (körsatilgan bölsa), tuğilgan sana (körsatilgan bölsa — tabriklaş uçun), işga qabul qilingan sana, profil surati (yuklangan bölsa), interfeys tili.</p>
+<p><b>4.3. Iş haqidagi maʼlumotlar:</b> jadval va smenalar, keliş va ketiş belgilari, keçikişlar, tabel, vazifalar va ularning bajarilişi, çek-listlar, test va ruxsatnoma natijalari, stavkalar, hisoblaşlar, jarimalar, mukofotlar, avans, arizalar (taʼtil, javob söraş, avans, smenani topşiriş va boşqalar), baholar va reyting, Muassasa içidagi xabarlar va bildirişnomalar.</p>
+<p><b>4.4. Harakat vaqtidagi joylaşuv.</b> Foydalanuvçi özi «Keldim», «Ketdim» tugmasini bosganda, vazifani belgilaganda, smenani topşirganda yoki ariza yuborganda, ilova brauzer yoki telefon ruxsati bilan uning koordinatalari va aniqligini bir marta aniqlaydi va şu harakat bilan birga saqlaydi. Maqsad — harakat iş joyida bajarilganini tasdiqlaş. <b>Jamoa joylaşuvni doimiy va fon rejimida kuzatmaydi:</b> harakatlar orasida koordinatalar aniqlanmaydi va uzatilmaydi. Telefon sozlamalarida joylaşuvga ruxsatni taqiqlaş mumkin; unda belgilaş imkonsiz bölişi yoki Muassasa qoidalariga köra joylaşuvsiz qilingan deb belgilanişi mumkin.</p>
+<p><b>4.5. Suratlar.</b> Suratlarni faqat Foydalanuvçining özi oladi yoki tanlaydi va faqat vazifa, hisobot yoki arizaga tasdiq sifatida (masalan, «tozalandi», «buziliş»). Biz Foydalanuvçi harakatisiz surat olmaymiz va yuzni tanib oliş uçun tasvirlarni tahlil qilmaymiz.</p>
+<p><b>4.6. Telefon kontaktlari.</b> Faqat Egasi yoki rahbar xodimni taklif qilişda «Kontaktlardan» tugmasini bossa: telefonning tizim oynasi kontaktlarni körsatadi va Jamoa’ga <b>faqat tanlangan</b> ism va raqam uzatiladi. Manzillar kitobining qolgan qismi öqilmaydi va uzatilmaydi.</p>
+<p><b>4.7. Sunʼiy intellekt yordamçilari.</b> Qöllab-quvvatlaş yordamçisiga berilgan savollar matni va Egasining şaxsiy SI yordamçisiga buyruqlar (matn yoki matnga aylantirilgan ovoz), şuningdek javob uçun kerakli Jamoa maʼlumotlari (masalan, Muassasa smenalari röyxati) qayta işlaş uçun SI provayderiga uzatiladi (7-bölimga qarang).</p>
+<p><b>4.8. Qöllab-quvvatlaşga murojaatlar:</b> murojaat matni, ilovalar, javob uçun aloqa.</p>
+<p><b>4.9. Texnik maʼlumotlar:</b> kiriş vaqti, qurilma va brauzer turi, til, server jurnallaridagi IP-manzil, xatolar haqidagi maʼlumotlar, bildirişnomalarga obuna (push-bildirişnomalar uçun texnik manzil), ilova işlaşi uçun qurilmada saqlangan maʼlumotlar (localStorage).</p>
+<p><b>4.10. Biz nimalarni yiğmaymiz:</b> biometrik maʼlumotlar (barmoq izlari, yuz va ovozni tanib oliş, Face ID), genetik maʼlumotlar, majburiy maydon sifatida pasport maʼlumotlari va soğliq haqidagi maʼlumotlar, fon rejimidagi doimiy geolokatsiya, butun manzillar kitobi, tölov kartalari maʼlumotlari. Muassasaga bunday maʼlumotlarni Jamoa’ga yuklaş taqiqlanadi (Foydalanuvçi kelişuviga qarang).</p>
+<h2 id="puz-5">5. Maʼlumotlarni nima uçun qayta işlaymiz (maqsadlar)</h2>
+<ol>
+<li>Xizmatni taqdim etiş: kiriş, vaqt hisobi, jadval, vazifalar, tabel, Muassasa belgilagan qoidalar böyiça iş haqini hisoblaş, arizalar, bildirişnomalar, hisobotlar.</li>
+<li>Belgi iş joyida qilinganini tasdiqlaş (harakat vaqtidagi joylaşuv).</li>
+<li>Foydalanuvçilarni qöllab-quvvatlaş, SI yordamçisi javoblari, xatolarni tuzatiş.</li>
+<li>Xavfsizlik: akkauntlarni himoya qiliş, suiisteʼmolning oldini oliş, hodisalarni tekşiriş.</li>
+<li>Qonun talablari va davlat organlarining qonuniy sörovlarini bajariş.</li>
+<li>Şaxssizlaştirilgan statistika böyiça Xizmatni yaxşilaş (masalan, funksiyadan neçta muassasa foydalanadi).</li>
+<li>Egasiga Xizmat haqida xabarlar (hujjatlar özgarişi, tölov, muhim özgarişlar).</li>
+</ol>
+<p>Biz şaxsga doir maʼlumotlarni <b>sotmaymiz</b>, reklama uçun bermaymiz va Xodimlar maʼlumotlaridan reklama uçun foydalanmaymiz.</p>
+<h2 id="puz-6">6. Qayta işlaş asoslari</h2>
+<ul>
+<li>Subyektning roziligi (Xodim uni ilovadagi rozilik ekranida beradi; Egasi — röyxatdan ötişda). Rozilik elektron şaklda beriladi: «Qabul qilaman» tugmasini bosiş yoki belgini qöyiş sana, vaqt va hujjat versiyasi bilan roziliklar jurnaliga yoziladi va rozilik olinganini tasdiqlaydi (ÖRQ-547-son Qonunning 21-moddasi).</li>
+<li>Şartnoma: Operator va Muassasa örtasidagi Foydalanuvçi kelişuvi.</li>
+<li>Qonunda belgilangan majburiyatlarni bajariş (şu jumladan Muassasa uçun — mehnat qonunçiligi).</li>
+</ul>
+<h2 id="puz-7">7. Maʼlumotlar kimga uzatiladi</h2>
+<ul>
+<li><b>Muassasaga</b> va undagi odamlarga — rollar böyiça: Egasi öz Muassasasining barça Xodimlari maʼlumotlarini köradi, rahbar — öz xizmatiniki, Xodim — öz maʼlumotlarini va Muassasa jamoaga oçgan narsalarni (jadval, reyting va h.k.).</li>
+<li><b>Operator topşiriği böyiça</b> va faqat Xizmat işlaşi uçun maʼlumotlarni qayta işlaydigan <b>xizmat körsatuvçilarga</b>:</li>
+<li>maʼlumotlar bazasi, fayllar va server funksiyalari xostingi — Supabase Inc. (Özbekistondan taşqaridagi bulutli serverlar, mintaqa: <mark class="ph">[РЕГИОН ХОСТИНГА]</mark>); Operator saqlaşni boşqa provayderga yoki Özbekistondagi maʼlumotlar markaziga köçirişga haqli;</li>
+<li>SI provayderi — Anthropic PBC (AQŞ): SI yordamçilariga berilgan savollar va buyruqlar matnini hamda javob uçun kerakli maʼlumotlarni oladi; Anthropic tijorat şartlariga köra API orqali sörovlar maʼlumotlari sukut böyiça modellarni öqitiş uçun işlatilmaydi;</li>
+<li>brauzer yoki telefon push-bildirişnoma xizmatlari (Google, Apple, Mozilla) — faqat texnik manzil va bildirişnoma matni;</li>
+<li>sayt xostingi — GitHub Pages (GitHub Inc., AQŞ) — faqat taşriflarning texnik jurnallari.</li>
+<li><b>Davlat organlariga</b> — faqat qonunda belgilangan hollarda va tartibda.</li>
+<li>Operator qayta taşkil etilganda yoki Xizmat topşirilganda <b>huquqiy vorisga</b> — uşbu Siyosat şartlari saqlangan holda.</li>
+</ul>
+<p>Operator xizmat körsatuvçilar bilan ularni maʼlumotlar maxfiyligi va himoyasini taʼminlaşga majburlovçi şartlarda işlaydi.</p>
+<h2 id="puz-8">8. Özbekistondan taşqarida uzatiş va saqlaş</h2>
+<p>Maʼlumotlar 7-bölimda körsatilgan provayderlar serverlarida, şu jumladan Özbekiston Respublikasidan taşqarida saqlanadi va qayta işlanadi. ÖRQ-547-son Qonunning 27¹-moddasi (26.03.2026 tahriri) biometrik, genetik maʼlumotlar va aloqa operatorlari abonentlari maʼlumotlariga taalluqli bölmagan maʼlumotlar uçun belgilangan şartlarga (şaxsga doir maʼlumotlarni teng darajada himoya qiluvçi davlat, namunaviy şartnoma şartlari yoki xalqaro standartlar) rioya qilingan holda bunga yöl qöyadi. Jamoa qonun faqat Özbekistonda saqlaşni talab qiladigan maʼlumotlarni yiğmaydi. Rozilik berib, subyekt uşbu bölimda tavsiflangan transçegaraviy uzatişga ham rozilik beradi (ÖRQ-547-son Qonunning 15-moddasi).</p>
+<h2 id="puz-9">9. Maʼlumotlar qança saqlanadi</h2>
+<ul>
+<li>Muassasa akkaunti amal qilib, Xodim unda turgan ekan — 5-bölim maqsadlari uçun.</li>
+<li>Xodim işdan böşaganda: yozuv arxivga ötkaziladi va tabel hamda hisob-kitoblar uçun Muassasada qoladi (bu iş beruvçi sifatida Muassasaning qarori va majburiyati).</li>
+<li>Egasi Muassasani yopganda: 30 kun içida Muassasani tiklaş mumkin; şundan keyin Muassasa maʼlumotlari oqilona muddatda (30 kungaça) öçiriladi yoki şaxssizlaştiriladi, Operator qonun böyiça saqlaşi şart bölgan maʼlumotlar bundan mustasno.</li>
+<li>Roziliklar jurnali akkaunt amal qiladigan butun muddat va u yopilgandan keyin 3 yil saqlanadi — rozilik olinganining dalili sifatida.</li>
+<li>Zaxira nusxalar xosting provayderi sikli böyiça qayta yoziladi (odatda 30 kungaça).</li>
+<li>Şaxssizlaştirilgan statistika muddatsiz saqlanişi mumkin.</li>
+</ul>
+<h2 id="puz-10">10. Sizning huquqlaringiz</h2>
+<p>Siz quyidagilarga haqlisiz (ÖRQ-547-son Qonunning 22, 30-moddalari):</p>
+<ul>
+<li>maʼlumotlaringiz qayta işlanayotganini, kim tomonidan, qanday maqsadda, qaysi maʼlumotlar va qayerdan olinganini, qança saqlanişini, çet elga uzatilişini biliş;</li>
+<li>öz maʼlumotlaringizga kiriş;</li>
+<li>notöğri maʼlumotlarni tuzatişni talab qiliş;</li>
+<li>rozilikni qaytarib oliş;</li>
+<li>qayta işlaş maqsadiga erişilgan, rozilik qaytarib olingan yoki qayta işlaş qonunga zid bölsa, maʼlumotlarni öçirişni talab qiliş;</li>
+<li>harakatlar ustidan vakolatli organga (Davlat personallaştiriş markazi) yoki sudga şikoyat qiliş.</li>
+</ul>
+<p><b>Qanday foydalaniş mumkin.</b> Xodimlar uçun: köp maʼlumotlar «Profil» bölimida körinadi; Xodim maʼlumotlarini özgartiriş va öçirişni baza mulkdori sifatida Muassasa (iş beruvçi) bajaradi — unga murojaat qiling. Agar Muassasa javob bermasa, bizga <mark class="ph">[EMAIL ДЛЯ ЗАПРОСОВ ПО ДАННЫМ]</mark> manziliga yozing — biz sörovni Muassasaga yetkazamiz va öz rolimiz doirasida yordam beramiz. Egalar uçun: <mark class="ph">[EMAIL ДЛЯ ЗАПРОСОВ ПО ДАННЫМ]</mark> manziliga yozing yoki sozlamalarda Muassasani yoping.</p>
+<p>Javob — qonunda belgilangan muddatlarda (tuzatiş — 3 kundan keçiktirmay, kirişni rad etiş — 10 kun içida yozma ravişda).</p>
+<p><b>Rozilikni qaytarib oliş.</b> Qaytarib oliş undan oldingi qayta işlaşning qonuniyligiga taʼsir qilmaydi. Asosiy maʼlumotlarni (ism, lavozim, belgilar, jadval) qayta işlamasdan Jamoa’da işlaş mumkin emas, şuning uçun qaytarib olingandan keyin Xodimning kirişi öçiriladi; iş hisobini keyin qanday yuritişni iş beruvçi hal qiladi. Qonun böyiça saqlanişi kerak bölgan maʼlumotlar belgilangan muddat saqlanadi.</p>
+<h2 id="puz-11">11. Maʼlumotlarni himoya qiliş</h2>
+<p>Uzatiş şifrlanadi (HTTPS/TLS); bazadagi maʼlumotlarga kiriş rollar böyiça qoidalar bilan çeklangan (har kim faqat öziga tegişli narsani köradi); parollar faqat xeş körinişida saqlanadi; suratlar — yopiq omborda; Operator xodimlarining kirişi — faqat qöllab-quvvatlaş va xavfsizlik uçun zarur bölganda. Heç bir tizim mutlaq himoyalanmagan; biz maʼlumotlar xususiyatiga mos oqilona çoralarni köramiz.</p>
+<p><b>Sizib çiqiş.</b> Şaxsga doir maʼlumotlarga taalluqli hodisa yuz bersa, Operator asossiz keçiktirmasdan Muassasaga va, agar qonun talab qilsa, vakolatli organga xabar beradi (transçegaraviy uzatişda — aniqlangan paytdan boşlab 24 soat içida, sabablari va çoralar haqida — 72 soat içida) va bartaraf etiş çoralarini köradi.</p>
+<h2 id="puz-12">12. Bolalar</h2>
+<p>Jamoa iş uçun möljallangan. Muassasani 18 yoşdan oşgan şaxslar röyxatdan ötkazişi mumkin. 18 yoşga tölmagan Xodimlarni Muassasa faqat mehnat qonunçiligiga rioya qilgan holda va qonuniy vakilining maʼlumotlarni qayta işlaşga roziligi bilan taklif qilişi mumkin — uni Muassasa oladi.</p>
+<h2 id="puz-13">13. Qurilmadagi fayllar (localStorage) va cookies</h2>
+<p>Ilova qurilmada sozlamalar, til, qoralamalar va tarmoqsiz işlaş uçun maʼlumotlar nusxalarini saqlaydi. Reklama va uçinçi tomon kuzatuv cookies fayllari yöq.</p>
+<h2 id="puz-14">14. Siyosatdagi özgarişlar</h2>
+<p>Biz Siyosatni yangilaşimiz mumkin. Yangi versiya uşbu sahifada yangi sana bilan eʼlon qilinadi; muhim özgarişlar haqida ilovada xabar beramiz. Agar özgarişlar rozilikka taalluqli bölsa, ilova yangi versiyani qabul qilişni söraydi.</p>
+<h2 id="puz-15">15. Aloqa</h2>
+<p><mark class="ph">[ОПЕРАТОР: полное наименование]</mark>, STIR <mark class="ph">[ИНН]</mark>, <mark class="ph">[АДРЕС]</mark>, <mark class="ph">[EMAIL]</mark>, <mark class="ph">[ТЕЛЕФОН]</mark>.</p><section class="emp" id="employee-uz"><h1 class="h1b">Xodimning Jamoa’da şaxsga doir maʼlumotlarini qayta işlaşga roziligi</h1>
+<p class="ver">Versiya 1.0 · 01.11.2026 tahriri · <mark class="ph">[ДАТА]</mark> dan amal qiladi</p>
+<h2 id="euz-1">Atamalar</h2>
+<ul>
+<li><b>Iş beruvçi</b> — siz işlaydigan va sizga Jamoa’ga kiriş bergan muassasa. Iş beruvçi şaxsga doir maʼlumotlaringizning mulkdori va operatori bölib, ularni qayta işlaş uçun javob beradi.</li>
+<li><b>Jamoa</b> — iş hisobini yuritiş ilovasi. Platforma operatori — <mark class="ph">[ОПЕРАТОР: полное наименование]</mark>, STIR <mark class="ph">[ИНН]</mark>, <mark class="ph">[АДРЕС]</mark>, <mark class="ph">[EMAIL]</mark>. U maʼlumotlaringizni iş beruvçi topşiriği böyiça qayta işlaydi.</li>
+<li><b>Siyosat</b> — Jamoa maxfiylik siyosati: <a href="privacy.html">https://jamoaapp.uz/privacy.html</a></li>
+</ul>
+<h2 id="euz-2">Men quyidagilarga roziman</h2>
+<ol>
+<li><b>Maʼlumotlar.</b> Iş beruvçi va Jamoa mening ismim, familiyam, jinsim, lavozimim, xizmatim, loginim, telefonim va tuğilgan sanam (körsatilgan bölsa), profil suratim (yuklasam), jadvalim, keliş va ketiş belgilarim, vazifalarim, test natijalarim, hisoblaşlar, jarimalar, mukofotlar, arizalar va ilovadagi xabarlarimni qayta işlaydi.</li>
+<li><b>Maqsadlar.</b> Iş vaqti va smenalar hisobi, vazifalar, tabel, iş beruvçi qoidalari böyiça iş haqini hisoblaş, arizalar, bildirişnomalar, hisobotlar, qöllab-quvvatlaş va xavfsizlik.</li>
+<li><b>Joylaşuv — faqat harakat vaqtida.</b> Men özim «Keldim», «Ketdim» tugmasini bosganimda, vazifani belgilaganimda, smenani topşirganimda yoki ariza yuborganimda, ilova joylaşuvimni bir marta aniqlaydi va şu harakat bilan saqlaydi. Doimiy va fon rejimida kuzatuv yöq.</li>
+<li><b>Surat — faqat vazifa va hisobotlarga.</b> Suratni iş tasdiği sifatida özim olaman yoki tanlayman. Yuzni tanib oliş va biometriya yöq.</li>
+<li><b>Uzatiş.</b> Maʼlumotlarni iş beruvçi va rahbarlar öz huquqlari doirasida köradi. Maʼlumotlar Jamoa provayderlarida, şu jumladan Özbekistondan taşqarida saqlanadi (Supabase xostingi, push-bildirişnomalar); qöllab-quvvatlaş yordamçisiga savollar matnini SI provayderi (Anthropic, AQŞ) qayta işlaydi. Maʼlumotlar sotilmaydi va reklama uçun işlatilmaydi.</li>
+<li><b>Muddat.</b> Men işlab, Jamoa’dan foydalanar ekanman, işdan böşaganimdan keyin esa — qonun böyiça iş beruvçiga kerak bölgança; keyin maʼlumotlar öçiriladi yoki şaxssizlaştiriladi (batafsil — Siyosatda).</li>
+<li><b>Huquqlar.</b> Men qaysi maʼlumotlar qayta işlanayotganini bilişim, ularni tuzatiş yoki öçirişni talab qilişim va rozilikni qaytarib olişim mumkin — iş beruvçiga yoki Jamoa’ga (<mark class="ph">[EMAIL ДЛЯ ЗАПРОСОВ ПО ДАННЫМ]</mark>) murojaat qilib. Roziliksiz ilovada işlaş mumkin emas: kiriş öçiriladi, hisobni keyin qanday yuritişni iş beruvçi hal qiladi. Qaytarib oliş oldingi qayta işlaşning qonuniyligini bekor qilmaydi.</li>
+</ol>
+<p>«Qabul qilaman» tugmasini bosib, men uşbu rozilik va Siyosatni öqiganimni tasdiqlayman. Belgi sana, vaqt va hujjat versiyasi bilan roziliklar jurnaliga yoziladi va mening imzoimga teng.</p></section><footer class="foot"><a href="terms.html">Foydalanuvçi kelişuvi</a><a href="app.html">Jamoa’ni oçiş</a><a href="#top">Yuqoriga</a></footer></article>
+<article class="doc" data-l="uzc" lang="uz-Cyrl" hidden><p class="draft">Ҳужжат лойиҳаси: оператор маълумотлари эълон қилишдан олдин тўлдирилади.</p><h1>Jamoa махфийлик сиёсати</h1>
+<p class="ver">Версия 1.0 · 01.11.2026 таҳрири · <mark class="ph">[ДАТА]</mark> дан амал қилади</p><nav class="toc" aria-label="Мундарижа"><b>Мундарижа</b><a href="#puzc-1">1. Биз киммиз</a><a href="#puzc-2">2. Атамалар</a><a href="#puzc-3">3. Маълумотлар учун ким жавоб беради: роллар тақсимоти</a><a href="#puzc-4">4. Қандай маълумотларни қайта ишлаймиз</a><a href="#puzc-5">5. Маълумотларни нима учун қайта ишлаймиз (мақсадлар)</a><a href="#puzc-6">6. Қайта ишлаш асослари</a><a href="#puzc-7">7. Маълумотлар кимга узатилади</a><a href="#puzc-8">8. Ўзбекистондан ташқарида узатиш ва сақлаш</a><a href="#puzc-9">9. Маълумотлар қанча сақланади</a><a href="#puzc-10">10. Сизнинг ҳуқуқларингиз</a><a href="#puzc-11">11. Маълумотларни ҳимоя қилиш</a><a href="#puzc-12">12. Болалар</a><a href="#puzc-13">13. Қурилмадаги файллар (localStorage) ва cookies</a><a href="#puzc-14">14. Сиёсатдаги ўзгаришлар</a><a href="#puzc-15">15. Алоқа</a><a href="#employee-uzc">Ходим розилиги</a></nav>
+<p>Ушбу Сиёсат Jamoa иловаси ва сайтида (<a href="https://jamoaapp.uz">https://jamoaapp.uz</a>) қандай шахсга доир маълумотлар қайта ишланиши, улар учун ким жавоб бериши, нима учун кераклиги, қаерда сақланиши ва сизнинг ҳуқуқларингизни тушунтиради. Сиёсат Ўзбекистон Республикасининг 02.07.2019 йилдаги ЎРҚ-547-сон «Шахсга доир маълумотлар тўғрисида»ги Қонуни (26.03.2026 йилдаги ЎРҚ-1125-сон Қонун билан киритилган ўзгаришлар билан) ва бошқа ҳужжатларга мувофиқ тузилган.</p>
+<h2 id="puzc-1">1. Биз киммиз</h2>
+<p>Jamoa платформаси оператори: <mark class="ph">[ОПЕРАТОР: полное наименование]</mark>, СТИР <mark class="ph">[ИНН]</mark>, манзил: <mark class="ph">[АДРЕС]</mark>, электрон почта: <mark class="ph">[EMAIL]</mark>, телефон: <mark class="ph">[ТЕЛЕФОН]</mark> (кейинги ўринларда — «Оператор», «биз»).</p>
+<p>Шахсга доир маълумотлар бўйича саволлар: <mark class="ph">[EMAIL ДЛЯ ЗАПРОСОВ ПО ДАННЫМ]</mark>.</p>
+<h2 id="puzc-2">2. Атамалар</h2>
+<ul>
+<li><b>Jamoa, Хизмат</b> — муассаса ходимлари ишини ҳисобга олиш учун илова (веб-илова ва унинг телефон версиялари) ва сайт: келиш ва кетишни белгилаш, сменалар, табель, вазифалар, тестлар, иш ҳақи, жарима ва мукофотлар, аризалар, билдиришномалар, ҳисоботлар.</li>
+<li><b>Муассаса</b> — ўз муассасасини Jamoa’да рўйхатдан ўтказган ва Фойдаланувчи келишувини қабул қилган якка тартибдаги тадбиркор ёки ташкилот (иш берувчи).</li>
+<li><b>Эгаси</b> — Муассасани рўйхатдан ўтказган ва уни Jamoa’да бошқарадиган шахс (эгаси, директор ёки у ваколат берган шахс).</li>
+<li><b>Ходим</b> — Муассаса ходими ёки Муассаса Jamoa’га кириш берган бошқа шахс (хизмат раҳбарлари ва бухгалтер ҳам).</li>
+<li><b>Фойдаланувчи</b> — Jamoa’дан фойдаланувчи ҳар қандай шахс: Эгаси ёки Ходим.</li>
+<li><b>Шахсга доир маълумотлар</b> — муайян ёки аниқланиши мумкин бўлган шахсга тааллуқли маълумотлар.</li>
+<li><b>Қайта ишлаш</b> — шахсга доир маълумотлар билан ҳар қандай ҳаракат: йиғиш, ёзиш, сақлаш, ўзгартириш, фойдаланиш, узатиш, шахссизлаштириш, ўчириш.</li>
+<li><b>Шахсга доир маълумотлар базасининг мулкдори ва оператори</b> — ЎРҚ-547-сон Қонун тушунчалари: мулкдор базага эгалик қилади ва қайта ишлаш мақсадларини белгилайди, оператор маълумотларни қайта ишлайди.</li>
+<li><b>Шахссизлаштирилган маълумотлар</b> — қайси шахсга тегишли эканини аниқлаб бўлмайдиган маълумотлар.</li>
+<li><b>Биометрик маълумотлар</b> — бармоқ излари, таниб олиш учун юз тасвири, кўз қорачиғи нақши, таниб олиш учун овоз ва шахсни аниқлашга имкон берувчи бошқа физиологик хусусиятлар ҳақидаги маълумотлар.</li>
+</ul>
+<h2 id="puzc-3">3. Маълумотлар учун ким жавоб беради: роллар тақсимоти</h2>
+<p><b>3.1. Ходимлар маълумотлари.</b> Муассаса (иш берувчи) ўз Ходимлари шахсга доир маълумотлари базасининг мулкдори ва операторидир. Айнан Муассаса кимни Jamoa’га таклиф қилишни, Ходим ҳақида қандай маълумот киритишни, жадвални қандай тузишни, иш ҳақи, жарима ва мукофотларни ҳисоблашни ҳал қилади ва қуйидагилар учун жавоб беради:</p>
+<ul>
+<li>қайта ишлашнинг қонуний асоси ва Ходимларнинг розилигини олиш (18 ёшга тўлмаган Ходимлар учун — қонуний вакилининг розилиги);</li>
+<li>Ходимларни қайта ишлаш мақсадлари ва уларнинг ҳуқуқлари ҳақида хабардор қилиш, ушбу Сиёсат билан таништириш;</li>
+<li>киритилган маълумотларнинг тўғрилиги;</li>
+<li>Jamoa ёрдамида қабул қилинган қарорлар (иш ҳақи ҳисоби, жарималар, мукофотлар, интизомий чоралар, ишдан бўшатиш) ва меҳнат қонунчилигига риоя қилиш.</li>
+</ul>
+<p>Оператор Ходимлар маълумотларини <b>Муассаса топшириғи бўйича ва унинг манфаатларида</b>, Фойдаланувчи келишуви асосида, фақат Хизмат ишлаши учун ва Муассаса белгилаган ҳажмда қайта ишлайди. Оператор Ходим ҳақида қандай маълумот киритилишини ҳал қилмайди ва улардан ўз мақсадларида фойдаланмайди, ушбу Сиёсатда тўғридан-тўғри кўрсатилган ҳоллар бундан мустасно (хавфсизлик, қонунни ижро этиш, шахссизлаштирилган статистика).</p>
+<p><b>3.2. Эгалар маълумотлари.</b> Эгаси рўйхатдан ўтишда ва аккаунтидан фойдаланишда берган маълумотлар (исм, почта, телефон, Муассаса ҳақидаги маълумотлар, қўллаб-қувватлашга мурожаатлар) учун оператор — Jamoa Оператори.</p>
+<p><b>3.3. Учинчи шахслар маълумотлари.</b> Агар Муассаса Jamoa’га бошқа шахслар (масалан, мижозлар, меҳмонлар, номзодлар) ҳақида маълумот киритса, уларнинг мулкдори ва оператори Муассаса бўлиб, уларни қонуний қайта ишлаш учун жавоб беради.</p>
+<h2 id="puzc-4">4. Қандай маълумотларни қайта ишлаймиз</h2>
+<p><b>4.1. Эгаси:</b> исм, фамилия, электрон почта, пароль (фақат шифрланган ҳолда сақланади — биз уни кўрмаймиз), телефон (кўрсатилган бўлса), Муассаса номи, тури ва тузилмаси, тил, ҳужжатларни қабул қилиш тарихи.</p>
+<p><b>4.2. Ходим (Муассаса ёки Ходимнинг ўзи киритади):</b> исм, фамилия, жинс, лавозим ва хизмат, логин, телефон рақами (кўрсатилган бўлса), туғилган сана (кўрсатилган бўлса — табриклаш учун), ишга қабул қилинган сана, профиль сурати (юкланган бўлса), интерфейс тили.</p>
+<p><b>4.3. Иш ҳақидаги маълумотлар:</b> жадвал ва сменалар, келиш ва кетиш белгилари, кечикишлар, табель, вазифалар ва уларнинг бажарилиши, чек-листлар, тест ва рухсатнома натижалари, ставкалар, ҳисоблашлар, жарималар, мукофотлар, аванс, аризалар (таътил, жавоб сўраш, аванс, сменани топшириш ва бошқалар), баҳолар ва рейтинг, Муассаса ичидаги хабарлар ва билдиришномалар.</p>
+<p><b>4.4. Ҳаракат вақтидаги жойлашув.</b> Фойдаланувчи ўзи «Келдим», «Кетдим» тугмасини босганда, вазифани белгилаганда, сменани топширганда ёки ариза юборганда, илова браузер ёки телефон рухсати билан унинг координаталари ва аниқлигини бир марта аниқлайди ва шу ҳаракат билан бирга сақлайди. Мақсад — ҳаракат иш жойида бажарилганини тасдиқлаш. <b>Jamoa жойлашувни доимий ва фон режимида кузатмайди:</b> ҳаракатлар орасида координаталар аниқланмайди ва узатилмайди. Телефон созламаларида жойлашувга рухсатни тақиқлаш мумкин; унда белгилаш имконсиз бўлиши ёки Муассаса қоидаларига кўра жойлашувсиз қилинган деб белгиланиши мумкин.</p>
+<p><b>4.5. Суратлар.</b> Суратларни фақат Фойдаланувчининг ўзи олади ёки танлайди ва фақат вазифа, ҳисобот ёки аризага тасдиқ сифатида (масалан, «тозаланди», «бузилиш»). Биз Фойдаланувчи ҳаракатисиз сурат олмаймиз ва юзни таниб олиш учун тасвирларни таҳлил қилмаймиз.</p>
+<p><b>4.6. Телефон контактлари.</b> Фақат Эгаси ёки раҳбар ходимни таклиф қилишда «Контактлардан» тугмасини босса: телефоннинг тизим ойнаси контактларни кўрсатади ва Jamoa’га <b>фақат танланган</b> исм ва рақам узатилади. Манзиллар китобининг қолган қисми ўқилмайди ва узатилмайди.</p>
+<p><b>4.7. Сунъий интеллект ёрдамчилари.</b> Қўллаб-қувватлаш ёрдамчисига берилган саволлар матни ва Эгасининг шахсий СИ ёрдамчисига буйруқлар (матн ёки матнга айлантирилган овоз), шунингдек жавоб учун керакли Jamoa маълумотлари (масалан, Муассаса сменалари рўйхати) қайта ишлаш учун СИ провайдерига узатилади (7-бўлимга қаранг).</p>
+<p><b>4.8. Қўллаб-қувватлашга мурожаатлар:</b> мурожаат матни, иловалар, жавоб учун алоқа.</p>
+<p><b>4.9. Техник маълумотлар:</b> кириш вақти, қурилма ва браузер тури, тил, сервер журналларидаги IP-манзил, хатолар ҳақидаги маълумотлар, билдиришномаларга обуна (push-билдиришномалар учун техник манзил), илова ишлаши учун қурилмада сақланган маълумотлар (localStorage).</p>
+<p><b>4.10. Биз нималарни йиғмаймиз:</b> биометрик маълумотлар (бармоқ излари, юз ва овозни таниб олиш, Face ID), генетик маълумотлар, мажбурий майдон сифатида паспорт маълумотлари ва соғлиқ ҳақидаги маълумотлар, фон режимидаги доимий геолокация, бутун манзиллар китоби, тўлов карталари маълумотлари. Муассасага бундай маълумотларни Jamoa’га юклаш тақиқланади (Фойдаланувчи келишувига қаранг).</p>
+<h2 id="puzc-5">5. Маълумотларни нима учун қайта ишлаймиз (мақсадлар)</h2>
+<ol>
+<li>Хизматни тақдим этиш: кириш, вақт ҳисоби, жадвал, вазифалар, табель, Муассаса белгилаган қоидалар бўйича иш ҳақини ҳисоблаш, аризалар, билдиришномалар, ҳисоботлар.</li>
+<li>Белги иш жойида қилинганини тасдиқлаш (ҳаракат вақтидаги жойлашув).</li>
+<li>Фойдаланувчиларни қўллаб-қувватлаш, СИ ёрдамчиси жавоблари, хатоларни тузатиш.</li>
+<li>Хавфсизлик: аккаунтларни ҳимоя қилиш, суиистеъмолнинг олдини олиш, ҳодисаларни текшириш.</li>
+<li>Қонун талаблари ва давлат органларининг қонуний сўровларини бажариш.</li>
+<li>Шахссизлаштирилган статистика бўйича Хизматни яхшилаш (масалан, функциядан нечта муассаса фойдаланади).</li>
+<li>Эгасига Хизмат ҳақида хабарлар (ҳужжатлар ўзгариши, тўлов, муҳим ўзгаришлар).</li>
+</ol>
+<p>Биз шахсга доир маълумотларни <b>сотмаймиз</b>, реклама учун бермаймиз ва Ходимлар маълумотларидан реклама учун фойдаланмаймиз.</p>
+<h2 id="puzc-6">6. Қайта ишлаш асослари</h2>
+<ul>
+<li>Субектнинг розилиги (Ходим уни иловадаги розилик экранида беради; Эгаси — рўйхатдан ўтишда). Розилик электрон шаклда берилади: «Қабул қиламан» тугмасини босиш ёки белгини қўйиш сана, вақт ва ҳужжат версияси билан розиликлар журналига ёзилади ва розилик олинганини тасдиқлайди (ЎРҚ-547-сон Қонуннинг 21-моддаси).</li>
+<li>Шартнома: Оператор ва Муассаса ўртасидаги Фойдаланувчи келишуви.</li>
+<li>Қонунда белгиланган мажбуриятларни бажариш (шу жумладан Муассаса учун — меҳнат қонунчилиги).</li>
+</ul>
+<h2 id="puzc-7">7. Маълумотлар кимга узатилади</h2>
+<ul>
+<li><b>Муассасага</b> ва ундаги одамларга — роллар бўйича: Эгаси ўз Муассасасининг барча Ходимлари маълумотларини кўради, раҳбар — ўз хизматиники, Ходим — ўз маълумотларини ва Муассаса жамоага очган нарсаларни (жадвал, рейтинг ва h.k.).</li>
+<li><b>Оператор топшириғи бўйича</b> ва фақат Хизмат ишлаши учун маълумотларни қайта ишлайдиган <b>хизмат кўрсатувчиларга</b>:</li>
+<li>маълумотлар базаси, файллар ва сервер функциялари хостинги — Supabase Inc. (Ўзбекистондан ташқаридаги булутли серверлар, минтақа: <mark class="ph">[РЕГИОН ХОСТИНГА]</mark>); Оператор сақлашни бошқа провайдерга ёки Ўзбекистондаги маълумотлар марказига кўчиришга ҳақли;</li>
+<li>СИ провайдери — Anthropic PBC (АҚШ): СИ ёрдамчиларига берилган саволлар ва буйруқлар матнини ҳамда жавоб учун керакли маълумотларни олади; Anthropic тижорат шартларига кўра API орқали сўровлар маълумотлари сукут бўйича моделларни ўқитиш учун ишлатилмайди;</li>
+<li>браузер ёки телефон push-билдиришнома хизматлари (Google, Apple, Mozilla) — фақат техник манзил ва билдиришнома матни;</li>
+<li>сайт хостинги — GitHub Pages (GitHub Inc., АҚШ) — фақат ташрифларнинг техник журналлари.</li>
+<li><b>Давлат органларига</b> — фақат қонунда белгиланган ҳолларда ва тартибда.</li>
+<li>Оператор қайта ташкил этилганда ёки Хизмат топширилганда <b>ҳуқуқий ворисга</b> — ушбу Сиёсат шартлари сақланган ҳолда.</li>
+</ul>
+<p>Оператор хизмат кўрсатувчилар билан уларни маълумотлар махфийлиги ва ҳимоясини таъминлашга мажбурловчи шартларда ишлайди.</p>
+<h2 id="puzc-8">8. Ўзбекистондан ташқарида узатиш ва сақлаш</h2>
+<p>Маълумотлар 7-бўлимда кўрсатилган провайдерлар серверларида, шу жумладан Ўзбекистон Республикасидан ташқарида сақланади ва қайта ишланади. ЎРҚ-547-сон Қонуннинг 27¹-моддаси (26.03.2026 таҳрири) биометрик, генетик маълумотлар ва алоқа операторлари абонентлари маълумотларига тааллуқли бўлмаган маълумотлар учун белгиланган шартларга (шахсга доир маълумотларни тенг даражада ҳимоя қилувчи давлат, намунавий шартнома шартлари ёки халқаро стандартлар) риоя қилинган ҳолда бунга йўл қўяди. Jamoa қонун фақат Ўзбекистонда сақлашни талаб қиладиган маълумотларни йиғмайди. Розилик бериб, субъект ушбу бўлимда тавсифланган трансчегаравий узатишга ҳам розилик беради (ЎРҚ-547-сон Қонуннинг 15-моддаси).</p>
+<h2 id="puzc-9">9. Маълумотлар қанча сақланади</h2>
+<ul>
+<li>Муассаса аккаунти амал қилиб, Ходим унда турган экан — 5-бўлим мақсадлари учун.</li>
+<li>Ходим ишдан бўшаганда: ёзув архивга ўтказилади ва табель ҳамда ҳисоб-китоблар учун Муассасада қолади (бу иш берувчи сифатида Муассасанинг қарори ва мажбурияти).</li>
+<li>Эгаси Муассасани ёпганда: 30 кун ичида Муассасани тиклаш мумкин; шундан кейин Муассаса маълумотлари оқилона муддатда (30 кунгача) ўчирилади ёки шахссизлаштирилади, Оператор қонун бўйича сақлаши шарт бўлган маълумотлар бундан мустасно.</li>
+<li>Розиликлар журнали аккаунт амал қиладиган бутун муддат ва у ёпилгандан кейин 3 йил сақланади — розилик олинганининг далили сифатида.</li>
+<li>Захира нусхалар хостинг провайдери сикли бўйича қайта ёзилади (одатда 30 кунгача).</li>
+<li>Шахссизлаштирилган статистика муддатсиз сақланиши мумкин.</li>
+</ul>
+<h2 id="puzc-10">10. Сизнинг ҳуқуқларингиз</h2>
+<p>Сиз қуйидагиларга ҳақлисиз (ЎРҚ-547-сон Қонуннинг 22, 30-моддалари):</p>
+<ul>
+<li>маълумотларингиз қайта ишланаётганини, ким томонидан, қандай мақсадда, қайси маълумотлар ва қаердан олинганини, қанча сақланишини, чет элга узатилишини билиш;</li>
+<li>ўз маълумотларингизга кириш;</li>
+<li>нотўғри маълумотларни тузатишни талаб қилиш;</li>
+<li>розиликни қайтариб олиш;</li>
+<li>қайта ишлаш мақсадига эришилган, розилик қайтариб олинган ёки қайта ишлаш қонунга зид бўлса, маълумотларни ўчиришни талаб қилиш;</li>
+<li>ҳаракатлар устидан ваколатли органга (Давлат персоналлаштириш маркази) ёки судга шикоят қилиш.</li>
+</ul>
+<p><b>Қандай фойдаланиш мумкин.</b> Ходимлар учун: кўп маълумотлар «Профиль» бўлимида кўринади; Ходим маълумотларини ўзгартириш ва ўчиришни база мулкдори сифатида Муассаса (иш берувчи) бажаради — унга мурожаат қилинг. Агар Муассаса жавоб бермаса, бизга <mark class="ph">[EMAIL ДЛЯ ЗАПРОСОВ ПО ДАННЫМ]</mark> манзилига ёзинг — биз сўровни Муассасага етказамиз ва ўз ролимиз доирасида ёрдам берамиз. Эгалар учун: <mark class="ph">[EMAIL ДЛЯ ЗАПРОСОВ ПО ДАННЫМ]</mark> манзилига ёзинг ёки созламаларда Муассасани ёпинг.</p>
+<p>Жавоб — қонунда белгиланган муддатларда (тузатиш — 3 кундан кечиктирмай, киришни рад этиш — 10 кун ичида ёзма равишда).</p>
+<p><b>Розиликни қайтариб олиш.</b> Қайтариб олиш ундан олдинги қайта ишлашнинг қонунийлигига таъсир қилмайди. Асосий маълумотларни (исм, лавозим, белгилар, жадвал) қайта ишламасдан Jamoa’да ишлаш мумкин эмас, шунинг учун қайтариб олингандан кейин Ходимнинг кириши ўчирилади; иш ҳисобини кейин қандай юритишни иш берувчи ҳал қилади. Қонун бўйича сақланиши керак бўлган маълумотлар белгиланган муддат сақланади.</p>
+<h2 id="puzc-11">11. Маълумотларни ҳимоя қилиш</h2>
+<p>Узатиш шифрланади (HTTPS/TLS); базадаги маълумотларга кириш роллар бўйича қоидалар билан чекланган (ҳар ким фақат ўзига тегишли нарсани кўради); пароллар фақат хеш кўринишида сақланади; суратлар — ёпиқ омборда; Оператор ходимларининг кириши — фақат қўллаб-қувватлаш ва хавфсизлик учун зарур бўлганда. Ҳеч бир тизим мутлақ ҳимояланмаган; биз маълумотлар хусусиятига мос оқилона чораларни кўрамиз.</p>
+<p><b>Сизиб чиқиш.</b> Шахсга доир маълумотларга тааллуқли ҳодиса юз берса, Оператор асоссиз кечиктирмасдан Муассасага ва, агар қонун талаб қилса, ваколатли органга хабар беради (трансчегаравий узатишда — аниқланган пайтдан бошлаб 24 соат ичида, сабаблари ва чоралар ҳақида — 72 соат ичида) ва бартараф этиш чораларини кўради.</p>
+<h2 id="puzc-12">12. Болалар</h2>
+<p>Jamoa иш учун мўлжалланган. Муассасани 18 ёшдан ошган шахслар рўйхатдан ўтказиши мумкин. 18 ёшга тўлмаган Ходимларни Муассаса фақат меҳнат қонунчилигига риоя қилган ҳолда ва қонуний вакилининг маълумотларни қайта ишлашга розилиги билан таклиф қилиши мумкин — уни Муассаса олади.</p>
+<h2 id="puzc-13">13. Қурилмадаги файллар (localStorage) ва cookies</h2>
+<p>Илова қурилмада созламалар, тил, қораламалар ва тармоқсиз ишлаш учун маълумотлар нусхаларини сақлайди. Реклама ва учинчи томон кузатув cookies файллари йўқ.</p>
+<h2 id="puzc-14">14. Сиёсатдаги ўзгаришлар</h2>
+<p>Биз Сиёсатни янгилашимиз мумкин. Янги версия ушбу саҳифада янги сана билан эълон қилинади; муҳим ўзгаришлар ҳақида иловада хабар берамиз. Агар ўзгаришлар розиликка тааллуқли бўлса, илова янги версияни қабул қилишни сўрайди.</p>
+<h2 id="puzc-15">15. Алоқа</h2>
+<p><mark class="ph">[ОПЕРАТОР: полное наименование]</mark>, СТИР <mark class="ph">[ИНН]</mark>, <mark class="ph">[АДРЕС]</mark>, <mark class="ph">[EMAIL]</mark>, <mark class="ph">[ТЕЛЕФОН]</mark>.</p><section class="emp" id="employee-uzc"><h1 class="h1b">Ходимнинг Jamoa’да шахсга доир маълумотларини қайта ишлашга розилиги</h1>
+<p class="ver">Версия 1.0 · 01.11.2026 таҳрири · <mark class="ph">[ДАТА]</mark> дан амал қилади</p>
+<h2 id="euzc-1">Атамалар</h2>
+<ul>
+<li><b>Иш берувчи</b> — сиз ишлайдиган ва сизга Jamoa’га кириш берган муассаса. Иш берувчи шахсга доир маълумотларингизнинг мулкдори ва оператори бўлиб, уларни қайта ишлаш учун жавоб беради.</li>
+<li><b>Jamoa</b> — иш ҳисобини юритиш иловаси. Платформа оператори — <mark class="ph">[ОПЕРАТОР: полное наименование]</mark>, СТИР <mark class="ph">[ИНН]</mark>, <mark class="ph">[АДРЕС]</mark>, <mark class="ph">[EMAIL]</mark>. У маълумотларингизни иш берувчи топшириғи бўйича қайта ишлайди.</li>
+<li><b>Сиёсат</b> — Jamoa махфийлик сиёсати: <a href="privacy.html">https://jamoaapp.uz/privacy.html</a></li>
+</ul>
+<h2 id="euzc-2">Мен қуйидагиларга розиман</h2>
+<ol>
+<li><b>Маълумотлар.</b> Иш берувчи ва Jamoa менинг исмим, фамилиям, жинсим, лавозимим, хизматим, логиним, телефоним ва туғилган санам (кўрсатилган бўлса), профиль суратим (юкласам), жадвалим, келиш ва кетиш белгиларим, вазифаларим, тест натижаларим, ҳисоблашлар, жарималар, мукофотлар, аризалар ва иловадаги хабарларимни қайта ишлайди.</li>
+<li><b>Мақсадлар.</b> Иш вақти ва сменалар ҳисоби, вазифалар, табель, иш берувчи қоидалари бўйича иш ҳақини ҳисоблаш, аризалар, билдиришномалар, ҳисоботлар, қўллаб-қувватлаш ва хавфсизлик.</li>
+<li><b>Жойлашув — фақат ҳаракат вақтида.</b> Мен ўзим «Келдим», «Кетдим» тугмасини босганимда, вазифани белгилаганимда, сменани топширганимда ёки ариза юборганимда, илова жойлашувимни бир марта аниқлайди ва шу ҳаракат билан сақлайди. Доимий ва фон режимида кузатув йўқ.</li>
+<li><b>Сурат — фақат вазифа ва ҳисоботларга.</b> Суратни иш тасдиғи сифатида ўзим оламан ёки танлайман. Юзни таниб олиш ва биометрия йўқ.</li>
+<li><b>Узатиш.</b> Маълумотларни иш берувчи ва раҳбарлар ўз ҳуқуқлари доирасида кўради. Маълумотлар Jamoa провайдерларида, шу жумладан Ўзбекистондан ташқарида сақланади (Supabase хостинги, push-билдиришномалар); қўллаб-қувватлаш ёрдамчисига саволлар матнини СИ провайдери (Anthropic, АҚШ) қайта ишлайди. Маълумотлар сотилмайди ва реклама учун ишлатилмайди.</li>
+<li><b>Муддат.</b> Мен ишлаб, Jamoa’дан фойдаланар эканман, ишдан бўшаганимдан кейин эса — қонун бўйича иш берувчига керак бўлганча; кейин маълумотлар ўчирилади ёки шахссизлаштирилади (батафсил — Сиёсатда).</li>
+<li><b>Ҳуқуқлар.</b> Мен қайси маълумотлар қайта ишланаётганини билишим, уларни тузатиш ёки ўчиришни талаб қилишим ва розиликни қайтариб олишим мумкин — иш берувчига ёки Jamoa’га (<mark class="ph">[EMAIL ДЛЯ ЗАПРОСОВ ПО ДАННЫМ]</mark>) мурожаат қилиб. Розиликсиз иловада ишлаш мумкин эмас: кириш ўчирилади, ҳисобни кейин қандай юритишни иш берувчи ҳал қилади. Қайтариб олиш олдинги қайта ишлашнинг қонунийлигини бекор қилмайди.</li>
+</ol>
+<p>«Қабул қиламан» тугмасини босиб, мен ушбу розилик ва Сиёсатни ўқиганимни тасдиқлайман. Белги сана, вақт ва ҳужжат версияси билан розиликлар журналига ёзилади ва менинг имзоимга тенг.</p></section><footer class="foot"><a href="terms.html">Фойдаланувчи келишуви</a><a href="app.html">Jamoa’ни очиш</a><a href="#top">Юқорига</a></footer></article>
+</main>
+<script>
+(function(){
+  var T={ru:"Политика конфиденциальности · Jamoa",uz:"Maxfiylik siyosati · Jamoa",uzc:"Махфийлик сиёсати · Jamoa"};
+  function set(l,save){
+    if(!T[l])l='ru';
+    [].forEach.call(document.querySelectorAll('article.doc'),function(a){a.hidden=a.getAttribute('data-l')!==l;});
+    [].forEach.call(document.querySelectorAll('.sw button'),function(b){var on=b.getAttribute('data-l')===l;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on?'true':'false');});
+    document.documentElement.lang=l==='uzc'?'uz-Cyrl':l;document.title=T[l];
+    if(save){try{localStorage.setItem('mlx-lang',l==='ru'?'ru':'uz');localStorage.setItem('mlx-script',l==='uzc'?'cyr':'lat');}catch(e){}}
+  }
+  var l='ru',m=/[?&]lang=(ru|uzc|uz)(?![a-z])/.exec(location.search);
+  if(m)l=m[1];else{try{var s=localStorage.getItem('mlx-lang');if(s==='uz')l=localStorage.getItem('mlx-script')==='cyr'?'uzc':'uz';}catch(e){}}
+  set(l,false);
+  [].forEach.call(document.querySelectorAll('.sw button'),function(b){b.onclick=function(){set(b.getAttribute('data-l'),true);};});
+  /* #employee → якорь на языке страницы */
+  if(/^#employee/.test(location.hash)){var e=document.getElementById('employee-'+l);if(e)setTimeout(function(){e.scrollIntoView({behavior:'instant',block:'start'});},0);}
+})();
+</script>
+</body></html>

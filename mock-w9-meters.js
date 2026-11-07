@@ -24,7 +24,7 @@
     ['m9', 9, 'Электричество · чиллер', 'Крыша, техплощадка', 'el', false, 0, 612470]
   ];
   var KS = { el: 'electric', water: 'water_cold', gas: 'gas' }, UT = { el: 'Электросеть', water: 'Сувоканал', gas: 'Худудгаз' };
-  var NUZ = { m1: 'Elektr · kirish', m2: 'Suv · kirish', m4: 'Gaz · qozonxona', m5: 'Suv · issiq suv qozoni', m6: 'Suv · kir yuvish', m7: 'Elektr · kir yuvish', m8: 'Elektr · oshxona', m3: 'Gaz · kirish', m9: 'Elektr · chiller' };
+  var NUZ = { m1: 'Elektr · kiriş', m2: 'Suv · kiriş', m4: 'Gaz · qozonxona', m5: 'Suv · issiq suv qozoni', m6: 'Suv · kir yuviş', m7: 'Elektr · kir yuviş', m8: 'Elektr · oşxona', m3: 'Gaz · kiriş', m9: 'Elektr · çiller' };
   DB.meter_points = PTS.map(function (p) { return { id: p[0], sort: p[1], name: p[2], name_uz: NUZ[p[0]], place: p[3], kind: KS[p[4]], unit: p[4] === 'el' ? 'кВт·ч' : 'м³', factor: 1, warn_pct: 30, utility: p[5] ? UT[p[4]] : null, active: true, serial: 'MLX-' + p[0].toUpperCase() + '-' + (4100 + p[1] * 37), created_at: '2026-09-01T09:00:00+05:00' }; });
   var fd = {}; (DB.fid_days || []).forEach(function (x) { fd[x.d] = x; });
   function occ(d) { var x = fd[d]; return x && x.rooms ? x.sold / ((x.rooms || 88) - (x.ooo || 0)) : 0.62; }

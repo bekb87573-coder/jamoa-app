@@ -289,7 +289,7 @@ async function sxOrg() {
       '<label class="sx-lbl">ИНН' + sxIn('oInn', P('org_inn', ''), ' inputmode="numeric" placeholder="9 цифр"') + '</label>' +
       '<label class="sx-lbl">Часовой пояс' + sxSel('oTz', [['Asia/Tashkent', 'Ташкент, UTC+5'], ['Asia/Samarkand', 'Самарканд, UTC+5'], ['Asia/Almaty', 'Алматы, UTC+5']], P('org_tz', 'Asia/Tashkent')) + '</label>' +
       '<label class="sx-lbl">Деньги показывать в' + sxSel('oCur', [['uzs', 'сумах'], ['usd', 'долларах'], ['both', 'сумах и долларах']], P('org_cur', 'uzs')) + '</label>' +
-      '<label class="sx-lbl">Язык приложения по умолчанию' + sxSel('oLang', [['user', 'Сотрудник выбирает сам'], ['ru', 'Русский'], ['uz', 'Oʻzbekcha']], P('org_lang', 'user')) + '</label>' +
+      '<label class="sx-lbl">Язык приложения по умолчанию' + sxSel('oLang', [['user', 'Сотрудник выбирает сам'], ['ru', 'Русский'], ['uz', 'Özbekça']], P('org_lang', 'user')) + '</label>' +
       '<label class="sx-lbl">Неделя начинается с' + sxSel('oWk', [['1', 'понедельника'], ['7', 'воскресенья']], P('org_week', '1')) + '</label>' +
       '<label class="sx-lbl">Формат даты' + sxSel('oDf', [['dmy', '23.10.2026'], ['dm', '23 окт']], P('org_datef', 'dmy')) + '</label>' +
       '</div></div>' +

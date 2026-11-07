@@ -67,7 +67,27 @@ var BRAND = ['Mir Luxe One', 'Mir Luxe Plaza', 'Mir Luxe', 'MirLuxe', 'Wi-Fi', '
 var BRAND_RX = new RegExp('(?<![A-Za-z])(' + BRAND.map(function (b) { return b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|') + ')(?![A-Za-z])', 'g');
 var PROT_RX = /(?:https?:\/\/|www\.)[^\s«»"]+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+|@[\w.]+|#[\w=&.-]+|\b[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)+(?:#[\w=&.-]*)?/g;
 /* заглавные коды, которые по-кириллице тоже пишут кириллицей */
-var CAPS_CY = { IKPU: 'ИКПУ', MXIK: 'МХИК', STIR: 'СТИР', JSHSHIR: 'ЖШШИР', SOʻM: 'СЎМ', XDP: 'ХДП' };
+var CAPS_CY = { IKPU: 'ИКПУ', MXIK: 'МХИК', STIR: 'СТИР', JSHSHIR: 'ЖШШИР', SOʻM: 'СЎМ', XDP: 'ХДП', AQSH: 'АҚШ' };
+
+/* ---------- 3а. Новый алфавит (закон от 21.10.2026, решение владельца 01.11): Ö Ğ Ş Ç ----------
+   Латиница в приложении теперь пишется по-новому (ö ğ ş ç), а данные, введённые людьми, бывают по-старому (oʻ gʻ sh ch).
+   Движок работает на старой форме: новые буквы сначала переводятся в старые (Ö→Oʻ, Ğ→Gʻ, Ş→Sh/SH, Ç→Ch/CH), дальше — таблица:
+   Ö→Ў, Ğ→Ғ, Ş→Ш, Ç→Ч. Словари WORD/STEM/VOCAB — в старой форме, поэтому подходят обе. */
+var NEWL = /[ÖöĞğŞşÇç]/;
+function isUpL(c) { return !!c && c !== c.toLowerCase() && c === c.toUpperCase(); }
+function toOld(s) {
+  s = String(s);
+  if (!NEWL.test(s)) return s;
+  return s.replace(/[ÖöĞğŞşÇç]/g, function (c, i, all) {
+    switch (c) {
+      case 'ö': return 'oʻ'; case 'ğ': return 'gʻ'; case 'ş': return 'sh'; case 'ç': return 'ch';
+      case 'Ö': return 'Oʻ'; case 'Ğ': return 'Gʻ';
+      default:  /* Ş Ç: в слове заглавными (ŞAHAR, AQŞ) — SH/CH, иначе Sh/Ch */
+        var allCaps = isUpL(all.charAt(i + 1)) || (isUpL(all.charAt(i - 1)) && !/[a-zöğşç]/.test(all.charAt(i + 1) || ''));
+        return (c === 'Ş' ? 'S' : 'C') + (allCaps ? 'H' : 'h');
+    }
+  });
+}
 
 /* ---------- 4. Слово ---------- */
 function up(ch) { return ch.toUpperCase(); }
@@ -100,6 +120,7 @@ function rule(w, start) {
 var WCACHE = {};
 function word(w, start) {
   if (start == null) start = true;
+  w = toOld(w);
   var key = (start ? '1' : '0') + w;
   if (WCACHE[key] != null) return WCACHE[key];
   var lw = norm(w), out = null;
@@ -123,7 +144,9 @@ function word(w, start) {
 var VOCAB = Object.create(null), VN = 0;
 function addVocab(list) {
   (list || []).forEach(function (s) {
-    if (typeof s !== 'string' || !/[A-Za-z]/.test(s)) return;
+    if (typeof s !== 'string') return;
+    s = toOld(s);
+    if (!/[A-Za-z]/.test(s)) return;
     s.replace(BRAND_RX, ' ').replace(PROT_RX, ' ').replace(/[A-Za-z](?:[A-Za-z]|[ʻʼ‘’'`](?=[A-Za-z]))*[ʻ‘]?/g, function (t) {
       if (t.length > 1 && t === t.toUpperCase()) return t;
       var k = norm(t); if (!VOCAB[k]) { VOCAB[k] = 1; VN++; } return t;
@@ -132,21 +155,22 @@ function addVocab(list) {
 }
 /* английские и служебные слова, которые попали в узбекский перевод, — не признак узбекского текста */
 var NOT_UZ = { in: 1, guest: 1, amenities: 1, revenue: 1, dirty: 1, double: 1, single: 1, suite: 1, early: 1, late: 1, no: 1, up: 1, upsell: 1, pick: 1, by: 1, to: 1, for: 1, at: 1, is: 1, it: 1, do: 1, not: 1, disturb: 1, make: 1, please: 1, minibar: 0, of: 1, the: 1, and: 1, out: 1, service: 1, order: 1, room: 1, only: 1, bed: 1, breakfast: 1, night: 1, check: 1, online: 1, offline: 1, push: 1, ok: 1, bot: 1, app: 1, html: 1, staff: 1, guest: 1, house: 1, plaza: 1, luxe: 1, mir: 1, one: 1, group: 1, travel: 1, global: 1, tour: 1, events: 1, event: 1, expo: 1, team: 1, airlines: 1, international: 1, invest: 1, energy: 1, corporation: 1, university: 1, school: 1, medical: 1, mail: 1, oil: 1, booking: 1, wi: 1, fi: 1 };
-function uzTok(t) { var k = norm(t); if (NOT_UZ[k]) return false; if (/[ʻʼ]/.test(t) || /[oOgG][‘'`]/.test(t)) return true; return !!VOCAB[k]; }
+function uzTok(t) { t = toOld(t); var k = norm(t); if (NOT_UZ[k]) return false; if (/[ʻʼ]/.test(t) || /[oOgG][‘'`]/.test(t)) return true; return !!VOCAB[k]; }
 /* oʻ/gʻ — первой альтернативой, иначе «yogʻ», «sariyogʻ» (знак в конце слова) теряли ʻ */
 var TOK = /[A-Za-z](?:[oOgG][ʻ‘'`]|[A-Za-z]|[ʻʼ‘’'`](?=[A-Za-z]))*/g;
 /* mode: 'all' — вся латиница (готовый перевод), 'auto' — только если строка похожа на узбекскую, 'strict' — только знакомые слова (строка с русским) */
 function text(s, mode) {
   if (s == null) return s;
-  s = String(s);
-  if (!/[A-Za-z]/.test(s)) return s;
+  var s0 = String(s);
+  s = toOld(s0);
+  if (!/[A-Za-z]/.test(s)) return s0;
   mode = mode || 'all';
   var keep = [], z = s.replace(BRAND_RX, function (m) { keep.push(m); return '\u0001' + (keep.length - 1) + '\u0002'; })
     .replace(PROT_RX, function (m) { keep.push(m); return '\u0001' + (keep.length - 1) + '\u0002'; });
   if (mode === 'auto') {
-    if (s.trim().length < 2) return s;                                                     /* одна буква (буквы логотипа, «A», «x») */
-    var any = false; z.replace(TOK, function (t) { if (!any && uzTok(t)) any = true; return t; });
-    if (!any) return s;
+    if (s0.trim().length < 2 && !NEWL.test(s0)) return s0;                                 /* одна буква (буквы логотипа, «A», «x»); Ş Ç (дни недели) — переводим */
+    var any = NEWL.test(s0); z.replace(TOK, function (t) { if (!any && uzTok(t)) any = true; return t; });
+    if (!any) return s0;
   }
   var out = z.replace(TOK, function (t, off, all) {
     var pc = all.charAt(off - 1), nc = all.charAt(off + t.length);
@@ -172,7 +196,7 @@ function text(s, mode) {
 var FIX = Object.create(null), LFIX = Object.create(null);
 
 window.MLX_CYR = {
-  word: word, text: text, addVocab: addVocab, uzTok: uzTok,
+  word: word, text: text, addVocab: addVocab, uzTok: uzTok, toOld: toOld,
   vocabSize: function () { return VN; },
   FIX: FIX, LFIX: LFIX, WORD: WORD, STEM: STEM,
   init: function (UZ) {
@@ -185,6 +209,7 @@ window.MLX_CYR = {
     if (s == null) return s;
     var t = String(s), core = t.trim();
     if (LFIX[core] != null) return t.replace(core, LFIX[core]);
+    if (LFIX[toOld(core)] != null) return t.replace(core, LFIX[toOld(core)]);
     return text(t, 'all');
   }
 };
