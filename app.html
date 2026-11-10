@@ -79,6 +79,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-perms.js"></script>
 <script src="uz-w4-polish.js"></script>
 <script src="uz-w4-praise.js"></script>
+<script src="uz-w4-pwreset.js"></script>
 <script src="uz-w4-requests.js"></script>
 <script src="uz-w4-sched31.js"></script>
 <script src="uz-w4-server.js"></script>
@@ -52572,6 +52573,260 @@ function dab_fold(s) {
   var d0 = dai_norm;
   dai_norm = function (s) { return d0(dab_fold(s)); };
 })();
+
+
+/* ===== ВОЛНА 4 · 92zp2-pwreset.js ===== */
+/* ===== 92zp2 «Восстановление пароля по почте» (префикс dpw_). Журнал — w4/log/dpw.md. Узбекский — w4/uz/pwreset.js =====
+   Для тех, кто входит по НАСТОЯЩЕЙ почте: владельцы и основатель. У сотрудников логин вида name.x@staff.jamoa.uz без почты —
+   им по-прежнему «попросите директора сбросить».
+   1) Экран входа: ссылка «Забыли пароль?» → лист «Почта» → «Отправить ссылку».
+      Режим сервера (sv_on): SV.real.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname }).
+      Ответ всегда нейтральный (не раскрываем, есть ли такой аккаунт). Повтор — не раньше чем через 60 с. В демо — тост.
+   2) Возврат по ссылке: клиент Supabase — flowType 'implicit' (по умолчанию в supabase-js 2.45.4, своих настроек нет) →
+      адрес #access_token=…&refresh_token=…&type=recovery. Хэш читается ЗДЕСЬ, синхронно при загрузке фрагмента —
+      раньше, чем supabase-js разберёт и сотрёт его, и раньше afterAuth (тот чистит хэш). Пока идёт восстановление:
+      afterAuth, «Создайте заведение» (SV.ui.noVenue) и «Сервер не ответил» (SV.ui.blocked) придержаны (обёртки ставятся
+      после всех фрагментов). Экран «Новый пароль» — слой поверх приложения. Успех → SV.real.auth.updateUser({ password }) →
+      адрес восстанавливается (у основателя — #as=jamoa.founder, запомнен при отправке) → перезагрузка → тост «Пароль изменён».
+      Ссылка устарела (#error_code=otp_expired… или сессия не появилась) → понятный текст и «Отправить ссылку ещё раз».
+   Порядок имён: после 90-server и 92zl-legal (оба дорисовывают экран входа), до 92zr-onboard (тот только меняет надпись #svSu). */
+var DPW = { rec: null, st: null, err: '', busy: false, tm: null, held: false };
+var DPW_K = { last: 'dpw-last', back: 'dpw-back', rec: 'dpw-rec', done: 'dpw-done' };
+function dpw_t(s) { try { return trUi(s); } catch (e) { return s; } }
+function dpw_e(s) { return h(dpw_t(s)); }
+function dpw_ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
+function dpw_ss(k, v) { try { if (v === undefined) return sessionStorage.getItem(k); if (v === null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, v); } catch (e) { return null; } }
+function dpw_real() { try { return window.JAMOA_SV && window.JAMOA_SV.real; } catch (e) { return null; } }
+function dpw_srv() { return typeof sv_on === 'function' && sv_on() && !!dpw_real(); }
+function dpw_staffDom() { var d = 'staff.jamoa.uz'; try { d = (window.JAMOA_SERVER && window.JAMOA_SERVER.staffDomain) || d; } catch (e) {} return d.toLowerCase(); }
+
+/* ---------- 0. возврат по ссылке: читаем адрес сразу, пока его не стёрли ---------- */
+(function () {
+  if (!(window.JAMOA_DEMO === false)) return;
+  var hs = String(location.hash || '').replace(/^#/, ''), P = {};
+  hs.split('&').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) { try { P[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' ')); } catch (e) {} } });
+  if (P.type === 'recovery' && P.access_token) { DPW.rec = 'ok'; dpw_ss(DPW_K.rec, String(Date.now())); }
+  else if ((P.error_code || P.error_description) && (P.error_code === 'otp_expired' || /recovery|expired|invalid/i.test(P.error_description || '') || dpw_ls(DPW_K.last))) {
+    DPW.rec = 'bad'; DPW.err = P.error_code || P.error || '';
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  } else {
+    /* перезагрузили страницу на экране «Новый пароль» (вход по ссылке уже сохранён) — показываем его снова, не дольше часа */
+    var t = +(dpw_ss(DPW_K.rec) || 0);
+    if (t && Date.now() - t < 3600000) DPW.rec = 'ok'; else if (t) dpw_ss(DPW_K.rec, null);
+  }
+  if (DPW.rec) {
+    DPW.st = DPW.rec === 'ok' ? 'wait' : 'bad';
+    var put = function () { dpw_gate(); };
+    if (document.body) put(); else document.addEventListener('DOMContentLoaded', put);
+  }
+})();
+
+/* ---------- стили (только существующие цвета и шрифты) ---------- */
+function dpw_css() {
+  if (document.getElementById('dpwCss')) return;
+  var st = document.createElement('style'); st.id = 'dpwCss';
+  st.textContent = '.dpw-lnk{align-self:flex-end;margin:-8px 0 -6px;min-height:40px;padding:0 2px;border:0;background:none;color:var(--goldink);font:600 14px/1.3 var(--sans);cursor:pointer;text-decoration:underline;text-underline-offset:3px;text-decoration-color:color-mix(in srgb,var(--gold) 45%,transparent)}' +
+    'html[data-theme=dark] .dpw-lnk,html.dark .dpw-lnk{color:var(--gold)}' +
+    '.dpw-g{position:fixed;inset:0;z-index:2147483100;overflow:auto;background:var(--bg)}' +
+    '.dpw-g .login{max-width:420px}' +
+    '.dpw-k{font-size:12px;font-weight:700;letter-spacing:.18em;color:var(--gold);text-transform:uppercase}' +
+    '.dpw-h{font-size:22px;font-weight:700;line-height:1.2}' +
+    '.dpw-s{font-size:14px;line-height:1.45;color:var(--muted)}' +
+    '.dpw-ok{display:flex;flex-direction:column;gap:6px;padding:14px 16px;border-radius:14px;background:var(--goldbg);color:var(--ink);font-size:14px;line-height:1.5}' +
+    '.dpw-ok b{color:var(--goldink)}' +
+    '.dpw-f{display:flex;flex-direction:column;gap:12px;margin-top:12px}';
+  document.head.appendChild(st);
+}
+
+/* ---------- 1. экран входа: ссылка «Забыли пароль?» ---------- */
+(function () {
+  var rl0 = renderLogin;
+  renderLogin = function () {
+    var r = rl0.apply(this, arguments);
+    try {
+      dpw_css();
+      var f = $('lf'), pw = $('pw'), lab = pw && pw.closest('label');
+      if (f && lab && !$('dpwLnk')) {
+        lab.insertAdjacentHTML('afterend', '<button type="button" class="dpw-lnk" id="dpwLnk">' + dpw_e('Забыли пароль?') + '</button>');
+      }
+      if ($('dpwLnk')) $('dpwLnk').onclick = function () { dpw_sheet(($('lg') && $('lg').value) || ''); };
+    } catch (e) { console.warn('[dpw]', e); }
+    return r;
+  };
+})();
+
+function dpw_left() { var t = +(dpw_ls(DPW_K.last) || 0); return Math.max(0, Math.ceil((t + 60000 - Date.now()) / 1000)); }
+function dpw_isStaff(v) {
+  v = String(v || '').trim().toLowerCase();
+  if (!v) return false;
+  if (v.indexOf('@') < 1) return true;   /* логин без почты — сотрудник */
+  var dom = v.split('@').pop();
+  return dom === dpw_staffDom() || /^staff\./.test(dom);
+}
+function dpw_sheet(pre) {
+  pre = String(pre || '').trim();
+  var em = pre.indexOf('@') > 0 && !dpw_isStaff(pre) ? pre.toLowerCase() : '';
+  sheet(sheetHead(dpw_e('Восстановление пароля'), dpw_e('Для владельцев, которые входят по почте. Пришлём письмо со ссылкой — по ней вы зададите новый пароль.')) +
+    '<form id="dpwF" class="dpw-f" novalidate>' +
+    '<label class="f">' + dpw_e('Почта') + '<input class="in" id="dpwEm" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="120" value="' + h(em) + '"></label>' +
+    '<div id="dpwE" class="note t-bad" style="display:none"></div>' +
+    '<div id="dpwOk" class="dpw-ok" role="status" style="display:none"></div>' +
+    '<button class="btn gold full" id="dpwGo" type="submit">' + dpw_e('Отправить ссылку') + '</button>' +
+    '<div class="lg-hint">' + dpw_e('Вы сотрудник и входите по логину? Пароль сбрасывает директор — попросите его.') + '</div>' +
+    '</form>');
+  if (pre && !em && dpw_isStaff(pre)) dpw_msg('e', 'Сотрудникам пароль сбрасывает директор');
+  dpw_tick();
+  $('dpwF').onsubmit = function (ev) { ev.preventDefault(); dpw_send(); };
+  if (!em) setTimeout(function () { try { $('dpwEm').focus(); } catch (e) {} }, 60);
+}
+function dpw_msg(kind, text) {
+  var e = $('dpwE'), o = $('dpwOk'); if (!e || !o) return;
+  e.style.display = 'none'; o.style.display = 'none';
+  if (kind === 'e') { e.textContent = dpw_t(text); e.style.display = 'block'; }
+  if (kind === 'ok') { o.innerHTML = '<b>' + dpw_e('Письмо отправлено') + '</b><span>' + dpw_e('Если такая почта есть, мы отправили ссылку. Проверьте почту и папку «Спам».') + '</span>'; o.style.display = 'flex'; }
+}
+/* защита от повторного нажатия: 60 с, счётчик на кнопке */
+function dpw_tick() {
+  clearTimeout(DPW.tm);
+  var b = $('dpwGo'); if (!b) return;
+  var n = dpw_left();
+  if (n > 0) { b.disabled = true; b.textContent = dpw_t('Отправить ещё раз через {n} с').replace('{n}', n); DPW.tm = setTimeout(dpw_tick, 1000); }
+  else if (!DPW.busy) { b.disabled = false; b.textContent = dpw_t(dpw_ls(DPW_K.last) ? 'Отправить ещё раз' : 'Отправить ссылку'); }
+}
+async function dpw_send() {
+  var inp = $('dpwEm'); if (!inp || DPW.busy) return;
+  var v = inp.value.trim().toLowerCase();
+  if (!v) return dpw_msg('e', 'Введите почту');
+  if (dpw_isStaff(v)) return dpw_msg('e', 'Сотрудникам пароль сбрасывает директор');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) return dpw_msg('e', 'Проверьте почту — в ней должна быть «@» и домен, например name@mail.uz');
+  if (dpw_left() > 0) return dpw_tick();
+  if (!dpw_srv()) { toast(dpw_t('В демо восстановление не работает'), 3500); return; }
+  DPW.busy = true; dpw_msg(); var b = $('dpwGo'); if (b) { b.disabled = true; b.textContent = dpw_t('Отправляем…'); }
+  /* у основателя после смены пароля вернуть кабинет: хэш затрётся токеном — запоминаем (письмо часто открывают в новой вкладке, поэтому localStorage) */
+  var fnd = /(^|[#&])as=jamoa\.founder(&|$)/.test(location.hash || '') || (typeof FP_ON !== 'undefined' && FP_ON);
+  dpw_ls(DPW_K.back, fnd ? JSON.stringify({ h: 'as=jamoa.founder', t: Date.now() }) : null);
+  var r = null, ex = null;
+  try { r = await dpw_real().auth.resetPasswordForEmail(v, { redirectTo: location.origin + location.pathname }); } catch (e) { ex = e; }
+  DPW.busy = false;
+  var e2 = ex || (r && r.error);
+  if (e2 && /Failed to fetch|NetworkError|network|load failed/i.test(String(e2.message || e2))) { dpw_msg('e', 'Нет интернета или сервер недоступен'); dpw_tick(); return; }
+  if (e2) try { console.warn('[dpw] reset', e2.message || e2); } catch (x) {}
+  dpw_ls(DPW_K.last, String(Date.now()));
+  dpw_msg('ok'); dpw_tick();
+}
+
+/* ---------- 2. экран «Новый пароль» (слой поверх приложения) ---------- */
+function dpw_head(t, sub) { return '<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start"><div class="dpw-k">Jamoa</div><div class="dpw-h">' + dpw_e(t) + '</div>' + (sub ? '<div class="dpw-s">' + dpw_e(sub) + '</div>' : '') + '</div>'; }
+function dpw_gate() {
+  dpw_css();
+  var g = document.getElementById('dpwGate');
+  if (!g) { g = document.createElement('div'); g.id = 'dpwGate'; g.className = 'dpw-g'; document.body.appendChild(g); }
+  if (DPW.st === 'wait') {
+    g.innerHTML = '<div class="login">' + dpw_head('Новый пароль', 'Проверяем ссылку из письма…') + '</div>';
+    dpw_waitSession();
+  } else if (DPW.st === 'form') {
+    g.innerHTML = '<form class="login" id="dpwNf" novalidate>' + dpw_head('Новый пароль', 'Придумайте новый пароль для входа — не меньше 8 символов. Никому его не сообщайте.') +
+      '<input type="email" autocomplete="username" id="dpwUn" style="display:none" value="' + h(DPW.email || '') + '">' +
+      '<label class="f">' + dpw_e('Новый пароль') + '<input class="in" id="dpwP1" type="password" autocomplete="new-password" minlength="8" maxlength="72" required></label>' +
+      '<label class="f">' + dpw_e('Повторите пароль') + '<input class="in" id="dpwP2" type="password" autocomplete="new-password" minlength="8" maxlength="72" required></label>' +
+      '<div id="dpwNe" class="note t-bad" style="display:none"></div>' +
+      '<button class="btn gold full" id="dpwSave" type="submit">' + dpw_e('Сохранить пароль') + '</button>' +
+      '<button class="btn ghost full" id="dpwCancel" type="button">' + dpw_e('Отмена') + '</button></form>';
+    $('dpwNf').onsubmit = function (ev) { ev.preventDefault(); dpw_save(); };
+    $('dpwCancel').onclick = dpw_cancel;
+    setTimeout(function () { try { $('dpwP1').focus(); } catch (e) {} }, 60);
+  } else {
+    var exp = DPW.err === 'otp_expired' || !DPW.err;
+    g.innerHTML = '<div class="login">' + dpw_head('Ссылка не сработала', exp ? 'Ссылка устарела или уже использована. Ссылка из письма действует один раз и недолго — отправьте новую.' : 'Не получилось открыть ссылку. Отправьте новую и откройте её с этого же телефона.') +
+      '<button class="btn gold full" id="dpwAgain" type="button">' + dpw_e('Отправить ссылку ещё раз') + '</button>' +
+      '<button class="btn ghost full" id="dpwToLogin" type="button">' + dpw_e('Ко входу') + '</button></div>';
+    $('dpwAgain').onclick = function () { dpw_off(); try { if (!S.session) render(); } catch (e) {} setTimeout(function () { dpw_sheet(''); }, 30); };
+    $('dpwToLogin').onclick = function () { dpw_off(); try { render(); } catch (e) {} };
+  }
+}
+function dpw_off() {
+  DPW.rec = null; DPW.st = null; dpw_ss(DPW_K.rec, null);
+  var g = document.getElementById('dpwGate'); if (g) g.remove();
+  dpw_release();
+}
+/* ждём, пока supabase-js разберёт ссылку и сохранит вход (событие PASSWORD_RECOVERY / SIGNED_IN или сессия в хранилище) */
+function dpw_waitSession() {
+  if (DPW.waiting) return; DPW.waiting = true;
+  var R = dpw_real(), t0 = Date.now(), done = false;
+  function ok(s) { if (done || DPW.st !== 'wait') return; done = true; DPW.waiting = false; DPW.email = (s && s.user && s.user.email) || ''; DPW.st = 'form'; dpw_gate(); }
+  function bad() { if (done || DPW.st !== 'wait') return; done = true; DPW.waiting = false; DPW.st = 'bad'; DPW.err = ''; dpw_ss(DPW_K.rec, null); dpw_gate(); }
+  if (!R) { setTimeout(function () { DPW.waiting = false; if (dpw_real()) dpw_waitSession(); else bad(); }, 400); return; }
+  try { R.auth.onAuthStateChange(function (ev, s) { if (s && (ev === 'PASSWORD_RECOVERY' || ev === 'SIGNED_IN' || ev === 'INITIAL_SESSION')) ok(s); }); } catch (e) {}
+  (function poll() {
+    if (done) return;
+    Promise.resolve().then(function () { return R.auth.getSession(); }).then(function (x) {
+      var s = x && x.data && x.data.session;
+      if (s) return ok(s);
+      if (Date.now() - t0 > 15000) return bad();
+      setTimeout(poll, 400);
+    }, function () { if (Date.now() - t0 > 15000) bad(); else setTimeout(poll, 600); });
+  })();
+}
+function dpw_ne(t) { var e = $('dpwNe'); if (!e) return; e.textContent = t ? dpw_t(t) : ''; e.style.display = t ? 'block' : 'none'; }
+async function dpw_save() {
+  if (DPW.busy) return;
+  var a = $('dpwP1').value, b = $('dpwP2').value;
+  if (a.length < 8) return dpw_ne('Минимум 8 символов');
+  if (a !== b) return dpw_ne('Пароли не совпадают');
+  dpw_ne(); DPW.busy = true; var btn = $('dpwSave'); btn.disabled = true; btn.textContent = dpw_t('Сохраняем…');
+  var r = null, ex = null;
+  try { r = await dpw_real().auth.updateUser({ password: a }); } catch (e) { ex = e; }
+  DPW.busy = false;
+  var e2 = ex || (r && r.error);
+  if (e2) {
+    var m = String(e2.message || e2), c = String(e2.code || '');
+    btn.disabled = false; btn.textContent = dpw_t('Сохранить пароль');
+    if (/same_password|should be different/i.test(c + ' ' + m)) return dpw_ne('Новый пароль должен отличаться от старого');
+    if (/weak_password|weak|at least/i.test(c + ' ' + m)) return dpw_ne('Пароль слишком простой — добавьте буквы и цифры');
+    if (/session|jwt|expired|not authenticated|missing|401|403/i.test(c + ' ' + m)) { DPW.st = 'bad'; DPW.err = ''; dpw_ss(DPW_K.rec, null); return dpw_gate(); }
+    if (/Failed to fetch|NetworkError|network/i.test(m)) return dpw_ne('Нет интернета или сервер недоступен');
+    return dpw_ne(err(e2));
+  }
+  try { if (S.me) S.me.must_change_password = false; } catch (e) {}
+  toast(dpw_t('Пароль изменён'), 3000);
+  dpw_ss(DPW_K.rec, null); dpw_ss(DPW_K.done, '1'); dpw_ls(DPW_K.last, null);
+  /* вернуть адрес: у основателя — кабинет (#as=jamoa.founder), у остальных — чистый адрес; дальше обычный вход (сессия уже есть) */
+  var back = ''; try { var o = JSON.parse(dpw_ls(DPW_K.back) || 'null'); if (o && o.h && Date.now() - (o.t || 0) < 86400000) back = o.h; } catch (e) {}
+  dpw_ls(DPW_K.back, null);
+  setTimeout(function () { try { history.replaceState(null, '', location.pathname + location.search + (back ? '#' + back : '')); } catch (e) {} location.reload(); }, 900);
+}
+async function dpw_cancel() {
+  /* вход по ссылке уже открыт — без нового пароля выходим, чтобы на телефоне не остался вход без пароля */
+  dpw_ss(DPW_K.rec, null);
+  try { await dpw_real().auth.signOut(); } catch (e) {}
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  location.reload();
+}
+/* после перезагрузки — тост об успехе */
+(function () {
+  if (dpw_ss(DPW_K.done) !== '1') return;
+  dpw_ss(DPW_K.done, null);
+  setTimeout(function () { try { toast(dpw_t('Пароль изменён'), 3500); } catch (e) {} }, 2600);
+})();
+
+/* ---------- придержать обычный вход, пока открыт экран восстановления (после всех фрагментов, чтобы быть внешней обёрткой) ---------- */
+function dpw_release() {
+  if (!DPW.held) return; DPW.held = false;
+  if (DPW.pendAuth) { DPW.pendAuth = false; try { afterAuth(); } catch (e) { console.warn('[dpw]', e); } }
+}
+Promise.resolve().then(function () {
+  if (!DPW.rec) return;
+  DPW.held = true;
+  var aa0 = afterAuth;
+  afterAuth = async function () { if (DPW.held && DPW.rec) { DPW.pendAuth = true; return; } return aa0.apply(this, arguments); };
+  var SV = window.JAMOA_SV;
+  if (SV && SV.ui) {
+    var nv0 = SV.ui.noVenue, bl0 = SV.ui.blocked;
+    SV.ui.noVenue = function () { if (DPW.held && DPW.rec) return Promise.resolve(false); return nv0 ? nv0.apply(this, arguments) : Promise.resolve(false); };
+    SV.ui.blocked = function () { if (DPW.held && DPW.rec) return; return bl0 ? bl0.apply(this, arguments) : undefined; };
+  }
+});
+if (/[?&]w4dbg/.test(location.search)) window.__dpw = { DPW: DPW, sheet: dpw_sheet, gate: dpw_gate, isStaff: dpw_isStaff };
 
 
 /* ===== ВОЛНА 4 · 92zq-ptr.js ===== */
