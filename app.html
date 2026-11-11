@@ -77,6 +77,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-paint.js"></script>
 <script src="uz-w4-parity.js"></script>
 <script src="uz-w4-perms.js"></script>
+<script src="uz-w4-photo.js"></script>
 <script src="uz-w4-polish.js"></script>
 <script src="uz-w4-praise.js"></script>
 <script src="uz-w4-pwreset.js"></script>
@@ -52827,6 +52828,152 @@ Promise.resolve().then(function () {
   }
 });
 if (/[?&]w4dbg/.test(location.search)) window.__dpw = { DPW: DPW, sheet: dpw_sheet, gate: dpw_gate, isStaff: dpw_isStaff };
+
+
+/* ===== ВОЛНА 4 · 92zp3-photo.js ===== */
+/* ===================== 92zp3 · АВАТАРКА НА СЕРВЕРЕ (часть dph, журнал w4/log/dph.md) =====================
+   Жалоба пилота «Crystal X» (химчистка, режим сервера): «отлетает фото, когда ставят сотрудники».
+   Причина: на сервере members.photo_path хранит ПУТЬ в приватном бакете (<venue>/<member>/profile-….jpg), а приложение
+   (avIn → photoOf) вставляло этот путь прямо в <img src>. Сразу после выбора фото было видно (в памяти лежала data:-картинка),
+   но после любой перезагрузки данных (loadBase) фото превращалось в битую ссылку — и у сотрудника, и у владельца.
+   Что делает фрагмент (только режим сервера; демо не трогается):
+   1) путь хранилища → подписанная ссылка (createSignedUrls пачкой при loadBase, кэш 10 ч; новый путь — подпись в фоне,
+      пока ждём — инициалы, потом картинка подставляется на место без перерисовки экрана);
+   2) «Поставить фото»: сжатие (объектный URL, запасной путь createImageBitmap), загрузка в свою папку, запись photo_path,
+      понятный текст при любой ошибке (HEIC, нет интернета, права, размер, формат) вместо молчания;
+   3) старое фото профиля при замене/удалении удаляется из хранилища (право есть: своя папка), ошибка удаления не мешает.
+   Сервер: 0039_photo_fix.sql — текущую аватарку видят все участники заведения (раньше коллеги не могли открыть). */
+(function () {
+  function dph_SV() { return window.JAMOA_DEMO === false && window.JAMOA_SV && typeof sv_on === 'function' && sv_on() ? window.JAMOA_SV : null; }
+  function dph_isPath(p) { return !!p && typeof p === 'string' && !/^(data:|blob:|https?:)/.test(p) && p.indexOf('/') > 0; }
+  var DPH = { u: {}, wait: {}, q: [], tm: null };
+  window.__dph = DPH;
+  function dph_url(p) { var c = DPH.u[p]; return c ? c.u : null; }
+  function dph_fresh(p) { var c = DPH.u[p]; return c && (c.t === 0 || c.t > Date.now()); }
+  async function dph_sign(paths) {
+    var SV = dph_SV(); if (!SV) return;
+    var need = paths.filter(function (p, i) { return dph_isPath(p) && !dph_fresh(p) && paths.indexOf(p) === i; });
+    if (!need.length) return;
+    need.forEach(function (p) { DPH.wait[p] = 1; });
+    try {
+      var B = SV.real.storage.from(SV.bucket || 'jamoa-photos'), sec = 43200, r;
+      if (B.createSignedUrls) r = await B.createSignedUrls(need, sec);
+      else { r = { data: [] }; for (var i = 0; i < need.length; i++) { var x = await B.createSignedUrl(need[i], sec); r.data.push({ path: need[i], signedUrl: x && x.data && x.data.signedUrl }); } }
+      (r && r.data || []).forEach(function (x, i) { var p = (x && x.path) || need[i]; if (x && x.signedUrl) DPH.u[p] = { u: x.signedUrl, t: Date.now() + 36e6 }; });
+    } catch (e) { try { console.warn('[dph] sign', e); } catch (x) {} }
+    need.forEach(function (p) { delete DPH.wait[p]; });
+    dph_patch();
+  }
+  /* ждём не дольше ms: экран не должен висеть из-за фото */
+  function dph_signWait(paths, ms) { return Promise.race([dph_sign(paths), new Promise(function (ok) { setTimeout(ok, ms); })]); }
+  function dph_need(p) {
+    if (DPH.wait[p] || DPH.q.indexOf(p) >= 0) return; DPH.q.push(p);
+    clearTimeout(DPH.tm); DPH.tm = setTimeout(function () { var L = DPH.q; DPH.q = []; dph_sign(L); }, 30);
+  }
+  /* подставить подписанные картинки на место инициалов, которые ждали подписи */
+  function dph_patch() {
+    document.querySelectorAll('[data-dphav]').forEach(function (el) {
+      var u = dph_url(el.getAttribute('data-dphav')); if (!u) return;
+      var im = document.createElement('img'); im.src = u; im.alt = ''; im.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block';
+      el.parentNode.replaceChild(im, el);
+    });
+  }
+
+  /* --- 1. показ --- */
+  var po0 = photoOf;
+  photoOf = function (e) {
+    var p = po0(e); if (!dph_SV() || !dph_isPath(p)) return p;
+    var u = dph_url(p); if (!dph_fresh(p)) dph_need(p);
+    return u || null;
+  };
+  var av0 = avIn;
+  avIn = function (e) {
+    var p = e && e.photo;
+    if (dph_SV() && dph_isPath(p) && !dph_url(p)) { dph_need(p); return '<span data-dphav="' + h(p) + '" style="display:contents">' + h(ini(e)) + '</span>'; }
+    return av0(e);
+  };
+  if (typeof loadBase === 'function') {
+    var lb0 = loadBase;
+    loadBase = async function () {
+      var r = await lb0.apply(this, arguments);
+      try { if (dph_SV() && S.emps) await dph_signWait(S.emps.map(function (e) { return e && e.photo; }), 3500); } catch (e) {}
+      return r;
+    };
+  }
+
+  /* --- 2. постановка фото --- */
+  function dph_t(s) { return s; }
+  function dph_heic(f) { return /hei[cf]/i.test((f && f.type) || '') || /\.hei[cf]$/i.test((f && f.name) || ''); }
+  function dph_isImg(f) { return !!f && (/^image\//.test(f.type || '') || (!f.type && /\.(jpe?g|png|webp|gif|bmp|hei[cf])$/i.test(f.name || ''))); }
+  function dph_draw(src, w0, h0) {
+    var z = 192, c = document.createElement('canvas'); c.width = z; c.height = z; var s0 = Math.min(w0, h0);
+    c.getContext('2d').drawImage(src, (w0 - s0) / 2, (h0 - s0) / 2, s0, s0, 0, 0, z, z); return c.toDataURL('image/jpeg', 0.82);
+  }
+  function dph_resize(file) {
+    return new Promise(function (ok, no) {
+      var url = null; try { url = URL.createObjectURL(file); } catch (e) {}
+      var viaBitmap = function () {
+        if (typeof createImageBitmap !== 'function') return no(new Error('decode'));
+        createImageBitmap(file).then(function (bm) { try { ok(dph_draw(bm, bm.width, bm.height)); } catch (e) { no(e); } }, no);
+      };
+      if (!url) return viaBitmap();
+      var im = new Image();
+      im.onload = function () { try { var d = dph_draw(im, im.naturalWidth || im.width, im.naturalHeight || im.height); URL.revokeObjectURL(url); ok(d); } catch (e) { URL.revokeObjectURL(url); viaBitmap(); } };
+      im.onerror = function () { URL.revokeObjectURL(url); viaBitmap(); };
+      im.src = url;
+    });
+  }
+  function dph_upErr(e) {
+    var m = String((e && (e.message || e.error || e.error_description)) || e || ''), c = String((e && (e.statusCode || e.status)) || '');
+    if (/Failed to fetch|NetworkError|Load failed|network|timeout|aborted/i.test(m)) return 'Нет интернета — фото не загрузилось. Проверьте связь и попробуйте ещё раз';
+    if (/row-level security|violates|Unauthorized|not allowed|403/i.test(m) || c === '403' || c === '401') return 'Сервер не разрешил загрузить фото. Выйдите из приложения и войдите снова. Если не поможет — напишите в поддержку';
+    if (/exceeded|too large|maximum allowed size|413/i.test(m) || c === '413') return 'Фото слишком большое. Выберите другое';
+    if (/mime|content type|invalid_mime/i.test(m) || c === '415') return 'Этот формат фото не подходит. Выберите фото JPG или PNG';
+    if (/Нет входа|no_auth/i.test(m)) return 'Нет входа. Выйдите из приложения и войдите снова';
+    return 'Фото не загрузилось: ' + m;
+  }
+  function dph_oldOwn(SV, p) { return dph_isPath(p) && SV.me && SV.venueId && p.indexOf(SV.venueId + '/' + SV.me.id + '/profile-') === 0; }
+  async function dph_removeOld(SV, p) {
+    if (!dph_oldOwn(SV, p)) return;
+    try { await SV.real.storage.from(SV.bucket || 'jamoa-photos').remove([p]); } catch (e) {}
+    delete DPH.u[p];
+  }
+  var DPH_BUSY = false;
+  var ps0 = photoSet;
+  photoSet = async function (file) {
+    var SV = dph_SV(); if (!SV) return ps0.apply(this, arguments);
+    if (DPH_BUSY) return;
+    if (!dph_isImg(file)) return toast(dph_t('Выберите фото (JPG или PNG)'));
+    var url;
+    try { url = await dph_resize(file); }
+    catch (x) { return toast(dph_t(dph_heic(file) ? 'Телефон сохранил фото в формате HEIC, браузер не может его открыть. Сделайте новый снимок камерой или выберите другое фото (JPG, PNG)' : 'Не удалось открыть фото. Выберите другое (JPG или PNG)'), 6000); }
+    DPH_BUSY = true; toast(dph_t('Загружаю фото…'));
+    var old = S.me && S.me.photo, path;
+    try {
+      var bl = await (await fetch(url)).blob();
+      path = await SV.upload(bl, 'profile');
+    } catch (e) { DPH_BUSY = false; try { console.warn('[dph] upload', e); } catch (x) {} return toast(dph_t(dph_upErr(e)), 7000); }
+    var r;
+    try { r = await sb.rpc('photo_set', { p_photo: path }); } catch (e) { r = { error: e }; }
+    if (r.error) {
+      DPH_BUSY = false;
+      try { await SV.real.storage.from(SV.bucket || 'jamoa-photos').remove([path]); } catch (x) {}
+      return toast(dph_t('Фото не сохранилось в профиле') + ': ' + err(r.error), 7000);
+    }
+    DPH.u[path] = { u: url, t: 0 };   /* своё новое фото показываем сразу из памяти, без подписи */
+    photoMine(path);
+    if (old && old !== path) dph_removeOld(SV, old);
+    DPH_BUSY = false;
+    toast(dph_t('Фото обновлено')); render();
+  };
+  var pd0 = photoDel;
+  photoDel = async function () {
+    var SV = dph_SV(); if (!SV) return pd0.apply(this, arguments);
+    var old = S.me && S.me.photo;
+    var r = await sb.rpc('photo_set', { p_photo: null }); if (r.error) return toast(err(r.error));
+    photoMine(null); dph_removeOld(SV, old); toast('Фото удалено'); render();
+  };
+})();
 
 
 /* ===== ВОЛНА 4 · 92zq-ptr.js ===== */
