@@ -64,6 +64,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-home2.js"></script>
 <script src="uz-w4-integ.js"></script>
 <script src="uz-w4-invite.js"></script>
+<script src="uz-w4-leavetime.js"></script>
 <script src="uz-w4-legal.js"></script>
 <script src="uz-w4-map.js"></script>
 <script src="uz-w4-mapv1.js"></script>
@@ -78,6 +79,7 @@ if (window.JAMOA_DEMO !== false) document.write('<script src="demo-db.js"><\/scr
 <script src="uz-w4-parity.js"></script>
 <script src="uz-w4-perms.js"></script>
 <script src="uz-w4-photo.js"></script>
+<script src="uz-w4-photoout.js"></script>
 <script src="uz-w4-polish.js"></script>
 <script src="uz-w4-praise.js"></script>
 <script src="uz-w4-pwreset.js"></script>
@@ -52974,6 +52976,451 @@ if (/[?&]w4dbg/.test(location.search)) window.__dpw = { DPW: DPW, sheet: dpw_she
     photoMine(null); dph_removeOld(SV, old); toast('Фото удалено'); render();
   };
 })();
+
+
+/* ===== ВОЛНА 4 · 92zp4-photoout.js ===== */
+/* ===================== 92zp4 · ФОТО ПРИ УХОДЕ — ПО УМОЛЧАНИЮ ВЫКЛЮЧЕНО (часть dpo, журнал w4/log/dpo.md) =====================
+   Решение владельца 14.11: фото при уходе (закрытии смены) — настраиваемое, по умолчанию ВЫКЛЮЧЕНО (все 22 типа).
+   Раньше база читала Pb('ph_close', true): если владелец ничего не выбирал (prefs без ключа — например, пилот «Crystal X»
+   с venues.prefs = {}), сотруднику при «Ушёл» открывался лист «Фото закрытия смены».
+   Теперь: нет ключа ph_close в настройках заведения = выключено. Данные на сервере не меняются (ключ не дописывается).
+   Где хранится: демо — hotel_settings.prefs (prefs_save), сервер — venues.prefs.ph_close (sv-adapter → venue_settings_save).
+   Переключатель: «Пульт → Порядок работы → Настройки приложения → Фото-проверки открытия и закрытия → Фото при закрытии смены».
+   ph_open (фото при открытии) не трогается: по умолчанию как было — включено (Pb('ph_open', true)). */
+(function () {
+  /* 1. значение по умолчанию: ph_close — false (и в Pb, и в P для описания настройки) */
+  var p0 = P;
+  P = function (k, d) { if (k === 'ph_close' && (d === true || d === 'true')) d = false; return p0.call(this, k, d); };
+  var b0 = Pb;
+  Pb = function (k, d) { if (k === 'ph_close') d = false; return b0.call(this, k, d); };
+  window.dpo_on = function () { return Pb('ph_close', false); };
+
+  /* 2. подсчёт «фото N из M» без вида: если фото при уходе выключено, старые снимки закрытия не засчитываются за открытие */
+  var c0 = phCount;
+  phCount = function (rows, pts, kind) {
+    if (!kind && !Pb('ph_close', false) && Array.isArray(rows)) rows = rows.filter(function (r) { return r && r.kind !== 'close'; });
+    return c0.call(this, rows, pts, kind);
+  };
+
+  /* 2б. демо: новый кабинет (#signup) берёт настройки, оставшиеся в браузере от прошлого кабинета — ph_close не переносим */
+  try {
+    if (window.__DB && typeof sxLS === 'function' && sxLS('mlx-one-new') === '1') {
+      var pp = sxJ(SX_PK, {}); if (pp && Object.prototype.hasOwnProperty.call(pp, 'ph_close')) { delete pp.ph_close; sxLS(SX_PK, JSON.stringify(pp)); }
+      var hs = (window.__DB.hotel_settings || [])[0]; if (hs && hs.prefs) delete hs.prefs.ph_close;
+    }
+  } catch (e) {}
+
+  /* 3. описание настройки: d:false и понятная подпись */
+  var g0 = prefGroups;
+  prefGroups = function () {
+    var L = g0.apply(this, arguments); if (!Array.isArray(L)) return L;
+    return L.map(function (g) {
+      if (!g || !Array.isArray(g.i) || !g.i.some(function (it) { return it && it.k === 'ph_close'; })) return g;
+      return Object.assign({}, g, { i: g.i.map(function (it) {
+        return it && it.k === 'ph_close' ? Object.assign({}, it, { d: false, soon: 0, h: 'Сотрудник при уходе фотографирует рабочие точки. Выключено — при уходе фото не просят' }) : it;
+      }) });
+    });
+  };
+})();
+
+
+/* ===== ВОЛНА 4 · 92zp5-leavetime.js ===== */
+/* ===== 92zp5 — удобный выбор даты и времени пальцем (префикс dlt_). Журнал w4/log/dlt.md. Решение владельца 14.11.
+   Было: в «Отпроситься у директора» (permForm) и «Забыл отметиться» (92b cb_forgotSheet) — системные <input type="time">,
+   на Android открывается неудобный круглый циферблат; дата — системный <input type="date">.
+   Стало:
+   1. Дата: чипы «Сегодня» / «Завтра» / «Другой день» (последний показывает системное поле даты — запасной путь).
+   2. Время: крупный итог («Выйду в 11:15»), кнопки −15 / +15, чипы по виду запроса и по смене сотрудника
+      (myShiftToday(S.me, day): начало/конец смены), «Другое время» — свои барабаны часы/минуты (шаг 5 мин).
+   Значения по-прежнему лежат в #lD / #lF (и #cbFi / #cbFo) — отправка, проверки и insert работают без изменений.
+   Обёртки: permForm (никто больше не оборачивает), sheet (только когда в окне есть #cbFi/#cbFo — «Забыл отметиться»).
+   Форма «Выходной» (vSched, #rd/#rt) — только даты, системного времени нет, не менялась. */
+var DLT = { css: false };
+function dlt_t(s) { try { return trUi(s); } catch (e) { return s; } }
+function dlt_e(s) { return h(dlt_t(s)); }
+function dlt_uz() { try { return uiLang() === 'uz'; } catch (e) { return false; } }
+function dlt_m(hm) { if (!hm) return null; var p = String(hm).split(':'); var v = (+p[0]) * 60 + (+p[1] || 0); return isNaN(v) ? null : v; }
+function dlt_hm(m) { m = ((Math.round(m) % 1440) + 1440) % 1440; var a = Math.floor(m / 60), b = m % 60; return (a < 10 ? '0' : '') + a + ':' + (b < 10 ? '0' : '') + b; }
+function dlt_now() { return dlt_m(nowHM()); }
+function dlt_up5(m) { return Math.ceil(m / 5) * 5; }
+function dlt_clamp(m) { return Math.max(0, Math.min(1435, m)); }
+/* «к 09:15» / «09:15 gaça», «в 17:00» / «17:00 da» */
+function dlt_to(t) { return dlt_uz() ? '<span class="num">' + t + '</span> gaça' : 'к <span class="num">' + t + '</span>'; }
+function dlt_at(t) { return dlt_uz() ? '<span class="num">' + t + '</span> da' : 'в <span class="num">' + t + '</span>'; }
+function dlt_shift(day) {
+  var x = null; try { x = myShiftToday(S.me, day); } catch (e) {}
+  return x && !x.off && x.start && x.end ? x : null;
+}
+function dlt_cssOnce() {
+  if (DLT.css || $('dltCss')) { DLT.css = true; return; }
+  DLT.css = true;
+  var st = document.createElement('style'); st.id = 'dltCss';
+  st.textContent =
+    '.dlt{display:flex;flex-direction:column;gap:8px;min-width:0}' +
+    '.dlt-lb{font-size:13px;color:var(--muted)}' +
+    '.dlt .chips,html[data-lx] .dlt .chips{flex-wrap:wrap!important;overflow:visible!important;-webkit-mask-image:none!important;mask-image:none!important;padding-right:0!important;margin:0}' +
+    '.dlt .chips>.pick{max-width:100%;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}' +
+    '.dlt .pick small{font-size:12px;font-weight:600;color:var(--muted)}.dlt .pick.on small{color:inherit;opacity:.85}' +
+    '.dlt .pick[disabled]{opacity:.38;pointer-events:none}' +
+    '.dlt-sum{display:flex;align-items:center;gap:10px;padding:12px 12px 12px 14px;border:1px solid var(--line);border-radius:16px;background:var(--surface-2,var(--line2))}' +
+    '.dlt-st{flex:1;min-width:0}' +
+    '.dlt-k{font-size:13px;color:var(--muted);line-height:1.3}' +
+    '.dlt-big{display:block;font-family:var(--sans);font-size:34px;line-height:1.1;font-weight:800;color:var(--ink);letter-spacing:.3px;font-variant-numeric:tabular-nums}' +
+    '.dlt-sub{font-size:12.5px;color:var(--muted);line-height:1.35;margin-top:2px}' +
+    '.dlt-nud{display:flex;gap:6px;flex-shrink:0}' +
+    '.dlt-nb{min-width:52px;height:44px;padding:0 8px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:700 15px/1 var(--sans);font-variant-numeric:tabular-nums}' +
+    '.dlt-nb[disabled]{opacity:.35}' +
+    '.dlt-nb:active:not([disabled]){transform:scale(.95)}' +
+    '.dlt-dw .in{width:100%}' +
+    '.dlt-wb{border:1px solid var(--line);border-radius:16px;padding:6px 10px 10px;background:var(--card)}' +
+    '.dlt-wcap{display:grid;grid-template-columns:1fr 14px 1fr;gap:4px;font-size:12px;font-weight:700;color:var(--muted);text-align:center;margin:4px 0 2px}' +
+    '.dlt-ws{position:relative;display:grid;grid-template-columns:1fr 14px 1fr;gap:4px;align-items:center}' +
+    '.dlt-band{position:absolute;left:0;right:0;top:50%;height:40px;margin-top:-20px;border-radius:12px;background:var(--surface-2,var(--line2));border:1px solid var(--line);pointer-events:none}' +
+    '.dlt-wh{position:relative;height:200px;overflow-y:scroll;scroll-snap-type:y mandatory;scrollbar-width:none;overscroll-behavior:contain;touch-action:pan-y;user-select:none;-webkit-user-select:none;' +
+      '-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 30%,#000 70%,transparent 100%);mask-image:linear-gradient(180deg,transparent 0,#000 30%,#000 70%,transparent 100%)}' +
+    '.dlt-wh::-webkit-scrollbar{display:none}' +
+    '.dlt-wh ul{list-style:none;margin:0;padding:80px 0}' +
+    '.dlt-wh li{height:40px;line-height:40px;text-align:center;font:700 24px/40px var(--sans);color:var(--muted);scroll-snap-align:center;font-variant-numeric:tabular-nums;cursor:pointer}' +
+    '.dlt-wh li.on{color:var(--ink);font-weight:800}' +
+    '.dlt-col{text-align:center;font:800 22px/1 var(--sans);color:var(--ink);position:relative;z-index:1}' +
+    '.dlt-wb .btn{margin-top:8px}' +
+    '@media (max-width:340px){.dlt-big{font-size:29px}.dlt-nb{min-width:46px;height:42px;font-size:14px}.dlt-sum{padding:10px}}';
+  document.head.appendChild(st);
+}
+
+/* ---------- общий выбор времени: итог, ±15, чипы, барабан ----------
+   o = { input, label: fn(T)→текст, sub: fn(T)→html, chips: fn()→[{l, s, v}], min: fn()→минуты|null, max: fn()→минуты|null, onChange } */
+function dlt_picker(o) {
+  dlt_cssOnce();
+  var el = document.createElement('div'); el.className = 'dlt dlt-tp';
+  var W = { open: !!o.wheel, built: false }, STP = o.step || 5, IH = 40, cs = [];
+  el.innerHTML = '<div class="dlt" data-dlttop></div><div class="dlt-wb" data-dltw hidden></div>';
+  var top = el.querySelector('[data-dlttop]'), wb = el.querySelector('[data-dltw]');
+  function T() { return dlt_m(o.input.value); }
+  function lim(v) { var a = o.min ? o.min() : null, b = o.max ? o.max() : null; return (a == null || v >= a) && (b == null || v <= b); }
+  function set(v, fromWheel) {
+    v = dlt_clamp(v); o.input.value = dlt_hm(v);
+    paintTop(); if (!fromWheel && W.open) wheelTo(v);
+    if (o.onChange) try { o.onChange(v); } catch (e) {}
+  }
+  function paintTop() {
+    var v = T(); cs = o.chips();
+    top.innerHTML =
+      '<div class="dlt-sum"><div class="dlt-st"><div class="dlt-k">' + dlt_e(o.label(v)) + '</div><b class="dlt-big num">' + (v == null ? '—' : dlt_hm(v)) + '</b>' +
+      '<div class="dlt-sub">' + (o.sub ? o.sub(v) || '' : '') + '</div></div>' +
+      '<div class="dlt-nud"><button type="button" class="dlt-nb num" data-dltn="-15" aria-label="' + dlt_e('Раньше на 15 минут') + '"' + (v == null || !lim(v - 15) ? ' disabled' : '') + '>−15</button>' +
+      '<button type="button" class="dlt-nb num" data-dltn="15" aria-label="' + dlt_e('Позже на 15 минут') + '"' + (v == null || !lim(v + 15) ? ' disabled' : '') + '>+15</button></div></div>' +
+      '<div class="chips">' + cs.map(function (c, i) {
+        return '<button type="button" class="pick' + (c.v === v ? ' on' : '') + '" data-dltc="' + i + '"' + (lim(c.v) ? '' : ' disabled') + '><span>' + dlt_e(c.l) + '</span>' + (c.s ? '<small>' + c.s + '</small>' : '') + '</button>';
+      }).join('') +
+      (o.wheel ? '' : '<button type="button" class="pick' + (W.open ? ' on' : '') + '" data-dlto="1"><span>' + dlt_e('Другое время') + '</span></button>') + '</div>';
+    top.querySelectorAll('[data-dltn]').forEach(function (b) { b.onclick = function () { var x = T(); if (x == null) x = Math.ceil(dlt_now() / STP) * STP; set(x + (+b.getAttribute('data-dltn'))); }; });
+    top.querySelectorAll('[data-dltc]').forEach(function (b) { b.onclick = function () { var c = cs[+b.getAttribute('data-dltc')]; if (c) set(c.v); }; });
+    var ob = top.querySelector('[data-dlto]'); if (ob) ob.onclick = function () { W.open = !W.open; paint(); };
+  }
+  function paint() {
+    paintTop(); wb.hidden = !W.open;
+    if (W.open) { if (!W.built) build(); wheelTo(T() == null ? Math.ceil(dlt_now() / STP) * STP : T()); }
+  }
+  /* барабаны: часы 00–23, минуты шагом STP (5 мин или шаг поля) */
+  function build() {
+    W.built = true;
+    var HH = [], MM = []; for (var i = 0; i < 24; i++) HH.push(i); for (var j = 0; j < 60; j += STP) MM.push(j);
+    function ul(vals, k) { return '<div class="dlt-wh num" data-dltwh="' + k + '" aria-label="' + dlt_e(k === 'h' ? 'Часы' : 'Минуты') + '"><ul>' + vals.map(function (x, n) { return '<li data-i="' + n + '">' + (x < 10 ? '0' : '') + x + '</li>'; }).join('') + '</ul></div>'; }
+    wb.innerHTML = '<div class="dlt-wcap"><span>' + dlt_e('Часы') + '</span><span></span><span>' + dlt_e('Минуты') + '</span></div>' +
+      '<div class="dlt-ws"><div class="dlt-band"></div>' + ul(HH, 'h') + '<div class="dlt-col">:</div>' + ul(MM, 'm') + '</div>' +
+      (o.wheel ? '' : '<button type="button" class="btn ghost full" data-dltok>' + dlt_e('Готово') + '</button>');
+    W.h = { el: wb.querySelector('[data-dltwh="h"]'), vals: HH }; W.m = { el: wb.querySelector('[data-dltwh="m"]'), vals: MM };
+    function idx(w) { return Math.max(0, Math.min(w.vals.length - 1, Math.round(w.el.scrollTop / IH))); }
+    function mark(w) { var k = idx(w); w.el.querySelectorAll('li').forEach(function (li, n) { li.classList.toggle('on', n === k); }); return w.vals[k]; }
+    var tmr = 0;
+    function read() {
+      if (W.mute) return;
+      var v = mark(W.h) * 60 + mark(W.m);
+      o.input.value = dlt_hm(v);
+      var big = top.querySelector('.dlt-big'); if (big) big.textContent = dlt_hm(v);
+      clearTimeout(tmr); tmr = setTimeout(function () { set(v, true); }, 220);
+    }
+    [W.h, W.m].forEach(function (w) {
+      w.el.addEventListener('scroll', read, { passive: true });
+      w.el.addEventListener('click', function (ev) { var li = ev.target.closest('li'); if (li) w.el.scrollTo({ top: +li.getAttribute('data-i') * IH, behavior: 'smooth' }); });
+    });
+    var ok = wb.querySelector('[data-dltok]'); if (ok) ok.onclick = function () { W.open = false; paint(); };
+  }
+  function wheelTo(v) {
+    if (!W.h) return;
+    v = dlt_clamp(v); var hh = Math.floor(v / 60), mm = Math.min(Math.floor((v % 60) / STP), W.m.vals.length - 1);
+    W.mute = true; W.h.el.scrollTop = hh * IH; W.m.el.scrollTop = mm * IH;
+    W.h.el.querySelectorAll('li').forEach(function (li, n) { li.classList.toggle('on', n === hh); });
+    W.m.el.querySelectorAll('li').forEach(function (li, n) { li.classList.toggle('on', n === mm); });
+    requestAnimationFrame(function () { requestAnimationFrame(function () { W.mute = false; }); });
+  }
+  el._dlt = { set: set, paint: paint, T: T, wheelTo: wheelTo };
+  paint();
+  return el;
+}
+
+/* =====================================================================
+   1. «Отпроситься у директора» — обёртка permForm
+   ===================================================================== */
+function dlt_dayRel(d) { var td = today(); return d === td ? 'today' : d === addDays(td, 1) ? 'tomorrow' : 'other'; }
+function dlt_dayWord(d) { var r = dlt_dayRel(d); return r === 'today' ? dlt_t('сегодня') : r === 'tomorrow' ? dlt_t('завтра') : ''; }
+/* чипы времени по виду запроса */
+function dlt_leaveChips(k, day) {
+  var sh = dlt_shift(day), td = day === today(), now = dlt_now(), nowU = dlt_up5(now);
+  var st = sh ? dlt_m(sh.start) : null, en = sh ? dlt_m(sh.end) : null;
+  if (sh && en <= st) en += 1440; /* ночная смена */
+  var lunch = sh ? Math.round((st + (en - st) / 2) / 30) * 30 : 780;
+  if (k === 'late') {
+    var b = st == null || (td && st < now) ? (td ? nowU : 540) : st;
+    return [[15, '+15 мин'], [30, '+30 мин'], [60, '+1 ч'], [120, '+2 ч']].map(function (x) { var v = b + x[0]; return { l: x[1], s: dlt_to(dlt_hm(v)), v: v % 1440 }; });
+  }
+  if (k === 'early') {
+    if (en == null) { var b2 = td ? nowU : 1080; return [[30, 'Через 30 мин'], [60, 'Через 1 ч'], [120, 'Через 2 ч'], [180, 'Через 3 ч']].map(function (x) { var v = td ? b2 + x[0] : b2 - x[0] + 30; return { l: td ? x[1] : dlt_hm(v), s: td ? dlt_at(dlt_hm(v)) : '', v: v % 1440 }; }); }
+    return [[30, 'за 30 мин'], [60, 'за 1 ч'], [120, 'за 2 ч'], [180, 'за 3 ч']].map(function (x) { var v = en - x[0]; return { l: x[1], s: dlt_at(dlt_hm(v)), v: v % 1440 }; });
+  }
+  if (k === 'absent') {
+    var a = [];
+    if (st != null) a.push({ l: 'С начала смены', s: '<span class="num">' + dlt_hm(st) + '</span>', v: st % 1440 });
+    if (td) a.push({ l: 'Сейчас', s: '<span class="num">' + dlt_hm(nowU) + '</span>', v: nowU });
+    if (!a.length) a.push({ l: dlt_hm(540), s: '', v: 540 });
+    return a;
+  }
+  /* out и прочие виды: «выйти на время» */
+  if (td) {
+    var c = [{ l: 'Сейчас', s: '<span class="num">' + dlt_hm(nowU) + '</span>', v: nowU }];
+    [[15, 'Через 15 мин'], [30, 'Через 30 мин'], [60, 'Через 1 ч']].forEach(function (x) { var v = dlt_up5(now + x[0]); c.push({ l: x[1], s: '<span class="num">' + dlt_hm(v) + '</span>', v: v % 1440 }); });
+    c.push({ l: 'В обед', s: '<span class="num">' + dlt_hm(lunch) + '</span>', v: lunch % 1440 });
+    return c;
+  }
+  var s0 = st == null ? 540 : st, e0 = en == null ? 1080 : en, seen = {}, out = [];
+  [s0 + 60, s0 + 120, lunch, e0 - 120, e0 - 60].forEach(function (v) { v = ((v % 1440) + 1440) % 1440; if (seen[v]) return; seen[v] = 1; out.push({ l: v === lunch % 1440 ? 'В обед' : '', s: '<span class="num">' + dlt_hm(v) + '</span>', v: v }); });
+  return out.map(function (c) { if (!c.l) { c.l = dlt_hm(c.v); c.s = ''; } return c; });
+}
+function dlt_leaveDefault(k, day) {
+  var cs = dlt_leaveChips(k, day), td = day === today(), now = dlt_now();
+  var pref = k === 'out' && td ? 1 : k === 'early' ? 1 : 0;
+  var ok = cs.filter(function (c) { return !td || c.v >= now - 5; });
+  return (cs[pref] && (!td || cs[pref].v >= now - 5) ? cs[pref] : ok[0] || cs[0]).v;
+}
+function dlt_permEnh(box) {
+  var lD = $('lD'), lF = $('lF'); if (!lD || !lF || lF.getAttribute('data-dlt')) return;
+  var grid = lF.closest('.grid2'); if (!grid) return;
+  var k = S.sub.lpK || 'out';
+  if (S.sub.dltK !== k) { S.sub.dltK = k; S.sub.dltT = null; }
+  var td = today(), day = S.sub.dltD && S.sub.dltD >= td ? S.sub.dltD : td;
+  var mode = S.sub.dltDm === 'other' && day !== td && day !== addDays(td, 1) ? 'other' : dlt_dayRel(day);
+  lD.value = day;
+  lF.setAttribute('data-dlt', '1'); lF.type = 'hidden';
+  dlt_cssOnce();
+  var wrap = document.createElement('div'); wrap.className = 'dlt dlt-leave';
+  wrap.innerHTML = '<div class="dlt-lb">' + dlt_e('Дата') + '</div><div class="chips" data-dltd>' +
+    [['today', 'Сегодня', td], ['tomorrow', 'Завтра', addDays(td, 1)], ['other', 'Другой день', '']].map(function (x) {
+      return '<button type="button" class="pick' + (mode === x[0] ? ' on' : '') + '" data-dltday="' + x[0] + '"><span>' + dlt_e(x[1]) + '</span>' + (x[2] ? '<small class="num">' + dm(x[2]) + '</small>' : mode === 'other' && x[0] === 'other' ? '<small class="num">' + dm(day) + '</small>' : '') + '</button>';
+    }).join('') + '</div><div class="dlt-dw" data-dltdw' + (mode === 'other' ? '' : ' hidden') + '></div>';
+  var dw = wrap.querySelector('[data-dltdw]');
+  var dsp = lD.__diV || (lD.nextElementSibling && lD.nextElementSibling.classList.contains('di-dtv') ? lD.nextElementSibling : null);
+  dw.style.position = 'relative'; dw.appendChild(lD); if (dsp) dw.appendChild(dsp); lD.setAttribute('aria-label', dlt_t('Выберите день'));
+  grid.parentNode.insertBefore(wrap, grid);
+  wrap.appendChild(lF);
+  grid.remove();
+  var lab = k === 'late' ? 'Приду к' : k === 'early' ? 'Уйду в' : k === 'absent' ? 'Время' : 'Выйду в';
+  function dayNow() { return lD.value || today(); }
+  function sub(v) {
+    var d = dayNow(), sh = dlt_shift(d), w = dlt_dayWord(d), p = [];
+    p.push((w ? '<span>' + h(w) + '</span>, ' : '') + '<span class="num">' + dm(d) + '</span>');
+    if (k === 'out' && v != null) { var mi = S.sub.lpM || 30; p.push(dlt_uz() ? '<span class="num">' + dlt_hm(v + mi) + '</span> gaça qaytaman' : 'вернусь к <span class="num">' + dlt_hm(v + mi) + '</span>'); }
+    p.push(sh ? (dlt_uz() ? 'smena ' : 'смена ') + '<span class="num">' + sh.start + '–' + sh.end + '</span>' : '<span>' + dlt_e('смены в графике нет') + '</span>');
+    return p.map(function (x) { return '<span style="white-space:nowrap">' + x + '</span>'; }).join(' · ');
+  }
+  var pk = dlt_picker({
+    input: lF,
+    label: function () { return lab; },
+    sub: sub,
+    chips: function () { return dlt_leaveChips(k, dayNow()); },
+    min: function () { return dayNow() === today() ? dlt_now() - 5 : null; },
+    onChange: function (v) { S.sub.dltT = v; }
+  });
+  wrap.appendChild(pk);
+  var t0 = S.sub.dltT;
+  if (t0 == null || (day === td && t0 < dlt_now() - 5)) t0 = dlt_leaveDefault(k, day);
+  lF.value = dlt_hm(t0); S.sub.dltT = t0; pk._dlt.paint();
+  function setDay(d, m) {
+    S.sub.dltD = d; S.sub.dltDm = m; lD.value = d;
+    wrap.querySelectorAll('[data-dltday]').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-dltday') === m); });
+    var oc = wrap.querySelector('[data-dltday="other"]'), sm = oc.querySelector('small');
+    if (m === 'other' && d) { if (!sm) { sm = document.createElement('small'); sm.className = 'num'; oc.appendChild(sm); } sm.textContent = dm(d); } else if (sm) sm.remove();
+    dw.hidden = m !== 'other';
+    /* время подстроить под новый день: прошлое сегодня — заменить на ближайшее разумное, чипы пересчитать */
+    var v = dlt_m(lF.value); if (v == null || (d === today() && v < dlt_now() - 5)) { v = dlt_leaveDefault(k, d); lF.value = dlt_hm(v); S.sub.dltT = v; }
+    pk._dlt.paint();
+    if (typeof shiftCacheLoad === 'function' && d !== today() && SHC[S.me.id + '|' + d] === undefined) shiftCacheLoad([S.me.id], d).then(function () { if (pk.isConnected && lD.value === d) pk._dlt.paint(); }).catch(function () {});
+  }
+  wrap.querySelectorAll('[data-dltday]').forEach(function (b) {
+    b.onclick = function () {
+      var m = b.getAttribute('data-dltday'), t = today();
+      if (m === 'today') return setDay(t, m);
+      if (m === 'tomorrow') return setDay(addDays(t, 1), m);
+      var d = lD.value && lD.value > addDays(t, 1) ? lD.value : addDays(t, 2);
+      setDay(d, 'other');
+      try { if (lD.showPicker) lD.showPicker(); } catch (e) {}
+    };
+  });
+  lD.addEventListener('change', function () { var d = lD.value; if (!d || d < today()) { d = today(); lD.value = d; } var r = dlt_dayRel(d); setDay(d, r === 'other' ? 'other' : r); });
+  /* «На сколько» (выйти на время) — подпись «вернусь к …» */
+  box.querySelectorAll('[data-lm]').forEach(function (b) { b.addEventListener('click', function () { setTimeout(function () { pk._dlt.paint(); }, 0); }); });
+  if (typeof shiftCacheLoad === 'function' && day !== td && SHC[S.me.id + '|' + day] === undefined) shiftCacheLoad([S.me.id], day).then(function () { if (pk.isConnected) pk._dlt.paint(); }).catch(function () {});
+}
+(function () {
+  var pf0 = permForm;
+  permForm = function (box) {
+    var r = pf0.apply(this, arguments);
+    try { dlt_permEnh(box); } catch (e) { console.warn('dlt', e); }
+    return r;
+  };
+})();
+
+/* =====================================================================
+   2. «Забыл отметиться» (92b cb_forgotSheet) — #cbFi / #cbFo
+   ===================================================================== */
+function dlt_forgotEnh() {
+  var L = $('layer'); if (!L || !$('cbFgo')) return;
+  var fi = $('cbFi'), fo = $('cbFo'); if ((!fi || fi.getAttribute('data-dlt')) && (!fo || fo.getAttribute('data-dlt'))) return;
+  var grid = (fi || fo).closest('.grid2'); if (!grid) return;
+  var dsel = $('cbFd');
+  function day() { return (dsel && dsel.value) || today(); }
+  function sh() { var d = day(), x = dlt_shift(d); if (!x) { try { var m = cb_ms(); if (m && !m.off && m.start) x = m; } catch (e) {} } return x; }
+  var host = document.createElement('div'); host.className = 'dlt dlt-fg';
+  grid.parentNode.insertBefore(host, grid);
+  [[fi, 'Пришёл в'], [fo, 'Ушёл в']].forEach(function (p) {
+    var inp = p[0]; if (!inp) return;
+    inp.setAttribute('data-dlt', '1'); inp.type = 'hidden';
+    var pk = dlt_picker({
+      input: inp,
+      label: function () { return p[1]; },
+      sub: function () { var s = sh(), d = day(); return '<span class="num">' + dm(d) + '</span>' + (s ? ' · ' + (dlt_uz() ? 'smena ' : 'смена ') + '<span class="num">' + s.start + '–' + s.end + '</span>' : ''); },
+      chips: function () {
+        var s = sh(), c = [];
+        if (s) { c.push({ l: 'Начало смены', s: '<span class="num">' + s.start + '</span>', v: dlt_m(s.start) }); c.push({ l: 'Конец смены', s: '<span class="num">' + s.end + '</span>', v: dlt_m(s.end) }); }
+        else { c.push({ l: dlt_hm(540), s: '', v: 540 }); c.push({ l: dlt_hm(1080), s: '', v: 1080 }); }
+        if (day() === today()) { var n = Math.floor(dlt_now() / 5) * 5; c.push({ l: 'Сейчас', s: '<span class="num">' + dlt_hm(n) + '</span>', v: n }); }
+        return c;
+      },
+      /* сегодня — не позже, чем сейчас (сервер проверяет «Время ещё не наступило»); ночная смена — уход может быть утром */
+      max: function () { var s = sh(); return day() === today() && !(inp === fo && s && s.overnight) ? dlt_now() + 1 : null; }
+    });
+    host.appendChild(pk); host.appendChild(inp);
+  });
+  grid.remove();
+}
+(function () {
+  var sh0 = sheet;
+  sheet = function () {
+    var r = sh0.apply(this, arguments);
+    try { if ($('cbFi') || $('cbFo')) dlt_forgotEnh(); } catch (e) { console.warn('dlt', e); }
+    return r;
+  };
+})();
+/* =====================================================================
+   3. Общее решение (уточнение владельца 14.11): ЛЮБОЕ поле <input type="time"> в приложении открывает не системный
+      круглый циферблат, а свой лист: крупный итог, −15/+15, чипы ближайших значений, барабан часы/минуты
+      (шаг 5 мин или шаг поля: step=900 → 15 мин), «Готово» / «Очистить» / «Отмена». «Готово» пишет value «HH:MM»
+      и посылает события input и change (bubbles) — существующие обработчики полей работают как раньше.
+      min/max поля учитываются; readonly/disabled поля не трогаем. Лист — отдельный слой поверх #layer (окно, в котором
+      поле, не закрывается).
+   ===================================================================== */
+function dlt_isTime(t) { return t && t.tagName === 'INPUT' && String(t.getAttribute('type') || '').toLowerCase() === 'time' && !t.disabled && !t.readOnly && !t.hasAttribute('data-dlt-native'); }
+function dlt_fieldTitle(inp) {
+  var lab = inp.closest('label'), txt = '';
+  if (lab) { var c = lab.cloneNode(true); c.querySelectorAll('input,select,textarea,button,.iconbtn,[aria-hidden="true"],.di-dtv').forEach(function (x) { x.remove(); }); txt = c.textContent.replace(/\s+/g, ' ').trim(); }
+  if (!txt) txt = (inp.getAttribute('aria-label') || inp.getAttribute('title') || '').trim();
+  var low = txt.toLowerCase();
+  if (/^(с|c|dan|дан)$/.test(low)) return dlt_t('Начало');
+  if (/^(до|gaça|gacha|гача)$/.test(low)) return dlt_t('Конец');
+  return txt || dlt_t('Время');
+}
+function dlt_tsClose() { var x = $('dltTs'); if (x) x.remove(); DLT.ts = null; }
+function dlt_timeSheet(inp) {
+  if (!inp || $('dltTs')) return;
+  try { inp.blur(); } catch (e) {}
+  var stp = +inp.getAttribute('step') || 0, STP = stp >= 300 && stp % 60 === 0 && 60 % (stp / 60) === 0 ? stp / 60 : 5;
+  var mn = dlt_m(inp.min), mx = dlt_m(inp.max);
+  var tmp = document.createElement('input'); tmp.type = 'hidden';
+  var v0 = dlt_m(inp.value);
+  if (v0 == null) { v0 = Math.ceil(dlt_now() / STP) * STP; if (mn != null && v0 < mn) v0 = mn; if (mx != null && v0 > mx) v0 = mx; }
+  tmp.value = dlt_hm(v0);
+  var title = dlt_fieldTitle(inp);
+  var wrap = document.createElement('div'); wrap.id = 'dltTs';
+  wrap.innerHTML = '<div class="sheet dlt-ts" data-dltbg style="z-index:80"><div class="box" role="dialog" aria-modal="true">' +
+    '<div style="display:flex;align-items:flex-start;gap:10px"><div style="flex:1;min-width:0"><h3 style="line-height:1.3">' + h(title) + '</h3>' +
+    (mn != null || mx != null ? '<div class="muted" style="font-size:13px;margin-top:4px">' + (mn != null && mx != null ? (dlt_uz() ? '<span class="num">' + dlt_hm(mn) + '</span> dan <span class="num">' + dlt_hm(mx) + '</span> gaça' : 'с <span class="num">' + dlt_hm(mn) + '</span> до <span class="num">' + dlt_hm(mx) + '</span>')
+      : mn != null ? (dlt_uz() ? '<span class="num">' + dlt_hm(mn) + '</span> dan keyin' : 'не раньше <span class="num">' + dlt_hm(mn) + '</span>') : (dlt_uz() ? '<span class="num">' + dlt_hm(mx) + '</span> gaça' : 'не позже <span class="num">' + dlt_hm(mx) + '</span>')) + '</div>' : '') +
+    '</div><button type="button" class="iconbtn" data-dltx aria-label="' + dlt_e('Закрыть') + '">✕</button></div>' +
+    '<div data-dltp></div>' +
+    '<div class="dlt-act">' + (inp.required ? '' : '<button type="button" class="btn ghost" data-dltclr>' + dlt_e('Очистить') + '</button>') +
+    '<button type="button" class="btn ghost" data-dltno>' + dlt_e('Отмена') + '</button><button type="button" class="btn gold" data-dltyes>' + dlt_e('Готово') + '</button></div></div></div>';
+  document.body.appendChild(wrap);
+  DLT.ts = inp;
+  var pk = dlt_picker({
+    input: tmp, wheel: true, step: STP,
+    label: function () { return 'Время'; },
+    sub: function () { return ''; },
+    chips: function () {
+      var b = dlt_m(tmp.value); if (b == null) b = v0; var seen = {}, out = [];
+      [Math.floor(b / 60) * 60, b - 30, b - 15, b + 15, b + 30, Math.floor(b / 60) * 60 + 60].forEach(function (v) {
+        if (v < 0 || v > 1439 || v === b || seen[v]) return; seen[v] = 1; out.push(v);
+      });
+      out.sort(function (a, c) { return a - c; });
+      return out.map(function (v) { return { l: dlt_hm(v), s: '', v: v }; });
+    },
+    min: function () { return mn; }, max: function () { return mx; }
+  });
+  wrap.querySelector('[data-dltp]').appendChild(pk); pk._dlt.paint();
+  function fire(val) {
+    inp.value = val;
+    try { inp.dispatchEvent(new Event('input', { bubbles: true })); } catch (e) {}
+    try { inp.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
+  }
+  wrap.querySelector('[data-dltbg]').onclick = function (e) { if (e.target === this) dlt_tsClose(); };
+  wrap.querySelector('[data-dltx]').onclick = dlt_tsClose;
+  wrap.querySelector('[data-dltno]').onclick = dlt_tsClose;
+  if (wrap.querySelector('[data-dltclr]')) wrap.querySelector('[data-dltclr]').onclick = function () { dlt_tsClose(); fire(''); };
+  wrap.querySelector('[data-dltyes]').onclick = function () {
+    var v = dlt_m(tmp.value); if (v == null) return dlt_tsClose();
+    if (mn != null && v < mn) v = mn; if (mx != null && v > mx) v = mx;
+    dlt_tsClose(); fire(dlt_hm(v));
+  };
+}
+(function () {
+  if (window.__dltTimeOn) return; window.__dltTimeOn = true;
+  dlt_cssOnce();
+  var ex = document.createElement('style'); ex.id = 'dltCss2';
+  ex.textContent = '.dlt-act{display:flex;gap:8px;flex-wrap:wrap}.dlt-act .btn{flex:1 1 0;min-width:0;padding-left:6px;padding-right:6px;white-space:nowrap}@media (max-width:360px){.dlt-act .btn{font-size:14px}}.dlt-act .btn.gold{flex:1.4 1 0}' +
+    '.dlt-ts .box{gap:12px}.dlt-ts .dlt-sum .dlt-k{display:none}' +
+    'input[type=time]:not([disabled]):not([readonly]){cursor:pointer}' +
+    'input[type=time]::-webkit-calendar-picker-indicator{pointer-events:none}';
+  document.head.appendChild(ex);
+  var tch = null, last = 0;
+  function open(t, ev) {
+    if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+    if (Date.now() - last < 450) return; last = Date.now();
+    dlt_timeSheet(t);
+  }
+  document.addEventListener('touchstart', function (ev) { var t = ev.target; if (!dlt_isTime(t)) return; var p = ev.touches[0]; tch = { t: t, x: p.clientX, y: p.clientY }; }, { capture: true, passive: true });
+  document.addEventListener('touchend', function (ev) {
+    var t = ev.target; if (!tch || tch.t !== t || !dlt_isTime(t)) { tch = null; return; }
+    var p = ev.changedTouches[0], moved = Math.abs(p.clientX - tch.x) > 10 || Math.abs(p.clientY - tch.y) > 10; tch = null;
+    if (!moved) open(t, ev);
+  }, { capture: true, passive: false });
+  document.addEventListener('mousedown', function (ev) { if (dlt_isTime(ev.target)) ev.preventDefault(); }, true);
+  document.addEventListener('pointerdown', function (ev) { if (dlt_isTime(ev.target) && ev.pointerType !== 'touch') ev.preventDefault(); }, true);
+  document.addEventListener('click', function (ev) { if (dlt_isTime(ev.target)) open(ev.target, ev); }, true);
+  document.addEventListener('keydown', function (ev) { if (dlt_isTime(ev.target) && (ev.key === 'Enter' || ev.key === ' ')) open(ev.target, ev); }, true);
+  /* фокус без нажатия (переход по Tab, автофокус) — тоже свой лист, не системный */
+  document.addEventListener('focusin', function (ev) { var t = ev.target; if (dlt_isTime(t) && !$('dltTs')) { setTimeout(function () { if (document.activeElement === t) open(t); }, 0); } }, true);
+  document.addEventListener('keyup', function (ev) { if (ev.key === 'Escape' && $('dltTs')) dlt_tsClose(); }, true);
+})();
+if (/[?&]w4dbg/.test(location.search)) window.__dlt = { chips: dlt_leaveChips, shift: dlt_shift, def: dlt_leaveDefault, open: dlt_timeSheet, close: dlt_tsClose };
 
 
 /* ===== ВОЛНА 4 · 92zq-ptr.js ===== */
