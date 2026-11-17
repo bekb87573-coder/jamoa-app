@@ -39397,7 +39397,7 @@ function cb_j(k, d) { try { var v = JSON.parse(cb_ls(k) || 'null'); return v == 
 function cb_save() { try { W3.gest = Date.now(); w3Save(); } catch (e) {} }
 
 /* ---------- настройки заведения (Пульт → Заведение) ---------- */
-var CB_DEF = { cb_radius: 150, cb_early_min: 15, cb_auto_h: 4, cb_health: true, cb_kiosk: false };
+var CB_DEF = { cb_radius: 150, cb_early_min: 120, cb_auto_h: 4, cb_health: true, cb_kiosk: false };
 function cb_set(k) { var loc = cb_demo() ? cb_j('cb-prefs', {}) : {}; var v = P(k, undefined); if (v === undefined && loc[k] !== undefined) v = loc[k]; if (k === 'cb_radius' && v === undefined) v = P('radius_m', undefined); return v === undefined || v === null || v === '' ? CB_DEF[k] : v; }
 function cb_setN(k) { var v = +cb_set(k); return isNaN(v) ? CB_DEF[k] : v; }
 function cb_setB(k) { var v = cb_set(k); return v === true || v === 'true' || v === 1; }
